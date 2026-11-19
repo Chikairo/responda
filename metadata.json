@@ -1,0 +1,6 @@
+{
+  "name": "RESPONDA",
+  "description": "AI-assisted emergency intake, location intelligence and command dispatch coordination for private emergency-response organisations in Lagos, Nigeria.",
+  "requestFramePermissions": ["microphone", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

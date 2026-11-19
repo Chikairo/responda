@@ -1,0 +1,94 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-canvas: #f8fafc;
+    --bg-panel: #ffffff;
+    --bg-elevated: #f1f5f9;
+    --border-muted: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+  }
+
+  .dark {
+    --bg-canvas: #0b1220;
+    --bg-panel: #111c2e;
+    --bg-elevated: #172438;
+    --border-muted: #26364b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+  }
+
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    text-wrap: balance;
+  }
+
+  .font-mono, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+}
+
+/* Custom Leaflet dark theme integration */
+.responda-leaflet-container {
+  background: #0b1220 !important;
+  font-family: 'DM Sans', system-ui, sans-serif !important;
+}
+
+.responda-dark-tiles .leaflet-tile-pane {
+  filter: invert(92%) hue-rotate(180deg) brightness(88%) contrast(92%) saturate(75%);
+}
+
+.responda-leaflet-container .leaflet-control-attribution {
+  background: rgba(11, 18, 32, 0.82) !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  border-top-left-radius: 6px;
+}
+
+.responda-leaflet-container .leaflet-control-attribution a {
+  color: #60a5fa !important;
+}
+
+.responda-leaflet-container .leaflet-popup-content-wrapper,
+.responda-leaflet-container .leaflet-popup-tip {
+  background: #172438 !important;
+  color: #f8fafc !important;
+  border: 1px solid #26364b;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* Subtle scrollbar for dark command panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #26364b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334863;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
