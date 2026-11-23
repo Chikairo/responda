@@ -111,10 +111,10 @@ export function ResponsiveShowcaseView({
       {/* Header & Explanation */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-bold text-slate-50">
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-50">
             Responsive Design Showcase — Desktop, Tablet &amp; Mobile
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             All three views render the same live RESPONDA state, visual identity, and human-controlled workflows. Click any incident in any device frame to sync across all three previews or jump into its live workspace.
           </p>
         </div>
@@ -132,9 +132,9 @@ export function ResponsiveShowcaseView({
             <button
               type="button"
               onClick={() => onOpenWorkspace(focusedIncident.id)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#172438] hover:bg-[#1E293B] border border-[#26364B] text-xs font-semibold text-slate-100 transition-colors"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-100 transition-colors"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+              <ExternalLink className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               <span>Open {focusedIncident.id}</span>
             </button>
           )}
@@ -144,16 +144,16 @@ export function ResponsiveShowcaseView({
       {/* 1. DESKTOP COMMAND CENTRE PREVIEW */}
       <section aria-label="Desktop Command Centre preview" className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-            <Monitor className="w-4 h-4 text-blue-400" />
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
+            <Monitor className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span>Desktop View — Full Command Centre (1280px+ Layout)</span>
           </div>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
             Full navigation sidebar · 5 KPI cards · Large Lagos map · Live active incident feed
           </span>
         </div>
 
-        <div className="rounded-2xl border-2 border-[#26364B] bg-[#0B1220] shadow-2xl overflow-hidden">
+        <div className="rounded-2xl border-2 border-slate-300 dark:border-[#26364B] bg-[#0B1220] shadow-xl dark:shadow-2xl overflow-hidden">
           <div className="flex flex-col lg:flex-row min-h-[430px]">
             {/* Desktop Preview Sidebar */}
             <div className="w-full lg:w-52 bg-[#111C2E] border-b lg:border-b-0 lg:border-r border-[#26364B] p-3 flex flex-col justify-between gap-3 shrink-0">
@@ -391,16 +391,16 @@ export function ResponsiveShowcaseView({
           className="xl:col-span-7 space-y-2.5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-              <Tablet className="w-4 h-4 text-blue-400" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
+              <Tablet className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Tablet View — Reorganised Command Centre (768px–1024px)</span>
             </div>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
               Collapsible menu · Compact KPI strip · Map + Quick Actions panel
             </span>
           </div>
 
-          <div className="rounded-2xl border-2 border-[#26364B] bg-[#0B1220] shadow-2xl overflow-hidden p-3.5 space-y-3">
+          <div className="rounded-2xl border-2 border-slate-300 dark:border-[#26364B] bg-[#0B1220] shadow-xl dark:shadow-2xl overflow-hidden p-3.5 space-y-3">
             {/* Tablet Top Header */}
             <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#26364B]">
               <div className="flex items-center gap-2.5">
@@ -542,16 +542,16 @@ export function ResponsiveShowcaseView({
           className="xl:col-span-5 space-y-2.5 flex flex-col items-center xl:items-stretch"
         >
           <div className="w-full flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-              <Smartphone className="w-4 h-4 text-blue-400" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
+              <Smartphone className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Mobile View — Touch-Friendly (&lt;768px)</span>
             </div>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
               2x2 KPIs · Urgent card · Bottom nav
             </span>
           </div>
 
-          <div className="w-full max-w-[340px] mx-auto rounded-[28px] border-4 border-[#26364B] bg-[#0B1220] shadow-2xl overflow-hidden flex flex-col">
+          <div className="w-full max-w-[340px] mx-auto rounded-[28px] border-4 border-slate-300 dark:border-[#26364B] bg-[#0B1220] shadow-xl dark:shadow-2xl overflow-hidden flex flex-col">
             {/* Mobile Top Header */}
             <div className="px-4 py-3 bg-[#111C2E] border-b border-[#26364B] flex items-center justify-between">
               <RespondaLogo compact />
@@ -666,30 +666,30 @@ export function ResponsiveShowcaseView({
       </div>
 
       {/* Consistency Footer */}
-      <div className="rounded-xl bg-[#111C2E] border border-[#26364B] p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs shadow-2xs dark:shadow-none">
         <div className="flex items-start gap-2.5">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
           <div>
-            <div className="font-semibold text-slate-100">Unified Data &amp; Controls</div>
-            <p className="text-slate-400 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">Unified Data &amp; Controls</div>
+            <p className="text-slate-500 dark:text-slate-400 mt-0.5">
               Desktop, tablet, and mobile share identical human takeover, location verification, and dispatch approval rules.
             </p>
           </div>
         </div>
         <div className="flex items-start gap-2.5">
-          <Navigation className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <div>
-            <div className="font-semibold text-slate-100">Zero Hidden Actions</div>
-            <p className="text-slate-400 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">Zero Hidden Actions</div>
+            <p className="text-slate-500 dark:text-slate-400 mt-0.5">
               Mobile prioritises urgent incidents and touch targets without horizontal scrolling; tablet surfaces Quick Actions beside the map.
             </p>
           </div>
         </div>
         <div className="flex items-start gap-2.5">
-          <Archive className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+          <Archive className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
           <div>
-            <div className="font-semibold text-slate-100">Test Real Responsive Breakpoints</div>
-            <p className="text-slate-400 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">Test Real Responsive Breakpoints</div>
+            <p className="text-slate-500 dark:text-slate-400 mt-0.5">
               Resize your browser window or open Command Centre on tablet/phone to interact directly with the adaptive layout.
             </p>
           </div>

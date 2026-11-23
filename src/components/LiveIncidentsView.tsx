@@ -74,10 +74,10 @@ export function LiveIncidentsView({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-bold text-slate-50">
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-50">
             {mode === 'live' ? 'Live Incidents Queue' : 'Incident History & Archive'}
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {mode === 'live'
               ? 'All open incidents requiring human review, verification, or active field coordination.'
               : 'Resolved and closed emergency records with preserved transcripts and audit trails.'}
@@ -93,7 +93,7 @@ export function LiveIncidentsView({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search incidents..."
               aria-label="Search incidents"
-              className="rounded-lg bg-[#111C2E] border border-[#26364B] pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+              className="rounded-lg bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 dark:bg-[#111C2E] dark:border-[#26364B] pl-8 pr-3 py-1.5 text-xs dark:text-slate-100 dark:placeholder:text-slate-500"
             />
           </div>
 
@@ -103,7 +103,7 @@ export function LiveIncidentsView({
             onChange={(e) =>
               setPriorityFilter(e.target.value as IncidentPriority | 'ALL')
             }
-            className="rounded-lg bg-[#111C2E] border border-[#26364B] px-2.5 py-1.5 text-xs text-slate-200"
+            className="rounded-lg bg-white border border-slate-200 text-slate-800 dark:bg-[#111C2E] dark:border-[#26364B] px-2.5 py-1.5 text-xs dark:text-slate-200"
           >
             <option value="ALL">All Priorities</option>
             <option value="CRITICAL">Critical</option>
@@ -116,7 +116,7 @@ export function LiveIncidentsView({
             aria-label="Filter category"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-lg bg-[#111C2E] border border-[#26364B] px-2.5 py-1.5 text-xs text-slate-200"
+            className="rounded-lg bg-white border border-slate-200 text-slate-800 dark:bg-[#111C2E] dark:border-[#26364B] px-2.5 py-1.5 text-xs dark:text-slate-200"
           >
             <option value="ALL">All Categories</option>
             {EMERGENCY_CATEGORIES.map((c) => (
@@ -130,7 +130,7 @@ export function LiveIncidentsView({
             aria-label="Sort list"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'newest' | 'priority')}
-            className="rounded-lg bg-[#111C2E] border border-[#26364B] px-2.5 py-1.5 text-xs text-slate-200"
+            className="rounded-lg bg-white border border-slate-200 text-slate-800 dark:bg-[#111C2E] dark:border-[#26364B] px-2.5 py-1.5 text-xs dark:text-slate-200"
           >
             <option value="newest">Newest First</option>
             <option value="priority">Highest Priority</option>
@@ -139,23 +139,23 @@ export function LiveIncidentsView({
       </div>
 
       {mode === 'live' && rows.length > 0 && (
-        <div className="rounded-xl bg-[#111C2E] border border-[#26364B] px-4 py-3 text-xs text-slate-300 flex flex-wrap items-center justify-between gap-2">
+        <div className="rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] px-4 py-3 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-xs">
           <span>
-            Showing <strong className="text-slate-100">{rows.length}</strong> open incident{rows.length === 1 ? '' : 's'}. Urgent and awaiting-takeover cases appear at the top — click <strong className="text-blue-300">Open Workspace</strong> to verify location or assign a unit.
+            Showing <strong className="text-slate-900 dark:text-slate-100">{rows.length}</strong> open incident{rows.length === 1 ? '' : 's'}. Urgent and awaiting-takeover cases appear at the top — click <strong className="text-blue-700 dark:text-blue-300">Open Workspace</strong> to verify location or assign a unit.
           </span>
-          <span className="font-mono text-[11px] text-amber-300">
+          <span className="font-mono text-[11px] text-amber-800 dark:text-amber-300 font-semibold">
             {rows.filter((r) => r.status === 'AWAITING_OPERATOR' || r.status === 'AI_INTAKE' || r.status === 'NEW').length} awaiting takeover
           </span>
         </div>
       )}
 
       {rows.length === 0 ? (
-        <div className="rounded-xl bg-[#111C2E] border border-[#26364B] p-10 text-center space-y-2">
-          <ShieldAlert className="w-8 h-8 text-slate-500 mx-auto" />
-          <div className="text-sm font-semibold text-slate-200">
+        <div className="rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] p-10 text-center space-y-2 shadow-xs">
+          <ShieldAlert className="w-8 h-8 text-slate-400 dark:text-slate-500 mx-auto" />
+          <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             {mode === 'live' ? 'No active incidents match your filters' : 'No closed or resolved incidents found'}
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             {mode === 'live'
               ? 'New reports submitted via AI Intake will appear here immediately.'
               : 'Resolved and closed cases appear here once field operations conclude.'}
@@ -177,24 +177,24 @@ export function LiveIncidentsView({
               return (
                 <div
                   key={inc.id}
-                  className="rounded-xl bg-[#111C2E] border border-[#26364B] p-4 space-y-3 text-xs"
+                  className="rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] p-4 space-y-3 text-xs shadow-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-100">{inc.id}</span>
-                        <span className="text-slate-400 font-mono text-[11px]">
+                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{inc.id}</span>
+                        <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                           {formatRelativeTime(inc.createdAt)}
                         </span>
                       </div>
-                      <div className="text-sm font-semibold text-slate-100 mt-0.5">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
                         {inc.category}
                       </div>
                     </div>
                     <PriorityBadge priority={inc.priority} />
                   </div>
 
-                  <p className="text-slate-300 leading-snug">
+                  <p className="text-slate-600 dark:text-slate-300 leading-snug">
                     {inc.location.correctedDescription || inc.location.description}
                   </p>
 
@@ -204,17 +204,17 @@ export function LiveIncidentsView({
                     <VerificationBadge status={inc.location.verificationStatus} />
                   </div>
 
-                  <div className="text-[11px] text-slate-400">
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
                     Operator: {inc.assignedOperator || 'Unassigned'}
                     {assignedUnit ? ` · Unit: ${assignedUnit.callsign}` : ''}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 pt-2 border-t border-[#26364B]">
+                  <div className="grid grid-cols-1 gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
                     {mode === 'live' && needsTakeover && canTakeOver(userRole) && (
                       <button
                         type="button"
                         onClick={() => onTakeOver(inc.id)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-semibold"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:border-amber-500/40 dark:text-amber-300 font-semibold"
                       >
                         <UserCheck className="w-4 h-4" />
                         <span>Take Over Incident</span>
@@ -235,11 +235,11 @@ export function LiveIncidentsView({
           </div>
 
           {/* Desktop & Tablet Table (>= md) */}
-          <div className="hidden md:block rounded-xl bg-[#111C2E] border border-[#26364B] overflow-hidden">
+          <div className="hidden md:block rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-[#26364B] bg-[#0B1220]/70 text-slate-400">
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 dark:border-[#26364B] dark:bg-[#0B1220]/70 dark:text-slate-400">
                   <th className="py-3 px-4 font-semibold">Incident</th>
                   <th className="py-3 px-4 font-semibold">Priority</th>
                   <th className="py-3 px-4 font-semibold">Location &amp; Source</th>
@@ -248,7 +248,7 @@ export function LiveIncidentsView({
                   <th className="py-3 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#26364B]">
+              <tbody className="divide-y divide-slate-200 dark:divide-[#26364B]">
                 {rows.map((inc) => {
                   const assignedUnit = inc.assignedUnitId
                     ? units.find((u) => u.id === inc.assignedUnitId)
@@ -261,22 +261,22 @@ export function LiveIncidentsView({
                   return (
                     <tr
                       key={inc.id}
-                      className="hover:bg-[#172438]/60 transition-colors"
+                      className="hover:bg-slate-50 dark:hover:bg-[#172438]/60 transition-colors"
                     >
                       <td className="py-3 px-4 max-w-xs">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-slate-100">
+                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
                             {inc.id}
                           </span>
-                          <span className="text-slate-500">·</span>
-                          <span className="font-semibold text-slate-200">
+                          <span className="text-slate-400 dark:text-slate-500">·</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
                             {inc.category}
                           </span>
                         </div>
-                        <p className="text-slate-400 mt-0.5 line-clamp-1">
+                        <p className="text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                           {inc.summary}
                         </p>
-                        <div className="font-mono text-[11px] text-slate-500 mt-0.5">
+                        <div className="font-mono text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
                           {formatRelativeTime(inc.createdAt)}
                         </div>
                       </td>
@@ -286,7 +286,7 @@ export function LiveIncidentsView({
                       </td>
 
                       <td className="py-3 px-4 max-w-xs">
-                        <div className="text-slate-200 line-clamp-1">
+                        <div className="text-slate-800 dark:text-slate-200 line-clamp-1">
                           {inc.location.correctedDescription || inc.location.description}
                         </div>
                         <div className="flex flex-wrap gap-1.5 mt-1">
@@ -299,9 +299,9 @@ export function LiveIncidentsView({
                         <IncidentStatusBadge status={inc.status} />
                       </td>
 
-                      <td className="py-3 px-4 text-slate-300">
+                      <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
                         <div>{inc.assignedOperator || 'Unassigned'}</div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
                           {assignedUnit ? assignedUnit.callsign : 'No unit assigned'}
                         </div>
                       </td>
@@ -312,7 +312,7 @@ export function LiveIncidentsView({
                             <button
                               type="button"
                               onClick={() => onTakeOver(inc.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-semibold whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:border-amber-500/40 dark:text-amber-300 font-semibold whitespace-nowrap"
                             >
                               <UserCheck className="w-3.5 h-3.5" />
                               <span>Take Over</span>
@@ -321,7 +321,7 @@ export function LiveIncidentsView({
                           <button
                             type="button"
                             onClick={() => onOpenWorkspace(inc.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/35 border border-blue-500/35 text-blue-300 font-semibold whitespace-nowrap"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 dark:bg-blue-600/20 dark:hover:bg-blue-600/35 dark:border-blue-500/35 dark:text-blue-300 font-semibold whitespace-nowrap"
                           >
                             <span>Workspace</span>
                             <ExternalLink className="w-3 h-3" />

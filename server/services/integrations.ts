@@ -4,17 +4,14 @@ import {
   RouteResult,
 } from '../../src/types/responda';
 import { isGeminiConfigured } from './geminiService';
+import { voiceProvider } from './voiceProvider';
 
 export function getIntegrationStatuses(): IntegrationStatus[] {
   const geminiLive = isGeminiConfigured();
   const orsConfigured = Boolean(process.env.OPENROUTESERVICE_API_KEY?.trim());
   const firebaseConfigured = Boolean(process.env.FIREBASE_PROJECT_ID?.trim());
-  const atConfigured = Boolean(
-    process.env.AFRICAS_TALKING_API_KEY?.trim() &&
-      process.env.AFRICAS_TALKING_USERNAME?.trim()
-  );
-  const termiiConfigured = Boolean(process.env.TERMII_API_KEY?.trim());
   const carrierConfigured = Boolean(process.env.CARRIER_LOCATION_ENDPOINT?.trim());
+  const voiceStatus = voiceProvider.getStatusSummary();
 
   return [
     {
@@ -62,7 +59,7 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
         : 'Map Active · Routing Key Not Configured',
       details: orsConfigured
         ? 'OpenStreetMap Leaflet tiles active with OpenRouteService server-side driving routes.'
-        : 'Interactive OpenStreetMap tiles are active. OpenRouteService API key is not configured—real driving ETAs are disabled unless simulated demo overlay is explicitly selected.',
+        : 'Interactive OpenStreetMap tiles are active. OpenRouteService API key is not configured—simulated demo corridor routes are clearly labelled when active.',
       envVars: ['OPENROUTESERVICE_API_KEY'],
       setupSteps: [
         'Obtain a free API key from openrouteservice.org.',
@@ -70,39 +67,18 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
       ],
     },
     {
-      id: 'africas_talking',
-      name: "Africa's Talking Voice API",
-      category: 'Telephony & SIP Call Intake',
-      configured: atConfigured,
-      mode: atConfigured ? 'LIVE' : 'NOT_CONFIGURED',
-      statusLabel: atConfigured
-        ? 'Webhook & Credentials Ready'
-        : 'Not Configured (Simulated Call Mode)',
+      id: 'voice_telephony',
+      name: 'Voice Provider Adapter (Provider-Independent)',
+      category: 'Telephony & Voice Intake',
+      configured: voiceStatus.realTelephonyConfigured,
+      mode: voiceStatus.realTelephonyConfigured ? 'LIVE' : 'NOT_CONFIGURED',
+      statusLabel: 'Real telephone integration not configured.',
       details:
-        'Webhook endpoint /api/integrations/africas-talking/voice is active for call-session logging. Live cellular AI-to-human call bridging requires provider SIP/transfer setup; public emergency numbers are not connected.',
-      envVars: ['AFRICAS_TALKING_API_KEY', 'AFRICAS_TALKING_USERNAME'],
+        'Using Local Simulation Voice Adapter. RESPONDA isolates AI intake and dispatch behind a replaceable VoiceProviderAdapter interface ready for future Nigerian telephony providers such as Voicebip or PressOne Signals.',
+      envVars: ['VoiceProviderAdapter (Local Simulation Active)'],
       setupSteps: [
-        'Create an Africa\'s Talking voice application in sandbox or production.',
-        'Point the voice callback URL to <APP_URL>/api/integrations/africas-talking/voice.',
-        'Set AFRICAS_TALKING_API_KEY and AFRICAS_TALKING_USERNAME in server secrets.',
-      ],
-    },
-    {
-      id: 'termii',
-      name: 'Termii SMS Notifications',
-      category: 'Unit & Caller SMS Alerts',
-      configured: termiiConfigured,
-      mode: termiiConfigured ? 'LIVE' : 'DEMO_FALLBACK',
-      statusLabel: termiiConfigured
-        ? 'Live SMS Gateway Ready'
-        : 'Demo Notification Logs Only',
-      details: termiiConfigured
-        ? 'Server-side Termii SMS adapter sends unit alerts only after explicit human dispatcher approval.'
-        : 'TERMII_API_KEY is not configured. Dispatch alerts are recorded as clearly labelled [SIMULATED DEMO] logs.',
-      envVars: ['TERMII_API_KEY', 'TERMII_SENDER_ID'],
-      setupSteps: [
-        'Register a Termii account and approve a Sender ID.',
-        'Set TERMII_API_KEY and TERMII_SENDER_ID in server secrets.',
+        'Implement VoiceProviderAdapter for your chosen telephony partner (e.g. Voicebip or PressOne Signals).',
+        'Bind incoming call webhooks, speech transcription, and human handover callbacks to /api/telephony/*.',
       ],
     },
     {
@@ -196,22 +172,25 @@ export async function calculateDrivingRoute(params: {
     }
   }
 
-  // Never invent distances or travel times when no routing provider is configured.
-  // Only return a visual straight/corridor line if caller explicitly requested a simulated demo overlay.
+  // Never invent real driving ETAs when no routing provider is configured.
+  // Only return a visual simulated corridor line if caller explicitly requested a simulated demo overlay.
   if (params.allowSimulatedOverlay) {
-    const midLat = (params.fromLat + params.toLat) / 2 + 0.004;
-    const midLng = (params.fromLng + params.toLng) / 2 - 0.003;
+    const mid1Lat = params.fromLat + (params.toLat - params.fromLat) * 0.33 + 0.0028;
+    const mid1Lng = params.fromLng + (params.toLng - params.fromLng) * 0.33 - 0.0022;
+    const mid2Lat = params.fromLat + (params.toLat - params.fromLat) * 0.68 + 0.0018;
+    const mid2Lng = params.fromLng + (params.toLng - params.fromLng) * 0.68 - 0.0011;
     return {
       available: true,
       isSimulatedFallback: true,
-      provider: 'Simulated Demo Overlay (No OpenRouteService Key)',
+      provider: 'Simulated Demo Route Corridor (No OpenRouteService Key)',
       coordinates: [
         [params.fromLat, params.fromLng],
-        [midLat, midLng],
+        [mid1Lat, mid1Lng],
+        [mid2Lat, mid2Lng],
         [params.toLat, params.toLng],
       ],
       message:
-        'Simulated demo corridor overlay shown. Configure OPENROUTESERVICE_API_KEY for real road routing, distance, and ETA.',
+        'Simulated demo route shown (OPENROUTESERVICE_API_KEY not configured; real driving ETA withheld).',
     };
   }
 
@@ -220,7 +199,7 @@ export async function calculateDrivingRoute(params: {
     isSimulatedFallback: false,
     provider: 'OpenRouteService',
     message:
-      'OpenRouteService API key is not configured. Map remains active; travel distance and ETA are withheld rather than invented.',
+      'OpenRouteService API key is not configured. Map remains active; real driving distance and ETA are withheld rather than invented.',
   };
 }
 
@@ -230,62 +209,18 @@ export async function sendDispatchNotification(params: {
   incidentId: string;
   unitId: string;
 }): Promise<NotificationLog> {
-  const apiKey = process.env.TERMII_API_KEY?.trim();
-  const senderId = process.env.TERMII_SENDER_ID?.trim() || 'Responda';
   const now = new Date().toISOString();
 
-  if (apiKey && params.recipient.startsWith('+')) {
-    try {
-      const res = await fetch('https://api.ng.termii.com/api/sms/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: params.recipient.replace(/[^0-9]/g, ''),
-          from: senderId,
-          sms: params.message,
-          type: 'plain',
-          channel: 'generic',
-          api_key: apiKey,
-        }),
-      });
-      const bodyText = await res.text();
-      return {
-        id: `notif-${Date.now()}`,
-        channel: 'TERMII_SMS',
-        recipient: params.recipient,
-        message: params.message,
-        incidentId: params.incidentId,
-        unitId: params.unitId,
-        status: res.ok ? 'SENT_LIVE' : 'FAILED',
-        providerResponse: `Termii HTTP ${res.status}: ${bodyText.slice(0, 160)}`,
-        timestamp: now,
-        isSimulated: false,
-      };
-    } catch (err) {
-      return {
-        id: `notif-${Date.now()}`,
-        channel: 'TERMII_SMS',
-        recipient: params.recipient,
-        message: params.message,
-        incidentId: params.incidentId,
-        unitId: params.unitId,
-        status: 'FAILED',
-        providerResponse: err instanceof Error ? err.message : 'Termii request error',
-        timestamp: now,
-        isSimulated: false,
-      };
-    }
-  }
-
   return {
-    id: `notif-${Date.now()}`,
-    channel: 'DEMO_SMS',
+    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    channel: 'DISPATCH_ALERT',
     recipient: params.recipient,
-    message: `[SIMULATED DEMO] ${params.message}`,
+    message: `[SIMULATED DISPATCH ALERT] ${params.message}`,
     incidentId: params.incidentId,
     unitId: params.unitId,
     status: 'DELIVERED_DEMO',
-    providerResponse: 'Simulated dispatch notification logged (Termii live SMS not invoked).',
+    providerResponse:
+      'Simulated dispatch alert recorded in command log (no external carrier message sent).',
     timestamp: now,
     isSimulated: true,
   };

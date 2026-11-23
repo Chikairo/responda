@@ -40,10 +40,14 @@
   }
 }
 
-/* Custom Leaflet dark theme integration */
+/* Custom Leaflet light & dark theme integration */
 .responda-leaflet-container {
-  background: #0b1220 !important;
+  background: #f1f5f9 !important;
   font-family: 'DM Sans', system-ui, sans-serif !important;
+}
+
+.dark .responda-leaflet-container {
+  background: #0b1220 !important;
 }
 
 .responda-dark-tiles .leaflet-tile-pane {
@@ -51,25 +55,42 @@
 }
 
 .responda-leaflet-container .leaflet-control-attribution {
-  background: rgba(11, 18, 32, 0.82) !important;
-  color: #94a3b8 !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #475569 !important;
   font-size: 10px !important;
   border-top-left-radius: 6px;
 }
 
+.dark .responda-leaflet-container .leaflet-control-attribution {
+  background: rgba(11, 18, 32, 0.82) !important;
+  color: #94a3b8 !important;
+}
+
 .responda-leaflet-container .leaflet-control-attribution a {
+  color: #2563eb !important;
+}
+
+.dark .responda-leaflet-container .leaflet-control-attribution a {
   color: #60a5fa !important;
 }
 
 .responda-leaflet-container .leaflet-popup-content-wrapper,
 .responda-leaflet-container .leaflet-popup-tip {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.14);
+}
+
+.dark .responda-leaflet-container .leaflet-popup-content-wrapper,
+.dark .responda-leaflet-container .leaflet-popup-tip {
   background: #172438 !important;
   color: #f8fafc !important;
   border: 1px solid #26364b;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
-/* Subtle scrollbar for dark command panels */
+/* Subtle scrollbar for light and dark command panels */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -78,11 +99,51 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #26364b;
+  background: #cbd5e1;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #26364b;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
   background: #334863;
+}
+
+/* Subtle simulation animations (compositor-only transform/opacity) */
+@keyframes respondaRadarExpand {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.78;
+  }
+  100% {
+    transform: scale(2.35);
+    opacity: 0;
+  }
+}
+
+@keyframes respondaWaveBar {
+  0%, 100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.responda-radar-ring {
+  animation: respondaRadarExpand 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.responda-radar-ring-delayed {
+  animation: respondaRadarExpand 2.2s cubic-bezier(0.16, 1, 0.3, 1) 1.1s infinite;
+}
+
+.responda-wave-bar {
+  transform-origin: center;
+  animation: respondaWaveBar 0.85s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

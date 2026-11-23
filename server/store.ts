@@ -738,13 +738,13 @@ export function createSeedData(): RespondaDatabase {
     },
     {
       id: 'notif-2',
-      channel: 'DEMO_SMS',
-      recipient: 'Surulere Rapid-3 (+234-800-UNIT-03)',
+      channel: 'DISPATCH_ALERT',
+      recipient: 'Surulere Rapid-3 (Demo Crew)',
       message: '[SIMULATED DEMO] Dispatch approved for INC-2026-1047 at 14 Adeniran Ogunsanya Close, Surulere.',
       incidentId: 'INC-2026-1047',
       unitId: 'UNIT-RRV-03',
       status: 'DELIVERED_DEMO',
-      providerResponse: 'Simulated Termii SMS dispatch log (no live carrier SMS sent)',
+      providerResponse: 'Simulated dispatch alert log (no live external SMS sent)',
       timestamp: minutesAgo(9),
       isSimulated: true,
     },
@@ -769,7 +769,21 @@ class StoreManager {
       const raw = await fs.readFile(DB_PATH, 'utf-8');
       const parsed = JSON.parse(raw) as RespondaDatabase;
       if (Array.isArray(parsed.incidents) && Array.isArray(parsed.units)) {
+        // Normalize any legacy channel identifiers from older persisted demo databases
+        const allowedChannels = ['DISPATCH_ALERT', 'DEMO_SMS', 'SYSTEM_ALERT'];
+        const allowedCallChannels = ['WEB_TEXT', 'WEB_VOICE', 'TELEPHONY_ADAPTER', 'DEMO_SCENARIO'];
+        parsed.notifications = (parsed.notifications || []).map((n) => ({
+          ...n,
+          channel: allowedChannels.includes(n.channel) ? n.channel : 'DISPATCH_ALERT',
+        }));
+        parsed.incidents = parsed.incidents.map((inc) => ({
+          ...inc,
+          callChannel: allowedCallChannels.includes(inc.callChannel)
+            ? inc.callChannel
+            : 'TELEPHONY_ADAPTER',
+        }));
         this.db = parsed;
+        await this.persist();
         return this.db;
       }
     } catch {

@@ -59,7 +59,7 @@ export type UnitAvailability =
 export type CallChannel =
   | 'WEB_TEXT'
   | 'WEB_VOICE'
-  | 'AFRICAS_TALKING_SIP'
+  | 'TELEPHONY_ADAPTER'
   | 'DEMO_SCENARIO';
 
 export interface TranscriptMessage {
@@ -171,7 +171,7 @@ export interface ResponseUnit {
 
 export interface NotificationLog {
   id: string;
-  channel: 'TERMII_SMS' | 'DEMO_SMS' | 'SYSTEM_ALERT';
+  channel: 'DISPATCH_ALERT' | 'DEMO_SMS' | 'SYSTEM_ALERT';
   recipient: string;
   message: string;
   incidentId?: string;
@@ -187,8 +187,7 @@ export interface IntegrationStatus {
     | 'gemini'
     | 'firebase'
     | 'routing'
-    | 'africas_talking'
-    | 'termii'
+    | 'voice_telephony'
     | 'carrier_location';
   name: string;
   category: string;
@@ -241,3 +240,41 @@ export type AppSection =
   | 'analytics'
   | 'responsive-showcase'
   | 'settings';
+
+export type SimulationScenarioId =
+  | 'yaba-accident'
+  | 'ikeja-medical'
+  | 'lekki-security';
+
+export type SimulationStageNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+export type SimulationCallStatus =
+  | 'IDLE'
+  | 'INCOMING'
+  | 'CONNECTED_AI'
+  | 'OPERATOR_CONNECTED'
+  | 'ENDED';
+
+export interface SimulationRuntimeState {
+  active: boolean;
+  paused: boolean;
+  scenarioId: SimulationScenarioId;
+  stage: SimulationStageNumber;
+  incidentId: string | null;
+  selectedUnitId: string | null;
+  callStatus: SimulationCallStatus;
+  callElapsedSec: number;
+  audioEnabled: boolean;
+  audioPlaying: boolean;
+  speakingSpeaker: 'CALLER' | 'AI' | 'OPERATOR' | null;
+  speechSupported: boolean;
+  revealedTurnCount: number;
+  locationResolvedInSim: boolean;
+  operatorTakenOver: boolean;
+  dispatchApproved: boolean;
+  trackingProgressPct: number;
+  arrivedOnScene: boolean;
+  completed: boolean;
+  activeRoute: RouteResult | null;
+  statusMessage: string;
+}

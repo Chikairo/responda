@@ -43,7 +43,14 @@ import {
   queryCarrierLocationAdapter,
   sendDispatchNotification,
 } from './server/services/integrations';
+import { voiceProvider } from './server/services/voiceProvider';
 import { createSeedData, store } from './server/store';
+import {
+  buildScenarioTranscript,
+  createSimulationFleetUnits,
+  SIMULATION_SCENARIOS,
+} from './src/utils/simulationEngine';
+import type { SimulationScenarioId } from './src/types/responda';
 
 const PORT = 3000;
 
@@ -597,9 +604,7 @@ async function startServer(): Promise<void> {
         inc.timeline.push({
           id: `ev-${Date.now() + 1}`,
           type: 'NOTIFICATION_SENT',
-          title: notification.isSimulated
-            ? 'Simulated unit dispatch alert logged'
-            : 'Unit SMS dispatch notification sent via Termii',
+          title: 'Simulated unit dispatch alert logged',
           description: notification.providerResponse,
           actor: 'Notification Service',
           actorRole: 'System',
@@ -938,18 +943,32 @@ async function startServer(): Promise<void> {
     });
   });
 
-  // Africa's Talking Voice Inbound Webhook Adapter
-  app.post('/api/integrations/africas-talking/voice', async (req, res) => {
-    const { sessionId, callerNumber, isActive } = req.body as {
+  // Provider-Independent Telephony Adapter Routes (Local Simulation Active)
+  app.get('/api/telephony/status', (_req, res) => {
+    res.json(voiceProvider.getStatusSummary());
+  });
+
+  app.post('/api/telephony/simulate-call', async (req, res) => {
+    const { sessionId, callerNumber, callerName, areaHint } = req.body as {
       sessionId?: string;
       callerNumber?: string;
-      isActive?: string;
+      callerName?: string;
+      areaHint?: string;
     };
 
     const now = new Date().toISOString();
-    const maskedPhone = callerNumber
-      ? `${callerNumber.slice(0, 6)}****${callerNumber.slice(-2)}`
-      : 'Private / Unknown';
+    const sid = sessionId?.trim() || `SIM-VOICE-${Date.now()}`;
+    const maskedPhone = callerNumber?.trim() || '+234-800-010-9999';
+
+    await voiceProvider.onIncomingCall({
+      sessionId: sid,
+      callerNumber: maskedPhone,
+      callerName: callerName?.trim(),
+      areaHint: areaHint?.trim() || 'Lagos',
+      receivedAt: now,
+      isSimulated: true,
+    });
+    await voiceProvider.answerCall(sid);
 
     const created = await store.mutate((db) => {
       const id = `INC-2026-${db.sequenceCounter++}`;
@@ -959,11 +978,13 @@ async function startServer(): Promise<void> {
         updatedAt: now,
         category: 'Other urgent incident',
         priority: 'HIGH',
-        priorityReason: 'Inbound Africa\'s Talking SIP voice call session awaiting operator intake.',
+        priorityReason:
+          'Simulated voice-adapter emergency call session awaiting human operator review.',
         status: 'AWAITING_OPERATOR',
+        callerName: callerName?.trim() || 'Simulated Voice Caller',
         callerPhone: maskedPhone,
-        summary: `Inbound telephone call session (${sessionId || 'AT-SANDBOX'}) — awaiting operator takeover.`,
-        description: `Africa's Talking webhook logged incoming voice session (isActive=${isActive ?? '1'}).`,
+        summary: `Simulated voice call session (${sid}) — awaiting human operator intake.`,
+        description: `Local Simulation Voice Adapter received simulated inbound call (${areaHint || 'Lagos'}). Real telephone integration not configured.`,
         peopleAffected: null,
         immediateDanger: false,
         missingInfoFlags: ['Emergency description', 'Location verification'],
@@ -971,14 +992,14 @@ async function startServer(): Promise<void> {
           {
             id: `t-${Date.now()}`,
             speaker: 'AI',
-            text: "Connected via Africa's Talking Voice Adapter. Responda automated intake greeted caller; carrier location not configured.",
+            text: 'Connected via Local Simulation Voice Adapter (real telephone integration not configured). Please describe the emergency and nearest Lagos landmark.',
             timestamp: now,
           },
         ],
         location: {
           source: 'UNKNOWN',
           verificationStatus: 'UNVERIFIED',
-          description: 'Caller location unknown — carrier location integration not configured.',
+          description: `Caller location unverified (${areaHint || 'Lagos'}) — carrier location integration not configured.`,
           carrierNote: 'Carrier location integration not configured',
           capturedAt: now,
         },
@@ -986,10 +1007,10 @@ async function startServer(): Promise<void> {
           {
             id: `ev-${Date.now()}`,
             type: 'INCIDENT_RECEIVED',
-            title: "Africa's Talking voice webhook received",
-            description: `Session ${sessionId || 'AT-DEMO'} logged. Seamless cellular transfer requires provider SIP bridging.`,
-            actor: "Africa's Talking Adapter",
-            actorRole: 'Telephony',
+            title: 'Simulated voice-adapter call received',
+            description: `Session ${sid} logged via Local Simulation Voice Adapter. Real telephone integration not configured.`,
+            actor: voiceProvider.name,
+            actorRole: 'Telephony Adapter',
             timestamp: now,
             isSimulated: true,
           },
@@ -997,28 +1018,279 @@ async function startServer(): Promise<void> {
         notes: [],
         aiIntakeActive: true,
         isSimulated: true,
-        callChannel: 'AFRICAS_TALKING_SIP',
+        callChannel: 'TELEPHONY_ADAPTER',
       };
       db.incidents.unshift(record);
       return record;
     });
 
     broadcastEvent('incident:created', created);
+    res.status(201).json({
+      incident: created,
+      telephonyStatus: voiceProvider.getStatusSummary(),
+    });
+  });
 
-    const wantsJson = req.headers.accept?.includes('application/json');
-    if (wantsJson) {
-      res.status(201).json({
-        incident: created,
-        xmlResponse:
-          '<Response><Say>Thank you for calling Responda emergency intake. Please state your emergency and Lagos landmark for our operator.</Say></Response>',
-      });
+  // Live Simulation Engine Sync Endpoints (Idempotent — zero duplicates on restart)
+  app.post('/api/simulation/prepare', async (req, res) => {
+    const { scenarioId = 'yaba-accident' } = req.body as {
+      scenarioId?: SimulationScenarioId;
+    };
+    const scenario =
+      SIMULATION_SCENARIOS[scenarioId] || SIMULATION_SCENARIOS['yaba-accident'];
+    const now = new Date().toISOString();
+
+    const state = await store.mutate((db) => {
+      // Remove any previous copy of the deterministic simulation incident IDs so Restart is clean
+      const simIncidentIds = new Set(
+        Object.values(SIMULATION_SCENARIOS).map((s) => s.incidentId)
+      );
+      db.incidents = db.incidents.filter((i) => !simIncidentIds.has(i.id));
+      db.notifications = db.notifications.filter(
+        (n) => !n.incidentId || !simIncidentIds.has(n.incidentId)
+      );
+
+      // Upsert the 4 dedicated simulation units cleanly without duplicates
+      const simUnits = createSimulationFleetUnits(now);
+      const simUnitIds = new Set(simUnits.map((u) => u.id));
+      const nonSimUnits = db.units.filter((u) => !simUnitIds.has(u.id));
+      db.units = [...simUnits, ...nonSimUnits];
+
+      return {
+        incidents: db.incidents,
+        units: db.units,
+        notifications: db.notifications,
+        scenarioId: scenario.id,
+      };
+    });
+
+    await voiceProvider.onIncomingCall({
+      sessionId: `SIM-${scenario.incidentId}`,
+      callerNumber: scenario.callerPhone,
+      callerName: scenario.callerName,
+      areaHint: scenario.area,
+      receivedAt: now,
+      isSimulated: true,
+    });
+
+    broadcastEvent('state:reset', {
+      incidents: state.incidents,
+      units: state.units,
+      notifications: state.notifications,
+    });
+    res.json(state);
+  });
+
+  app.post('/api/simulation/incident', async (req, res) => {
+    const {
+      scenarioId = 'yaba-accident',
+      turnCount = 6,
+      includeCoords = true,
+      markLocationResolved = true,
+    } = req.body as {
+      scenarioId?: SimulationScenarioId;
+      turnCount?: number;
+      includeCoords?: boolean;
+      markLocationResolved?: boolean;
+    };
+    const scenario =
+      SIMULATION_SCENARIOS[scenarioId] || SIMULATION_SCENARIOS['yaba-accident'];
+    const now = new Date().toISOString();
+
+    await voiceProvider.answerCall(`SIM-${scenario.incidentId}`);
+
+    const outcome = await store.mutate((db) => {
+      const existingIdx = db.incidents.findIndex(
+        (i) => i.id === scenario.incidentId
+      );
+      const transcript = buildScenarioTranscript(scenario, turnCount, now);
+      const lastTurn = scenario.dialogue[Math.max(0, Math.min(turnCount, scenario.dialogue.length) - 1)];
+
+      const record: IncidentRecord =
+        existingIdx >= 0
+          ? {
+              ...db.incidents[existingIdx],
+              transcript,
+              missingInfoFlags: lastTurn
+                ? lastTurn.remainingMissingFlags
+                : scenario.dialogue[scenario.dialogue.length - 1].remainingMissingFlags,
+              updatedAt: now,
+              location: {
+                ...db.incidents[existingIdx].location,
+                lat: includeCoords ? scenario.resolvedCoords.lat : undefined,
+                lng: includeCoords ? scenario.resolvedCoords.lng : undefined,
+                accuracyMeters: includeCoords
+                  ? scenario.resolvedCoords.accuracyMeters
+                  : undefined,
+              },
+            }
+          : {
+              id: scenario.incidentId,
+              createdAt: now,
+              updatedAt: now,
+              category: scenario.category,
+              priority: scenario.priority,
+              priorityReason: scenario.priorityReason,
+              status: 'AWAITING_OPERATOR',
+              callerName: scenario.callerName,
+              callerPhone: scenario.callerPhone,
+              summary: scenario.summary,
+              description: scenario.description,
+              peopleAffected: scenario.peopleAffected,
+              immediateDanger: scenario.immediateDanger,
+              dangerDetails: scenario.dangerDetails,
+              missingInfoFlags: lastTurn
+                ? lastTurn.remainingMissingFlags
+                : ['Operator verification of exact location'],
+              transcript,
+              location: {
+                source: 'CALLER_DESCRIPTION',
+                verificationStatus: 'UNVERIFIED',
+                description: scenario.vagueLocationDescription,
+                landmark: scenario.landmark,
+                area: scenario.area,
+                lat: includeCoords ? scenario.resolvedCoords.lat : undefined,
+                lng: includeCoords ? scenario.resolvedCoords.lng : undefined,
+                accuracyMeters:
+                  includeCoords && markLocationResolved
+                    ? scenario.resolvedCoords.accuracyMeters
+                    : undefined,
+                carrierNote: 'Carrier location integration not configured',
+                capturedAt: now,
+              },
+              timeline: [
+                {
+                  id: `ev-${Date.now()}-1`,
+                  type: 'INCIDENT_RECEIVED',
+                  title: 'Simulated emergency call received',
+                  description: `${scenario.incomingCallNotification} Real telephone integration not configured.`,
+                  actor: voiceProvider.name,
+                  actorRole: 'Telephony Adapter',
+                  timestamp: now,
+                  isSimulated: true,
+                },
+                {
+                  id: `ev-${Date.now()}-2`,
+                  type: 'INCIDENT_CREATED',
+                  title: 'Structured incident record created (Simulation)',
+                  description: `${scenario.category} · ${scenario.priority} suggested · Location: CALLER_DESCRIPTION (UNVERIFIED).`,
+                  actor: 'Responda AI Intake',
+                  actorRole: 'AI Assistant',
+                  timestamp: now,
+                  isSimulated: true,
+                },
+              ],
+              notes: [],
+              aiIntakeActive: true,
+              isSimulated: true,
+              callChannel: 'DEMO_SCENARIO',
+            };
+
+      if (existingIdx >= 0) {
+        db.incidents[existingIdx] = record;
+      } else {
+        db.incidents.unshift(record);
+        db.notifications.unshift({
+          id: `notif-sim-${Date.now()}`,
+          channel: 'SYSTEM_ALERT',
+          recipient: 'Command Centre Queue',
+          message: `[DEMO SIMULATION] ${record.id} (${record.category} · ${scenario.area}) created — awaiting operator takeover.`,
+          incidentId: record.id,
+          status: 'DELIVERED_DEMO',
+          providerResponse: 'Simulated command alert broadcast',
+          timestamp: now,
+          isSimulated: true,
+        });
+      }
+
+      return { incident: record, created: existingIdx < 0 };
+    });
+
+    broadcastEvent(
+      outcome.created ? 'incident:created' : 'incident:updated',
+      outcome.incident
+    );
+    res.status(outcome.created ? 201 : 200).json(outcome);
+  });
+
+  app.post('/api/simulation/unit-position', async (req, res) => {
+    const {
+      unitId,
+      lat,
+      lng,
+      availability,
+      incidentId,
+      incidentStatus,
+      timelineTitle,
+      timelineDescription,
+    } = req.body as {
+      unitId?: string;
+      lat?: number;
+      lng?: number;
+      availability?: UnitAvailability;
+      incidentId?: string;
+      incidentStatus?: IncidentStatus;
+      timelineTitle?: string;
+      timelineDescription?: string;
+    };
+
+    if (!unitId || typeof lat !== 'number' || typeof lng !== 'number') {
+      res.status(400).json({ error: 'unitId, lat, and lng are required.' });
       return;
     }
 
-    res.set('Content-Type', 'application/xml');
-    res.send(
-      '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling Responda emergency intake. Please state what happened and your nearest landmark in Lagos.</Say></Response>'
-    );
+    const now = new Date().toISOString();
+    const result = await store.mutate((db) => {
+      const unit = db.units.find((u) => u.id === unitId);
+      if (!unit) return null;
+      unit.lat = Number(lat.toFixed(5));
+      unit.lng = Number(lng.toFixed(5));
+      if (availability) unit.availability = availability;
+      unit.lastLocationUpdate = now;
+
+      let incident: IncidentRecord | undefined;
+      if (incidentId) {
+        incident = db.incidents.find((i) => i.id === incidentId);
+        if (incident) {
+          if (incidentStatus) incident.status = incidentStatus;
+          if (availability === 'ACKNOWLEDGED') {
+            incident.acknowledgedAt = incident.acknowledgedAt || now;
+          }
+          incident.updatedAt = now;
+          if (timelineTitle) {
+            incident.timeline.push({
+              id: `ev-sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+              type:
+                availability === 'ON_SCENE'
+                  ? 'UNIT_ON_SCENE'
+                  : availability === 'EN_ROUTE'
+                  ? 'UNIT_EN_ROUTE'
+                  : availability === 'ACKNOWLEDGED'
+                  ? 'UNIT_ACKNOWLEDGED'
+                  : 'STATUS_CHANGED',
+              title: timelineTitle,
+              description: timelineDescription || 'Simulation unit tracking update.',
+              actor: unit.callsign,
+              actorRole: 'Responder (Simulation)',
+              timestamp: now,
+              isSimulated: true,
+            });
+          }
+        }
+      }
+      return { unit, incident };
+    });
+
+    if (!result) {
+      res.status(404).json({ error: 'Unit not found.' });
+      return;
+    }
+
+    broadcastEvent('unit:updated', result.unit);
+    if (result.incident) {
+      broadcastEvent('incident:updated', result.incident);
+    }
+    res.json(result);
   });
 
   // Repeatable Competition Demo Scenario Reset / Launch

@@ -145,10 +145,11 @@ export function AiIntakeWorkspace({
     if (!ctx) return;
 
     const draw = () => {
+      const isDark = document.documentElement.classList.contains('dark');
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = '#0B1220';
+      ctx.fillStyle = isDark ? '#0B1220' : '#F1F5F9';
       ctx.fillRect(0, 0, w, h);
 
       const bars = 40;
@@ -166,7 +167,11 @@ export function AiIntakeWorkspace({
         const barH = Math.max(4, Math.round(amp * (h - 14)));
         const x = 6 + i * (barW + 3);
         const y = Math.round((h - barH) / 2);
-        ctx.fillStyle = voiceActiveRef.current ? '#3B82F6' : '#26364B';
+        ctx.fillStyle = voiceActiveRef.current
+          ? '#3B82F6'
+          : isDark
+          ? '#26364B'
+          : '#CBD5E1';
         ctx.fillRect(x, y, barW, barH);
       }
 
@@ -176,7 +181,17 @@ export function AiIntakeWorkspace({
     };
 
     draw();
+
+    const observer = new MutationObserver(() => {
+      if (!voiceActiveRef.current) draw();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
     return () => {
+      observer.disconnect();
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [callState, mode]);
@@ -456,43 +471,58 @@ export function AiIntakeWorkspace({
   });
 
   const callStateLabels: Record<IntakeCallState, { text: string; cls: string }> = {
-    WAITING_FOR_CALLER: { text: 'Ready — Waiting for caller', cls: 'text-slate-300 bg-slate-500/15' },
-    LISTENING: { text: 'Listening — Microphone active', cls: 'text-emerald-300 bg-emerald-500/15' },
-    PROCESSING: { text: 'Processing caller details...', cls: 'text-blue-300 bg-blue-500/15' },
-    AI_RESPONDING: { text: 'Intake updated — AI responding', cls: 'text-blue-300 bg-blue-500/15' },
+    WAITING_FOR_CALLER: {
+      text: 'Ready — Waiting for caller',
+      cls: 'text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-slate-500/15',
+    },
+    LISTENING: {
+      text: 'Listening — Microphone active',
+      cls: 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/15',
+    },
+    PROCESSING: {
+      text: 'Processing caller details...',
+      cls: 'text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-500/15',
+    },
+    AI_RESPONDING: {
+      text: 'Intake updated — AI responding',
+      cls: 'text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-500/15',
+    },
     WAITING_FOR_OPERATOR: {
       text: 'Completed — Ready for operator takeover',
-      cls: 'text-amber-300 bg-amber-500/15',
+      cls: 'text-amber-800 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15',
     },
     HUMAN_OPERATOR_CONNECTED: {
       text: 'Completed — Human operator connected',
-      cls: 'text-emerald-300 bg-emerald-500/20',
+      cls: 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/20',
     },
-    CALL_ENDED: { text: 'Completed — Call ended', cls: 'text-slate-300 bg-slate-600/25' },
+    CALL_ENDED: {
+      text: 'Completed — Call ended',
+      cls: 'text-slate-700 bg-slate-200 dark:text-slate-300 dark:bg-slate-600/25',
+    },
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-bold text-slate-50">
+          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-50">
             AI Emergency Intake
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Calm, progressive intake extraction. AI never dispatches units or promises arrival times.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Engine Mode Selector */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-[#111C2E] border border-[#26364B]">
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] shadow-2xs dark:shadow-none">
             <button
               type="button"
               onClick={() => setIntakeEngine('gemini')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
                 intakeEngine === 'gemini'
                   ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               Gemini AI {geminiConfigured ? '(Ready)' : '(Key Required)'}
@@ -503,7 +533,7 @@ export function AiIntakeWorkspace({
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
                 intakeEngine === 'simulated'
                   ? 'bg-amber-500 text-slate-950'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               Simulated Demo Intake
@@ -511,15 +541,17 @@ export function AiIntakeWorkspace({
           </div>
 
           {/* Text vs Voice Mode */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-[#111C2E] border border-[#26364B]">
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] shadow-2xs dark:shadow-none">
             <button
               type="button"
               onClick={() => {
                 stopVoiceSession();
                 setMode('text');
               }}
-              className={`px-3 py-1 rounded-md text-xs font-semibold ${
-                mode === 'text' ? 'bg-[#172438] text-white' : 'text-slate-400'
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                mode === 'text'
+                  ? 'bg-slate-900 text-white dark:bg-[#172438] dark:text-white'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               Text Simulation
@@ -527,8 +559,10 @@ export function AiIntakeWorkspace({
             <button
               type="button"
               onClick={() => setMode('voice')}
-              className={`px-3 py-1 rounded-md text-xs font-semibold ${
-                mode === 'voice' ? 'bg-[#172438] text-white' : 'text-slate-400'
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                mode === 'voice'
+                  ? 'bg-slate-900 text-white dark:bg-[#172438] dark:text-white'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               Voice (Gemini Live)
@@ -539,21 +573,21 @@ export function AiIntakeWorkspace({
 
       {/* Plain-English 3-Step Intake Guide */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-        <div className="rounded-xl bg-[#111C2E] border border-[#26364B] p-3">
-          <div className="font-semibold text-blue-300">Step 1 · Gather Report</div>
-          <p className="text-slate-300 mt-0.5">
+        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 shadow-2xs dark:shadow-none">
+          <div className="font-semibold text-blue-700 dark:text-blue-300">Step 1 · Gather Report</div>
+          <p className="text-slate-600 dark:text-slate-300 mt-0.5">
             Type or speak the emergency report below, including area or landmark.
           </p>
         </div>
-        <div className="rounded-xl bg-[#111C2E] border border-[#26364B] p-3">
-          <div className="font-semibold text-amber-300">Step 2 · Review Extracted Facts</div>
-          <p className="text-slate-300 mt-0.5">
+        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 shadow-2xs dark:shadow-none">
+          <div className="font-semibold text-amber-800 dark:text-amber-300">Step 2 · Review Extracted Facts</div>
+          <p className="text-slate-600 dark:text-slate-300 mt-0.5">
             Check the detected category, priority, and any missing details on the right.
           </p>
         </div>
-        <div className="rounded-xl bg-[#111C2E] border border-[#26364B] p-3">
-          <div className="font-semibold text-emerald-300">Step 3 · Send to Command Centre</div>
-          <p className="text-slate-300 mt-0.5">
+        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 shadow-2xs dark:shadow-none">
+          <div className="font-semibold text-emerald-700 dark:text-emerald-300">Step 3 · Send to Command Centre</div>
+          <p className="text-slate-600 dark:text-slate-300 mt-0.5">
             Click &ldquo;Create Incident&rdquo; so a human operator can verify and dispatch a unit.
           </p>
         </div>
@@ -561,14 +595,14 @@ export function AiIntakeWorkspace({
 
       {/* Human Takeover Banner */}
       {operatorTookOver && linkedIncident && (
-        <div className="rounded-xl bg-emerald-500/15 border border-emerald-500/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-sm text-emerald-200">
-            <UserCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-sm text-emerald-900 dark:text-emerald-200">
+            <UserCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
               <div className="font-bold">
                 Human Operator Connected ({linkedIncident.assignedOperator})
               </div>
-              <div className="text-xs text-emerald-200/80">
+              <div className="text-xs text-emerald-800 dark:text-emerald-200/80">
                 Automated AI intake has been stopped for {linkedIncident.id}. Operator now controls the case.
               </div>
             </div>
@@ -584,9 +618,9 @@ export function AiIntakeWorkspace({
       )}
 
       {errorMsg && (
-        <div className="rounded-xl bg-red-500/10 border border-red-500/35 p-3.5 text-xs text-red-200 flex items-start justify-between gap-3">
+        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 p-3.5 text-xs text-red-800 dark:text-red-200 flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
           {intakeEngine === 'gemini' && (
@@ -606,15 +640,15 @@ export function AiIntakeWorkspace({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT: CONVERSATION / VOICE CONSOLE */}
-        <div className="lg:col-span-7 rounded-xl bg-[#111C2E] border border-[#26364B] p-4 flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#26364B]">
+        <div className="lg:col-span-7 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 flex flex-col gap-4 shadow-2xs dark:shadow-none">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#26364B]">
             <div className="flex items-center gap-2">
               <span
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold ${callStateLabels[callState].cls}`}
               >
                 {callStateLabels[callState].text}
               </span>
-              <span className="font-mono text-xs text-slate-400">
+              <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                 {String(Math.floor(durationSec / 60)).padStart(2, '0')}:
                 {String(durationSec % 60).padStart(2, '0')}
               </span>
@@ -623,22 +657,22 @@ export function AiIntakeWorkspace({
             <button
               type="button"
               onClick={requestBrowserGps}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#172438] hover:bg-[#1E293B] border border-[#26364B] text-xs text-slate-200"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors"
             >
-              <LocateFixed className="w-3.5 h-3.5 text-blue-400" />
+              <LocateFixed className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               <span>Share Browser GPS (Optional)</span>
             </button>
           </div>
 
           {gpsNotice && (
-            <div className="rounded-lg bg-[#0B1220] border border-[#26364B] px-3 py-2 text-xs text-slate-300">
+            <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-700 dark:text-slate-300">
               {gpsNotice}
             </div>
           )}
 
           {/* Voice Mode Controls */}
           {mode === 'voice' && (
-            <div className="rounded-xl bg-[#0B1220] border border-[#26364B] p-4 space-y-3">
+            <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   {callState === 'LISTENING' || callState === 'AI_RESPONDING' ? (
@@ -666,11 +700,11 @@ export function AiIntakeWorkspace({
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                   {callState === 'LISTENING' ? (
-                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   ) : (
-                    <MicOff className="w-4 h-4 text-slate-500" />
+                    <MicOff className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   )}
                   <span>16kHz PCM → Gemini Live</span>
                 </div>
@@ -680,10 +714,10 @@ export function AiIntakeWorkspace({
                 ref={canvasRef}
                 width={520}
                 height={56}
-                className="w-full h-14 rounded-lg border border-[#26364B]"
+                className="w-full h-14 rounded-lg border border-slate-200 dark:border-[#26364B]"
               />
 
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Privacy notice: Microphone audio is streamed only while active to assist intake transcription. For telephone calls, seamless cellular transfer requires Africa&apos;s Talking SIP configuration.
               </p>
             </div>
@@ -696,25 +730,25 @@ export function AiIntakeWorkspace({
                 key={m.id}
                 className={`rounded-xl p-3 text-xs border ${
                   m.speaker === 'CALLER'
-                    ? 'bg-[#0B1220] border-[#26364B] ml-10'
-                    : 'bg-blue-500/10 border-blue-500/30 mr-10'
+                    ? 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] ml-10'
+                    : 'bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30 mr-10'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                  <span className="font-semibold text-slate-200">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
                     {m.speaker === 'CALLER' ? 'Caller' : 'Responda AI Intake'}
                   </span>
                   <span className="font-mono">
                     {new Date(m.timestamp).toLocaleTimeString()}
                   </span>
                 </div>
-                <p className="text-slate-100 leading-relaxed">{m.text}</p>
+                <p className="text-slate-800 dark:text-slate-100 leading-relaxed">{m.text}</p>
               </div>
             ))}
           </div>
 
           {/* Text Simulation Input */}
-          <form onSubmit={sendTextMessage} className="space-y-2.5 pt-2 border-t border-[#26364B]">
+          <form onSubmit={sendTextMessage} className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-[#26364B]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input
                 type="text"
@@ -722,7 +756,7 @@ export function AiIntakeWorkspace({
                 onChange={(e) => setCallerName(e.target.value)}
                 placeholder="Caller name (optional)"
                 aria-label="Caller name"
-                className="rounded-lg bg-[#0B1220] border border-[#26364B] px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+                className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
               <input
                 type="text"
@@ -730,7 +764,7 @@ export function AiIntakeWorkspace({
                 onChange={(e) => setCallerPhone(e.target.value)}
                 placeholder="Callback phone (optional)"
                 aria-label="Callback phone"
-                className="rounded-lg bg-[#0B1220] border border-[#26364B] px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+                className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
             </div>
 
@@ -742,7 +776,7 @@ export function AiIntakeWorkspace({
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Describe what happened, Lagos location/landmark, injuries, people affected..."
                 aria-label="Emergency report message"
-                className="flex-1 rounded-lg bg-[#0B1220] border border-[#26364B] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
               />
               <button
                 type="submit"
@@ -757,17 +791,17 @@ export function AiIntakeWorkspace({
         </div>
 
         {/* RIGHT: LIVE STRUCTURED EXTRACTION & INCIDENT CREATION */}
-        <div className="lg:col-span-5 rounded-xl bg-[#111C2E] border border-[#26364B] p-4 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#26364B] pb-3">
-            <h2 className="font-display text-sm font-bold text-slate-100">
+        <div className="lg:col-span-5 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-4 shadow-2xs dark:shadow-none">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#26364B] pb-3">
+            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
               Structured Incident Extraction
             </h2>
             {extraction && <PriorityBadge priority={extraction.suggestedPriority} />}
           </div>
 
           {!extraction ? (
-            <div className="rounded-xl bg-[#0B1220] border border-[#26364B] p-5 text-xs text-slate-400 space-y-2">
-              <div className="font-semibold text-slate-200">
+            <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-5 text-xs text-slate-500 dark:text-slate-400 space-y-2">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">
                 Awaiting caller report details
               </div>
               <p>
@@ -777,15 +811,15 @@ export function AiIntakeWorkspace({
           ) : (
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2.5">
-                <div className="rounded-lg bg-[#0B1220] border border-[#26364B] p-2.5">
-                  <div className="text-slate-400 text-[11px]">Detected Category</div>
-                  <div className="font-semibold text-slate-100 mt-0.5">
+                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5">
+                  <div className="text-slate-500 dark:text-slate-400 text-[11px]">Detected Category</div>
+                  <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
                     {extraction.category}
                   </div>
                 </div>
-                <div className="rounded-lg bg-[#0B1220] border border-[#26364B] p-2.5">
-                  <div className="text-slate-400 text-[11px]">People Affected</div>
-                  <div className="font-mono font-bold text-slate-100 mt-0.5">
+                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5">
+                  <div className="text-slate-500 dark:text-slate-400 text-[11px]">People Affected</div>
+                  <div className="font-mono font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                     {extraction.peopleAffected !== null
                       ? extraction.peopleAffected
                       : 'Unknown'}
@@ -793,34 +827,34 @@ export function AiIntakeWorkspace({
                 </div>
               </div>
 
-              <div className="rounded-lg bg-[#0B1220] border border-[#26364B] p-3 space-y-1">
-                <div className="text-slate-400 text-[11px]">Structured Summary</div>
-                <div className="text-slate-100">{extraction.summary}</div>
-                <div className="text-slate-400 pt-1">
+              <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-1">
+                <div className="text-slate-500 dark:text-slate-400 text-[11px]">Structured Summary</div>
+                <div className="text-slate-900 dark:text-slate-100">{extraction.summary}</div>
+                <div className="text-slate-500 dark:text-slate-400 pt-1">
                   Priority Rationale: {extraction.priorityReason}
                 </div>
               </div>
 
               {extraction.immediateDanger && (
-                <div className="rounded-lg bg-red-500/10 border border-red-500/35 p-2.5 text-red-200 flex items-center gap-2">
-                  <AlertOctagon className="w-4 h-4 text-red-400 shrink-0" />
+                <div className="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 p-2.5 text-red-800 dark:text-red-200 flex items-center gap-2">
+                  <AlertOctagon className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
                   <span>Immediate danger flagged — prompt human review requested.</span>
                 </div>
               )}
 
-              <div className="rounded-lg bg-[#0B1220] border border-[#26364B] p-3 space-y-2">
-                <div className="text-slate-400 text-[11px]">Location Assessment</div>
+              <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
+                <div className="text-slate-500 dark:text-slate-400 text-[11px]">Location Assessment</div>
                 <div className="flex flex-wrap gap-1.5">
                   <LocationSourceBadge source={previewLocation.source} />
                   <VerificationBadge status={previewLocation.verificationStatus} />
                 </div>
-                <div className="text-slate-200">{previewLocation.description}</div>
+                <div className="text-slate-800 dark:text-slate-200">{previewLocation.description}</div>
               </div>
 
               {extraction.missingInfoFlags.length > 0 && (
-                <div className="rounded-lg bg-amber-500/10 border border-amber-500/35 p-3 space-y-1 text-amber-200">
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 p-3 space-y-1 text-amber-900 dark:text-amber-200">
                   <div className="font-semibold flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-700 dark:text-amber-300" />
                     <span>Missing Information</span>
                   </div>
                   <ul className="list-disc list-inside space-y-0.5">
@@ -833,11 +867,11 @@ export function AiIntakeWorkspace({
             </div>
           )}
 
-          <div className="pt-2 border-t border-[#26364B] space-y-2">
+          <div className="pt-2 border-t border-slate-200 dark:border-[#26364B] space-y-2">
             {createdId ? (
               <div className="space-y-2">
-                <div className="rounded-lg bg-emerald-500/15 border border-emerald-500/35 p-3 text-xs text-emerald-200 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/35 p-3 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>
                     Incident <strong className="font-mono">{createdId}</strong> created and queued on Command Centre.
                   </span>
@@ -863,7 +897,7 @@ export function AiIntakeWorkspace({
                 Create Incident &amp; Alert Command Centre
               </button>
             )}
-            <p className="text-[11px] text-slate-400 text-center">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center">
               Creates an AWAITING_OPERATOR record. Human approval is required before dispatching any unit.
             </p>
           </div>
