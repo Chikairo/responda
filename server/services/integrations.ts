@@ -1,10 +1,10 @@
-import {
+import type {
   IntegrationStatus,
   NotificationLog,
   RouteResult,
-} from '../../src/types/responda';
-import { isGeminiConfigured } from './geminiService';
-import { voiceProvider } from './voiceProvider';
+} from '../../src/types/responda.ts';
+import { isGeminiConfigured } from './geminiService.ts';
+import { voiceProvider } from './voiceProvider.ts';
 
 export function getIntegrationStatuses(): IntegrationStatus[] {
   const geminiLive = isGeminiConfigured();

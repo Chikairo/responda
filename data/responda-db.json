@@ -2,8 +2,8 @@
   "incidents": [
     {
       "id": "INC-2026-1048",
-      "createdAt": "2026-11-23T17:09:55.204Z",
-      "updatedAt": "2026-11-23T17:10:55.204Z",
+      "createdAt": "2026-11-23T17:27:57.654Z",
+      "updatedAt": "2026-11-23T17:28:57.654Z",
       "category": "Road accident",
       "priority": "CRITICAL",
       "priorityReason": "Multi-vehicle collision on Herbert Macaulay Way with 2 reported injuries and fuel leak risk.",
@@ -23,13 +23,13 @@
           "id": "t-1048-1",
           "speaker": "AI",
           "text": "This is Responda automated intake. Please tell me what happened and where you are located.",
-          "timestamp": "2026-11-23T17:09:55.204Z"
+          "timestamp": "2026-11-23T17:27:57.654Z"
         },
         {
           "id": "t-1048-2",
           "speaker": "CALLER",
           "text": "There is a bad car crash right by Sabo junction in Yaba. A danfo bus hit a sedan.",
-          "timestamp": "2026-11-23T17:10:07.204Z",
+          "timestamp": "2026-11-23T17:28:09.654Z",
           "extractedTags": [
             "Road accident",
             "Sabo junction, Yaba"
@@ -39,13 +39,13 @@
           "id": "t-1048-3",
           "speaker": "AI",
           "text": "Understood. Is anyone injured, trapped, or in immediate danger?",
-          "timestamp": "2026-11-23T17:10:25.204Z"
+          "timestamp": "2026-11-23T17:28:27.654Z"
         },
         {
           "id": "t-1048-4",
           "speaker": "CALLER",
           "text": "Yes, two people in the car are injured and bleeding, one door is jammed. I smell fuel.",
-          "timestamp": "2026-11-23T17:10:49.204Z",
+          "timestamp": "2026-11-23T17:28:51.654Z",
           "extractedTags": [
             "2 injured",
             "Door jammed",
@@ -62,7 +62,7 @@
         "lat": 6.5095,
         "lng": 3.3711,
         "accuracyMeters": 22,
-        "capturedAt": "2026-11-23T17:10:01.204Z"
+        "capturedAt": "2026-11-23T17:28:03.654Z"
       },
       "timeline": [
         {
@@ -72,7 +72,7 @@
           "description": "Inbound simulated web intake initiated.",
           "actor": "Responda Intake Gateway",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:09:55.204Z",
+          "timestamp": "2026-11-23T17:27:57.654Z",
           "isSimulated": true
         },
         {
@@ -82,7 +82,7 @@
           "description": "Extracted Road accident · CRITICAL priority suggestion · Flagged for human takeover.",
           "actor": "Responda AI Intake",
           "actorRole": "AI Assistant",
-          "timestamp": "2026-11-23T17:10:43.204Z",
+          "timestamp": "2026-11-23T17:28:45.654Z",
           "isSimulated": true
         },
         {
@@ -92,7 +92,7 @@
           "description": "Alert queued on Command Centre for human verification.",
           "actor": "Responda Router",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:10:55.204Z",
+          "timestamp": "2026-11-23T17:28:57.654Z",
           "isSimulated": true
         }
       ],
@@ -103,11 +103,11 @@
     },
     {
       "id": "INC-2026-1047",
-      "createdAt": "2026-11-23T16:58:55.204Z",
-      "updatedAt": "2026-11-23T17:08:55.204Z",
-      "acceptedAt": "2026-11-23T17:00:55.204Z",
-      "dispatchedAt": "2026-11-23T17:03:55.204Z",
-      "acknowledgedAt": "2026-11-23T17:04:55.204Z",
+      "createdAt": "2026-11-23T17:16:57.654Z",
+      "updatedAt": "2026-11-23T17:26:57.654Z",
+      "acceptedAt": "2026-11-23T17:18:57.654Z",
+      "dispatchedAt": "2026-11-23T17:21:57.654Z",
+      "acknowledgedAt": "2026-11-23T17:22:57.654Z",
       "category": "Medical",
       "priority": "HIGH",
       "priorityReason": "Acute respiratory distress reported for elderly resident.",
@@ -126,13 +126,13 @@
           "id": "t-1047-1",
           "speaker": "CALLER",
           "text": "My father is having severe trouble breathing at 14 Adeniran Ogunsanya close, Surulere.",
-          "timestamp": "2026-11-23T16:58:55.204Z"
+          "timestamp": "2026-11-23T17:16:57.654Z"
         },
         {
           "id": "t-1047-2",
           "speaker": "OPERATOR",
           "text": "Operator Amina speaking. I have taken over your call and verified your gate code with our Surulere Rapid unit.",
-          "timestamp": "2026-11-23T17:00:55.204Z"
+          "timestamp": "2026-11-23T17:18:57.654Z"
         }
       ],
       "location": {
@@ -145,9 +145,9 @@
         "lat": 6.4945,
         "lng": 3.3592,
         "accuracyMeters": 15,
-        "capturedAt": "2026-11-23T16:58:55.204Z",
+        "capturedAt": "2026-11-23T17:16:57.654Z",
         "verifiedBy": "Amina Bello",
-        "verifiedAt": "2026-11-23T17:01:55.204Z"
+        "verifiedAt": "2026-11-23T17:19:57.654Z"
       },
       "timeline": [
         {
@@ -157,7 +157,7 @@
           "description": "Inbound report logged via simulated call.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T16:58:55.204Z",
+          "timestamp": "2026-11-23T17:16:57.654Z",
           "isSimulated": true
         },
         {
@@ -167,7 +167,7 @@
           "description": "Amina Bello assumed human control.",
           "actor": "Amina Bello",
           "actorRole": "Call Operator",
-          "timestamp": "2026-11-23T17:00:55.204Z",
+          "timestamp": "2026-11-23T17:18:57.654Z",
           "isSimulated": true
         },
         {
@@ -177,7 +177,7 @@
           "description": "Confirmed Gate B entry on Adeniran Ogunsanya Close.",
           "actor": "Amina Bello",
           "actorRole": "Call Operator",
-          "timestamp": "2026-11-23T17:01:55.204Z",
+          "timestamp": "2026-11-23T17:19:57.654Z",
           "isSimulated": true
         },
         {
@@ -187,7 +187,7 @@
           "description": "Surulere Rapid-3 approved for dispatch by human dispatcher.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T17:03:55.204Z",
+          "timestamp": "2026-11-23T17:21:57.654Z",
           "isSimulated": true
         },
         {
@@ -197,7 +197,7 @@
           "description": "Surulere Rapid-3 acknowledged and departed station.",
           "actor": "UNIT-RRV-03",
           "actorRole": "Responder",
-          "timestamp": "2026-11-23T17:08:55.204Z",
+          "timestamp": "2026-11-23T17:26:57.654Z",
           "isSimulated": true
         }
       ],
@@ -207,7 +207,7 @@
           "author": "Amina Bello",
           "role": "Call Operator",
           "text": "Estate security alerted at Gate B to keep barrier clear.",
-          "timestamp": "2026-11-23T17:02:55.204Z"
+          "timestamp": "2026-11-23T17:20:57.654Z"
         }
       ],
       "aiIntakeActive": false,
@@ -216,9 +216,9 @@
     },
     {
       "id": "INC-2026-1046",
-      "createdAt": "2026-11-23T16:50:55.204Z",
-      "updatedAt": "2026-11-23T16:54:55.204Z",
-      "acceptedAt": "2026-11-23T16:53:55.204Z",
+      "createdAt": "2026-11-23T17:08:57.654Z",
+      "updatedAt": "2026-11-23T17:12:57.654Z",
+      "acceptedAt": "2026-11-23T17:11:57.654Z",
       "category": "Security",
       "priority": "MEDIUM",
       "priorityReason": "Perimeter intrusion alarm at commercial warehouse with no confirmed weapon sighting.",
@@ -236,7 +236,7 @@
           "id": "t-1046-1",
           "speaker": "CALLER",
           "text": "Rear gate motion alarm triggered at our Admiralty Way depot in Lekki Phase 1.",
-          "timestamp": "2026-11-23T16:50:55.204Z"
+          "timestamp": "2026-11-23T17:08:57.654Z"
         }
       ],
       "location": {
@@ -247,9 +247,9 @@
         "area": "Lekki",
         "lat": 6.4479,
         "lng": 3.4678,
-        "capturedAt": "2026-11-23T16:50:55.204Z",
+        "capturedAt": "2026-11-23T17:08:57.654Z",
         "verifiedBy": "Seyi Ogunleye",
-        "verifiedAt": "2026-11-23T16:54:55.204Z"
+        "verifiedAt": "2026-11-23T17:12:57.654Z"
       },
       "timeline": [
         {
@@ -259,7 +259,7 @@
           "description": "Commercial client security desk initiated report.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T16:50:55.204Z",
+          "timestamp": "2026-11-23T17:08:57.654Z",
           "isSimulated": true
         },
         {
@@ -269,7 +269,7 @@
           "description": "Seyi Ogunleye verified client callback credentials.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T16:53:55.204Z",
+          "timestamp": "2026-11-23T17:11:57.654Z",
           "isSimulated": true
         },
         {
@@ -279,7 +279,7 @@
           "description": "Ready for patrol unit assignment decision.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T16:54:55.204Z",
+          "timestamp": "2026-11-23T17:12:57.654Z",
           "isSimulated": true
         }
       ],
@@ -290,11 +290,11 @@
     },
     {
       "id": "INC-2026-1045",
-      "createdAt": "2026-11-23T16:36:55.204Z",
-      "updatedAt": "2026-11-23T17:04:55.204Z",
-      "acceptedAt": "2026-11-23T16:38:55.204Z",
-      "dispatchedAt": "2026-11-23T16:42:55.204Z",
-      "acknowledgedAt": "2026-11-23T16:44:55.204Z",
+      "createdAt": "2026-11-23T16:54:57.654Z",
+      "updatedAt": "2026-11-23T17:22:57.654Z",
+      "acceptedAt": "2026-11-23T16:56:57.654Z",
+      "dispatchedAt": "2026-11-23T17:00:57.654Z",
+      "acknowledgedAt": "2026-11-23T17:02:57.654Z",
       "category": "Fire",
       "priority": "CRITICAL",
       "priorityReason": "Electrical transformer fire adjacent to commercial building in Iganmu.",
@@ -314,7 +314,7 @@
           "id": "t-1045-1",
           "speaker": "CALLER",
           "text": "Our transformer by Eric Moore / Iganmu road just caught fire with thick black smoke.",
-          "timestamp": "2026-11-23T16:36:55.204Z"
+          "timestamp": "2026-11-23T16:54:57.654Z"
         }
       ],
       "location": {
@@ -325,9 +325,9 @@
         "area": "Surulere",
         "lat": 6.4795,
         "lng": 3.3665,
-        "capturedAt": "2026-11-23T16:36:55.204Z",
+        "capturedAt": "2026-11-23T16:54:57.654Z",
         "verifiedBy": "Seyi Ogunleye",
-        "verifiedAt": "2026-11-23T16:39:55.204Z"
+        "verifiedAt": "2026-11-23T16:57:57.654Z"
       },
       "timeline": [
         {
@@ -337,7 +337,7 @@
           "description": "Report captured via AI intake.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T16:36:55.204Z",
+          "timestamp": "2026-11-23T16:54:57.654Z",
           "isSimulated": true
         },
         {
@@ -347,7 +347,7 @@
           "description": "Seyi Ogunleye verified evacuation status.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T16:38:55.204Z",
+          "timestamp": "2026-11-23T16:56:57.654Z",
           "isSimulated": true
         },
         {
@@ -357,7 +357,7 @@
           "description": "Eko Fire Partner-6 dispatched.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T16:42:55.204Z",
+          "timestamp": "2026-11-23T17:00:57.654Z",
           "isSimulated": true
         },
         {
@@ -367,7 +367,7 @@
           "description": "Fire crew isolating perimeter and suppressing blaze.",
           "actor": "UNIT-FIR-06",
           "actorRole": "Responder",
-          "timestamp": "2026-11-23T17:04:55.204Z",
+          "timestamp": "2026-11-23T17:22:57.654Z",
           "isSimulated": true
         }
       ],
@@ -378,8 +378,8 @@
     },
     {
       "id": "INC-2026-1044",
-      "createdAt": "2026-11-23T17:06:55.204Z",
-      "updatedAt": "2026-11-23T17:07:55.204Z",
+      "createdAt": "2026-11-23T17:24:57.654Z",
+      "updatedAt": "2026-11-23T17:25:57.654Z",
       "category": "Medical",
       "priority": "HIGH",
       "priorityReason": "Workplace fall injury reported near Allen Avenue; exact building floor missing.",
@@ -399,7 +399,7 @@
           "id": "t-1044-1",
           "speaker": "CALLER",
           "text": "Someone fell on the stairs at our office near Allen Avenue Ikeja. His ankle looks broken.",
-          "timestamp": "2026-11-23T17:06:55.204Z"
+          "timestamp": "2026-11-23T17:24:57.654Z"
         }
       ],
       "location": {
@@ -410,7 +410,7 @@
         "area": "Ikeja",
         "lat": 6.6018,
         "lng": 3.3515,
-        "capturedAt": "2026-11-23T17:06:55.204Z"
+        "capturedAt": "2026-11-23T17:24:57.654Z"
       },
       "timeline": [
         {
@@ -420,7 +420,7 @@
           "description": "Submitted via text intake.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:06:55.204Z",
+          "timestamp": "2026-11-23T17:24:57.654Z",
           "isSimulated": true
         },
         {
@@ -430,7 +430,7 @@
           "description": "Missing exact suite number flagged for human follow-up.",
           "actor": "Responda AI Intake",
           "actorRole": "AI Assistant",
-          "timestamp": "2026-11-23T17:07:55.204Z",
+          "timestamp": "2026-11-23T17:25:57.654Z",
           "isSimulated": true
         }
       ],
@@ -441,12 +441,12 @@
     },
     {
       "id": "INC-2026-1043",
-      "createdAt": "2026-11-23T14:52:55.204Z",
-      "updatedAt": "2026-11-23T15:47:55.204Z",
-      "acceptedAt": "2026-11-23T14:55:55.204Z",
-      "dispatchedAt": "2026-11-23T14:58:55.204Z",
-      "acknowledgedAt": "2026-11-23T15:00:55.204Z",
-      "resolvedAt": "2026-11-23T15:47:55.204Z",
+      "createdAt": "2026-11-23T15:10:57.654Z",
+      "updatedAt": "2026-11-23T16:05:57.654Z",
+      "acceptedAt": "2026-11-23T15:13:57.654Z",
+      "dispatchedAt": "2026-11-23T15:16:57.654Z",
+      "acknowledgedAt": "2026-11-23T15:18:57.654Z",
+      "resolvedAt": "2026-11-23T16:05:57.654Z",
       "category": "Environmental hazard",
       "priority": "MEDIUM",
       "priorityReason": "Fallen tree obstructing residential access road in Ikoyi.",
@@ -465,7 +465,7 @@
           "id": "t-1043-1",
           "speaker": "CALLER",
           "text": "A large branch fell across one lane on Bourdillon Road Ikoyi.",
-          "timestamp": "2026-11-23T14:52:55.204Z"
+          "timestamp": "2026-11-23T15:10:57.654Z"
         }
       ],
       "location": {
@@ -476,9 +476,9 @@
         "area": "Ikoyi",
         "lat": 6.4549,
         "lng": 3.4346,
-        "capturedAt": "2026-11-23T14:52:55.204Z",
+        "capturedAt": "2026-11-23T15:10:57.654Z",
         "verifiedBy": "Amina Bello",
-        "verifiedAt": "2026-11-23T14:56:55.204Z"
+        "verifiedAt": "2026-11-23T15:14:57.654Z"
       },
       "timeline": [
         {
@@ -488,7 +488,7 @@
           "description": "Logged via intake.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T14:52:55.204Z",
+          "timestamp": "2026-11-23T15:10:57.654Z",
           "isSimulated": true
         },
         {
@@ -498,7 +498,7 @@
           "description": "Amina Bello verified location.",
           "actor": "Amina Bello",
           "actorRole": "Call Operator",
-          "timestamp": "2026-11-23T14:55:55.204Z",
+          "timestamp": "2026-11-23T15:13:57.654Z",
           "isSimulated": true
         },
         {
@@ -508,7 +508,7 @@
           "description": "Lekki Rescue-5 dispatched.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T14:58:55.204Z",
+          "timestamp": "2026-11-23T15:16:57.654Z",
           "isSimulated": true
         },
         {
@@ -518,7 +518,7 @@
           "description": "Roadway cleared and reopened.",
           "actor": "UNIT-RES-05",
           "actorRole": "Responder",
-          "timestamp": "2026-11-23T15:47:55.204Z",
+          "timestamp": "2026-11-23T16:05:57.654Z",
           "isSimulated": true
         }
       ],
@@ -529,12 +529,12 @@
     },
     {
       "id": "INC-2026-1042",
-      "createdAt": "2026-11-23T13:42:55.204Z",
-      "updatedAt": "2026-11-23T14:27:55.204Z",
-      "acceptedAt": "2026-11-23T13:44:55.204Z",
-      "dispatchedAt": "2026-11-23T13:47:55.204Z",
-      "acknowledgedAt": "2026-11-23T13:48:55.204Z",
-      "resolvedAt": "2026-11-23T14:27:55.204Z",
+      "createdAt": "2026-11-23T14:00:57.654Z",
+      "updatedAt": "2026-11-23T14:45:57.654Z",
+      "acceptedAt": "2026-11-23T14:02:57.654Z",
+      "dispatchedAt": "2026-11-23T14:05:57.654Z",
+      "acknowledgedAt": "2026-11-23T14:06:57.654Z",
+      "resolvedAt": "2026-11-23T14:45:57.654Z",
       "category": "Rescue",
       "priority": "HIGH",
       "priorityReason": "Stalled elevator with two occupants inside Victoria Island office building.",
@@ -553,7 +553,7 @@
           "id": "t-1042-1",
           "speaker": "CALLER",
           "text": "Two visitors are stuck in lift 2 at our Adeola Odeku tower.",
-          "timestamp": "2026-11-23T13:42:55.204Z"
+          "timestamp": "2026-11-23T14:00:57.654Z"
         }
       ],
       "location": {
@@ -564,9 +564,9 @@
         "area": "Victoria Island",
         "lat": 6.4281,
         "lng": 3.4219,
-        "capturedAt": "2026-11-23T13:42:55.204Z",
+        "capturedAt": "2026-11-23T14:00:57.654Z",
         "verifiedBy": "Amina Bello",
-        "verifiedAt": "2026-11-23T13:45:55.204Z"
+        "verifiedAt": "2026-11-23T14:03:57.654Z"
       },
       "timeline": [
         {
@@ -576,7 +576,7 @@
           "description": "Logged via intake.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T13:42:55.204Z",
+          "timestamp": "2026-11-23T14:00:57.654Z",
           "isSimulated": true
         },
         {
@@ -586,7 +586,7 @@
           "description": "Occupants safely assisted; no injuries reported.",
           "actor": "Seyi Ogunleye",
           "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T14:27:55.204Z",
+          "timestamp": "2026-11-23T14:45:57.654Z",
           "isSimulated": true
         }
       ],
@@ -608,7 +608,7 @@
       "lat": 6.6018,
       "lng": 3.3515,
       "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:10:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:28:57.654Z",
       "isSimulated": true
     },
     {
@@ -622,7 +622,7 @@
       "lat": 6.5068,
       "lng": 3.3775,
       "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:11:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:29:57.654Z",
       "isSimulated": true
     },
     {
@@ -637,7 +637,7 @@
       "lng": 3.3568,
       "availability": "EN_ROUTE",
       "currentAssignmentId": "INC-2026-1047",
-      "lastLocationUpdate": "2026-11-23T17:11:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:29:57.654Z",
       "isSimulated": true
     },
     {
@@ -651,7 +651,7 @@
       "lat": 6.4281,
       "lng": 3.4219,
       "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:09:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:27:57.654Z",
       "isSimulated": true
     },
     {
@@ -665,7 +665,7 @@
       "lat": 6.4474,
       "lng": 3.4723,
       "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:08:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:26:57.654Z",
       "isSimulated": true
     },
     {
@@ -680,7 +680,7 @@
       "lng": 3.3665,
       "availability": "ON_SCENE",
       "currentAssignmentId": "INC-2026-1045",
-      "lastLocationUpdate": "2026-11-23T17:10:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:28:57.654Z",
       "isSimulated": true
     },
     {
@@ -694,7 +694,7 @@
       "lat": 6.4549,
       "lng": 3.4346,
       "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:07:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:25:57.654Z",
       "isSimulated": true
     },
     {
@@ -708,7 +708,7 @@
       "lat": 6.6152,
       "lng": 3.3589,
       "availability": "UNAVAILABLE",
-      "lastLocationUpdate": "2026-11-23T16:54:55.204Z",
+      "lastLocationUpdate": "2026-11-23T17:12:57.654Z",
       "isSimulated": true
     }
   ],
@@ -721,7 +721,7 @@
       "incidentId": "INC-2026-1048",
       "status": "DELIVERED_DEMO",
       "providerResponse": "WebSocket broadcast queued (Demo)",
-      "timestamp": "2026-11-23T17:10:55.204Z",
+      "timestamp": "2026-11-23T17:28:57.654Z",
       "isSimulated": true
     },
     {
@@ -733,7 +733,7 @@
       "unitId": "UNIT-RRV-03",
       "status": "DELIVERED_DEMO",
       "providerResponse": "Simulated dispatch alert log (no live external SMS sent)",
-      "timestamp": "2026-11-23T17:03:55.204Z",
+      "timestamp": "2026-11-23T17:21:57.654Z",
       "isSimulated": true
     }
   ],

@@ -1,14 +1,14 @@
-import {
+import type {
   IncidentPriority,
   IncidentRecord,
   ResponseUnit,
-} from '../types/responda';
+} from '../types/responda.ts';
 import {
   computeAverageAcceptanceMinutes,
   computeAverageAckMinutes,
   computeAverageResolutionMinutes,
   isActiveIncidentStatus,
-} from './incidentLogic';
+} from './incidentLogic.ts';
 
 export type AnalyticsDateRange = 'ALL' | 'TODAY' | '24H' | '7D';
 

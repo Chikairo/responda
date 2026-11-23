@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { IncidentRecord } from '../types/responda';
+import type { IncidentRecord } from '../types/responda.ts';
 import {
   SIMULATION_SCENARIOS,
   SIMULATION_STAGES,
@@ -15,7 +15,7 @@ import {
   getTrackingMilestoneForElapsed,
   interpolatePointAlongRoute,
   rankUnitsForIncident,
-} from './simulationEngine';
+} from './simulationEngine.ts';
 
 function makeSimIncident(overrides: Partial<IncidentRecord> = {}): IncidentRecord {
   const scenario = SIMULATION_SCENARIOS['yaba-accident'];

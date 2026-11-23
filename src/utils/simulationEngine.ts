@@ -1,4 +1,4 @@
-import {
+import type {
   EmergencyCategory,
   HospitalDestination,
   IncidentPriority,
@@ -10,7 +10,7 @@ import {
   SimulationStageNumber,
   TranscriptMessage,
   UnitAvailability,
-} from '../types/responda';
+} from '../types/responda.ts';
 
 export const SIMULATION_TRACKING_DURATION_SEC = 60;
 

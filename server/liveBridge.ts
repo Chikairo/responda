@@ -1,7 +1,7 @@
 import http from 'http';
-import { LiveServerMessage, Modality } from '@google/genai';
+import { type LiveServerMessage, Modality } from '@google/genai';
 import { WebSocket, WebSocketServer } from 'ws';
-import { getGeminiClient } from './services/geminiService';
+import { getGeminiClient } from './services/geminiService.ts';
 
 const eventClients = new Set<WebSocket>();
 

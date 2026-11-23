@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { IncidentRecord, ResponseUnit } from '../types/responda';
-import { computeCommandBriefing, computeIncidentWorkflow } from './guidedWorkflow';
+import type { IncidentRecord, ResponseUnit } from '../types/responda.ts';
+import { computeCommandBriefing, computeIncidentWorkflow } from './guidedWorkflow.ts';
 
 function makeIncident(overrides: Partial<IncidentRecord> = {}): IncidentRecord {
   const now = '2026-11-14T10:00:00.000Z';

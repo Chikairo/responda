@@ -1,10 +1,10 @@
-import {
+import type {
   EmergencyCategory,
   IncidentLocation,
   IncidentPriority,
   IntakeExtraction,
   LocationSource,
-} from '../types/responda';
+} from '../types/responda.ts';
 
 export interface LagosLandmarkRef {
   area: string;

@@ -1,6 +1,6 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import { IntakeExtraction, TranscriptMessage } from '../../src/types/responda';
-import { normalizeIntakeExtraction } from '../../src/utils/intakeParser';
+import type { IntakeExtraction, TranscriptMessage } from '../../src/types/responda.ts';
+import { normalizeIntakeExtraction } from '../../src/utils/intakeParser.ts';
 
 let cachedClient: GoogleGenAI | null = null;
 let cachedKey: string | undefined;

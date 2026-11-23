@@ -6,8 +6,8 @@ import {
   computeAverageAcceptanceMinutes,
   computeDashboardMetrics,
   validateStatusTransition,
-} from './incidentLogic';
-import { IncidentRecord, ResponseUnit } from '../types/responda';
+} from './incidentLogic.ts';
+import type { IncidentRecord, ResponseUnit } from '../types/responda.ts';
 
 const sampleIncidents: IncidentRecord[] = [
   {

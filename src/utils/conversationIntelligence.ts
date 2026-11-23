@@ -1,4 +1,4 @@
-import { IncidentRecord, TranscriptMessage } from '../types/responda';
+import type { IncidentRecord, TranscriptMessage } from '../types/responda.ts';
 
 export interface TurnPlaybackWindow {
   id: string;

@@ -5,7 +5,7 @@ import {
   isValidLagosCoords,
   normalizeIntakeExtraction,
   sanitizePriority,
-} from './intakeParser';
+} from './intakeParser.ts';
 
 test('GPS coordinates never auto-verify an incident location', () => {
   const loc = buildLocationFromIntake({

@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
-import {
+import type {
   IncidentRecord,
   NotificationLog,
   ResponseUnit,
-} from '../src/types/responda';
+} from '../src/types/responda.ts';
 
 export interface RespondaDatabase {
   incidents: IncidentRecord[];

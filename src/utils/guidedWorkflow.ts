@@ -1,5 +1,5 @@
-import { IncidentRecord, ResponseUnit } from '../types/responda';
-import { isActiveIncidentStatus } from './incidentLogic';
+import type { IncidentRecord, ResponseUnit } from '../types/responda.ts';
+import { isActiveIncidentStatus } from './incidentLogic.ts';
 
 export type WorkflowActionType =
   | 'GATHER_INFO'

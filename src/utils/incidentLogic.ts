@@ -1,4 +1,4 @@
-import {
+import type {
   EmergencyCategory,
   IncidentPriority,
   IncidentRecord,
@@ -6,7 +6,7 @@ import {
   ResponseUnit,
   UnitAvailability,
   UserRole,
-} from '../types/responda';
+} from '../types/responda.ts';
 
 export const INCIDENT_STATUS_ORDER: IncidentStatus[] = [
   'NEW',

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IncidentRecord, ResponseUnit } from '../types/responda';
+import type { IncidentRecord, ResponseUnit } from '../types/responda.ts';
 import {
   computeAreaHotspots,
   computeDailyTrend,
@@ -8,13 +8,13 @@ import {
   computeIncidentPerformanceRows,
   computeResolutionStats,
   filterAnalyticsIncidents,
-} from './analyticsEngine';
+} from './analyticsEngine.ts';
 import {
   buildAiCallSummary,
   computeIntakeCompleteness,
   computeTalkRatio,
   formatSecondsClock,
-} from './conversationIntelligence';
+} from './conversationIntelligence.ts';
 
 function makeIncident(overrides: Partial<IncidentRecord>): IncidentRecord {
   const baseTime = '2026-11-17T10:00:00.000Z';

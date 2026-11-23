@@ -4,18 +4,18 @@ dotenv.config();
 import express from 'express';
 import http from 'http';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import {
+import type {
   CallChannel,
   IncidentLocation,
   IncidentPriority,
   IncidentRecord,
   IncidentStatus,
   LocationSource,
+  SimulationScenarioId,
   TranscriptMessage,
   UnitAvailability,
   UserRole,
-} from './src/types/responda';
+} from './src/types/responda.ts';
 import {
   canApproveDispatch,
   canTakeOver,
@@ -24,35 +24,34 @@ import {
   canVerifyIncident,
   mapUnitAvailabilityToIncidentStatus,
   validateStatusTransition,
-} from './src/utils/incidentLogic';
+} from './src/utils/incidentLogic.ts';
 import {
   buildLocationFromIntake,
   isValidLagosCoords,
   sanitizeCategory,
   sanitizePriority,
-} from './src/utils/intakeParser';
-import { attachWebSocketServers, broadcastEvent } from './server/liveBridge';
+} from './src/utils/intakeParser.ts';
+import { attachWebSocketServers, broadcastEvent } from './server/liveBridge.ts';
 import {
   isGeminiConfigured,
   runGeminiIntakeTurn,
   runSimulatedDemoIntakeTurn,
-} from './server/services/geminiService';
+} from './server/services/geminiService.ts';
 import {
   calculateDrivingRoute,
   getIntegrationStatuses,
   queryCarrierLocationAdapter,
   sendDispatchNotification,
-} from './server/services/integrations';
-import { voiceProvider } from './server/services/voiceProvider';
-import { createSeedData, store } from './server/store';
+} from './server/services/integrations.ts';
+import { voiceProvider } from './server/services/voiceProvider.ts';
+import { createSeedData, store } from './server/store.ts';
 import {
   buildScenarioTranscript,
   createSimulationFleetUnits,
   SIMULATION_SCENARIOS,
-} from './src/utils/simulationEngine';
-import type { SimulationScenarioId } from './src/types/responda';
+} from './src/utils/simulationEngine.ts';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 function getRoleFromReq(req: express.Request): { role: UserRole; operatorName: string } {
   const rawRole = String(req.headers['x-responda-role'] || req.body?.actorRole || 'Dispatcher');
@@ -1330,6 +1329,7 @@ async function startServer(): Promise<void> {
 
   // Vite middleware in dev, static dist in prod
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -1338,7 +1338,7 @@ async function startServer(): Promise<void> {
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.get('/{*splat}', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
