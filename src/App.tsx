@@ -59,10 +59,12 @@ import { SimulationWorkspace } from './components/SimulationWorkspace';
 import { RespondaLogo } from './components/StatusBadges';
 import {
   buildSimulatedCorridorRoute,
+  getTrackingMilestoneForElapsed,
   interpolatePointAlongRoute,
   rankUnitsForIncident,
   SIMULATION_SCENARIOS,
   SIMULATION_STAGES,
+  SIMULATION_TRACKING_DURATION_SEC,
 } from './utils/simulationEngine';
 import {
   isSpeechSynthesisSupported,
@@ -179,6 +181,11 @@ export default function App() {
     operatorTakenOver: false,
     dispatchApproved: false,
     trackingProgressPct: 0,
+    trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
+    trackingElapsedSec: 0,
+    trackingStatusText: '',
+    simulatedArrivalAt: undefined,
+    patientPickupStatus: 'PENDING',
     arrivedOnScene: false,
     completed: false,
     activeRoute: null,
@@ -192,6 +199,11 @@ export default function App() {
   const unitsRef = useRef(units);
   unitsRef.current = units;
   const simTimersRef = useRef<Set<number>>(new Set());
+  const trackingIntervalRef = useRef<number | null>(null);
+  const trackingRemainingMsRef = useRef<number>(SIMULATION_TRACKING_DURATION_SEC * 1000);
+  const trackingLastTickRef = useRef<number>(0);
+  const trackingArrivalHandledRef = useRef<boolean>(false);
+  const trackingMilestonesSentRef = useRef<Set<string>>(new Set());
   const speechCancelRef = useRef<(() => void) | null>(null);
 
   const scheduleSimTimeout = useCallback((fn: () => void, ms: number) => {
@@ -203,7 +215,15 @@ export default function App() {
     return id;
   }, []);
 
+  const stopTrackingInterval = useCallback(() => {
+    if (trackingIntervalRef.current !== null) {
+      window.clearInterval(trackingIntervalRef.current);
+      trackingIntervalRef.current = null;
+    }
+  }, []);
+
   const clearSimExecution = useCallback(() => {
+    stopTrackingInterval();
     simTimersRef.current.forEach((id) => window.clearTimeout(id));
     simTimersRef.current.clear();
     if (speechCancelRef.current) {
@@ -211,7 +231,7 @@ export default function App() {
       speechCancelRef.current = null;
     }
     stopAllSpeech();
-  }, []);
+  }, [stopTrackingInterval]);
 
   useEffect(() => {
     return () => {
@@ -456,6 +476,9 @@ export default function App() {
       return;
     }
     setIncidents((prev) => prev.map((i) => (i.id === id ? data.incident : i)));
+    if (Array.isArray(data.units)) {
+      setUnits(data.units);
+    }
     if (
       status === 'CLOSED' &&
       simStateRef.current.active &&
@@ -601,13 +624,125 @@ export default function App() {
     []
   );
 
+  const persistSimUnitMilestone = useCallback(
+    async (payload: {
+      unitId: string;
+      lat: number;
+      lng: number;
+      availability: UnitAvailability;
+      incidentId: string;
+      incidentStatus: IncidentStatus;
+      timelineTitle: string;
+      timelineDescription: string;
+      extraTimelineEvents?: Array<{
+        type?: IncidentRecord['timeline'][number]['type'];
+        title: string;
+        description: string;
+      }>;
+    }) => {
+      const res = await fetch('/api/simulation/unit-position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as {
+          unit: ResponseUnit;
+          incident?: IncidentRecord;
+        };
+        setUnits((prev) => prev.map((u) => (u.id === d.unit.id ? d.unit : u)));
+        if (d.incident) {
+          setIncidents((prev) =>
+            prev.map((i) => (i.id === d.incident!.id ? d.incident! : i))
+          );
+        }
+      }
+    },
+    []
+  );
+
+  const completeTrackingArrival = useCallback(
+    async (
+      scenarioId: SimulationScenarioId,
+      unitId: string,
+      advanceImmediately: boolean = false
+    ) => {
+      if (trackingArrivalHandledRef.current) return;
+      trackingArrivalHandledRef.current = true;
+      stopTrackingInterval();
+      trackingRemainingMsRef.current = 0;
+
+      const scenario = SIMULATION_SCENARIOS[scenarioId];
+      const arrivalIso = new Date().toISOString();
+
+      await persistSimUnitMilestone({
+        unitId,
+        lat: scenario.resolvedCoords.lat,
+        lng: scenario.resolvedCoords.lng,
+        availability: 'ON_SCENE',
+        incidentId: scenario.incidentId,
+        incidentStatus: 'ON_SCENE',
+        timelineTitle: 'Response unit arrived (Simulation)',
+        timelineDescription: `Response unit has arrived at the incident location (${scenario.verifiedLocationDescription}).`,
+        extraTimelineEvents: [
+          {
+            type: 'STATUS_CHANGED',
+            title: 'Patient picked up — En route to hospital (Simulation)',
+            description: `Simulated patient pickup recorded. En route to ${scenario.hospitalDestination.name} (Demo Destination).`,
+          },
+        ],
+      });
+
+      setSimState((prev) => ({
+        ...prev,
+        trackingProgressPct: 100,
+        trackingRemainingSec: 0,
+        trackingElapsedSec: SIMULATION_TRACKING_DURATION_SEC,
+        trackingStatusText: 'Response unit has arrived at the incident location.',
+        arrivedOnScene: true,
+        simulatedArrivalAt: arrivalIso,
+        patientPickupStatus: 'PICKED_UP_EN_ROUTE_TO_HOSPITAL',
+        stage: advanceImmediately ? 10 : prev.stage,
+        statusMessage: advanceImmediately
+          ? SIMULATION_STAGES[9].nextExpectedAction
+          : `RESPONSE UNIT ARRIVED — PATIENT PICKED UP — EN ROUTE TO HOSPITAL (${scenario.hospitalDestination.name} · Simulated).`,
+      }));
+
+      pushToast(
+        `Response unit arrived — patient picked up (en route to ${scenario.hospitalDestination.name} · Demo).`,
+        'success'
+      );
+
+      if (!advanceImmediately) {
+        scheduleSimTimeout(() => {
+          if (
+            !simStateRef.current.active ||
+            simStateRef.current.paused ||
+            simStateRef.current.stage !== 9
+          ) {
+            return;
+          }
+          setSimState((prev) => ({
+            ...prev,
+            stage: 10,
+            arrivedOnScene: true,
+            statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
+          }));
+        }, 2500);
+      }
+    },
+    [persistSimUnitMilestone, pushToast, scheduleSimTimeout, stopTrackingInterval]
+  );
+
   const runSimulationTracking = useCallback(
     async (
       scenarioId: SimulationScenarioId,
       unitId: string,
-      routeToUse: RouteResult
+      routeToUse: RouteResult,
+      options: { resumeExisting?: boolean } = {}
     ) => {
       const scenario = SIMULATION_SCENARIOS[scenarioId];
+      const totalMs = SIMULATION_TRACKING_DURATION_SEC * 1000;
       const coords =
         routeToUse.coordinates && routeToUse.coordinates.length >= 2
           ? routeToUse.coordinates
@@ -618,112 +753,122 @@ export default function App() {
               scenario.resolvedCoords.lng
             ).coordinates!;
 
-      const checkpoints: Array<{
-        pct: number;
-        availability?: UnitAvailability;
-        incidentStatus?: IncidentStatus;
-        title?: string;
-        desc?: string;
-      }> = [
-        {
-          pct: 25,
-          availability: 'ACKNOWLEDGED',
-          incidentStatus: 'RESPONDING',
-          title: 'Unit acknowledged dispatch (Simulation)',
-          desc: 'Crew confirmed route along Lagos corridor.',
-        },
-        {
-          pct: 50,
-          availability: 'EN_ROUTE',
-          incidentStatus: 'RESPONDING',
-          title: 'Unit en route — Simulation',
-          desc: `Approaching ${scenario.area} sector.`,
-        },
-        { pct: 75 },
-        {
-          pct: 100,
-          availability: 'ON_SCENE',
-          incidentStatus: 'ON_SCENE',
-          title: 'Unit arrived On Scene (Simulation)',
-          desc: `Arrived at ${scenario.verifiedLocationDescription}.`,
-        },
-      ];
+      stopTrackingInterval();
 
-      let idx = 0;
-      const stepFrame = async () => {
+      if (!options.resumeExisting) {
+        trackingRemainingMsRef.current = totalMs;
+        trackingArrivalHandledRef.current = false;
+        trackingMilestonesSentRef.current = new Set(['DEPARTED']);
+        const startMilestone = getTrackingMilestoneForElapsed(
+          0,
+          SIMULATION_TRACKING_DURATION_SEC,
+          scenario.area
+        );
+        const [startLat, startLng] = interpolatePointAlongRoute(coords, 0);
+
+        setSimState((prev) => ({
+          ...prev,
+          trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
+          trackingElapsedSec: 0,
+          trackingProgressPct: 0,
+          trackingStatusText: startMilestone.statusText,
+          arrivedOnScene: false,
+          simulatedArrivalAt: undefined,
+          patientPickupStatus: 'PENDING',
+          statusMessage: `${startMilestone.statusText} (01:00 simulated countdown active)`,
+        }));
+
+        await persistSimUnitMilestone({
+          unitId,
+          lat: startLat,
+          lng: startLng,
+          availability: startMilestone.availability,
+          incidentId: scenario.incidentId,
+          incidentStatus: 'RESPONDING',
+          timelineTitle: startMilestone.timelineTitle,
+          timelineDescription: startMilestone.timelineDescription,
+        });
+      }
+
+      if (trackingArrivalHandledRef.current || trackingRemainingMsRef.current <= 0) {
+        void completeTrackingArrival(scenarioId, unitId);
+        return;
+      }
+
+      trackingLastTickRef.current = Date.now();
+      trackingIntervalRef.current = window.setInterval(() => {
         const cur = simStateRef.current;
-        if (!cur.active || cur.paused || cur.stage !== 9) return;
-        const cp = checkpoints[idx];
-        if (!cp) return;
-        const [lat, lng] = interpolatePointAlongRoute(coords, cp.pct);
+        if (!cur.active || cur.paused || cur.stage !== 9) {
+          stopTrackingInterval();
+          return;
+        }
 
-        if (cp.availability) {
-          const res = await fetch('/api/simulation/unit-position', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              unitId,
-              lat,
-              lng,
-              availability: cp.availability,
-              incidentId: scenario.incidentId,
-              incidentStatus: cp.incidentStatus,
-              timelineTitle: cp.title,
-              timelineDescription: cp.desc,
-            }),
+        const now = Date.now();
+        const deltaMs = Math.max(0, now - trackingLastTickRef.current);
+        trackingLastTickRef.current = now;
+
+        const nextRemainingMs = Math.max(0, trackingRemainingMsRef.current - deltaMs);
+        trackingRemainingMsRef.current = nextRemainingMs;
+
+        const remainingSec = Math.ceil(nextRemainingMs / 1000);
+        const elapsedSec = Math.max(
+          0,
+          Math.min(SIMULATION_TRACKING_DURATION_SEC, SIMULATION_TRACKING_DURATION_SEC - remainingSec)
+        );
+        const exactPct = Math.min(
+          100,
+          Math.round(((totalMs - nextRemainingMs) / totalMs) * 100)
+        );
+
+        const milestone = getTrackingMilestoneForElapsed(
+          elapsedSec,
+          SIMULATION_TRACKING_DURATION_SEC,
+          scenario.area
+        );
+
+        const [lat, lng] = interpolatePointAlongRoute(coords, exactPct);
+        setUnits((prev) =>
+          prev.map((u) => (u.id === unitId ? { ...u, lat, lng, availability: milestone.availability } : u))
+        );
+
+        if (
+          (milestone.milestoneKey === 'EN_ROUTE' || milestone.milestoneKey === 'APPROACHING') &&
+          !trackingMilestonesSentRef.current.has(milestone.milestoneKey)
+        ) {
+          trackingMilestonesSentRef.current.add(milestone.milestoneKey);
+          void persistSimUnitMilestone({
+            unitId,
+            lat,
+            lng,
+            availability: milestone.availability,
+            incidentId: scenario.incidentId,
+            incidentStatus: 'RESPONDING',
+            timelineTitle: milestone.timelineTitle,
+            timelineDescription: milestone.timelineDescription,
           });
-          if (res.ok) {
-            const d = (await res.json()) as {
-              unit: ResponseUnit;
-              incident?: IncidentRecord;
-            };
-            setUnits((prev) => prev.map((u) => (u.id === d.unit.id ? d.unit : u)));
-            if (d.incident) {
-              setIncidents((prev) =>
-                prev.map((i) => (i.id === d.incident!.id ? d.incident! : i))
-              );
-            }
+          if (milestone.milestoneKey === 'EN_ROUTE') {
+            pushToast('Emergency vehicle is en route — Simulation.', 'info');
           }
-          if (cp.availability === 'EN_ROUTE') {
-            pushToast('Unit en route — Simulation.', 'info');
-          }
-        } else {
-          setUnits((prev) =>
-            prev.map((u) => (u.id === unitId ? { ...u, lat, lng } : u))
-          );
+        }
+
+        if (nextRemainingMs <= 0) {
+          void completeTrackingArrival(scenarioId, unitId);
+          return;
         }
 
         setSimState((prev) => ({
           ...prev,
-          trackingProgressPct: cp.pct,
-          arrivedOnScene: cp.pct >= 100,
-          statusMessage:
-            cp.pct >= 100
-              ? 'Unit arrived On Scene. Advancing to final review and closure.'
-              : `Tracking live movement along Lagos route (${cp.pct}% complete).`,
+          trackingRemainingSec: remainingSec,
+          trackingElapsedSec: elapsedSec,
+          trackingProgressPct: exactPct,
+          trackingStatusText: milestone.statusText,
+          statusMessage: `${milestone.statusText} (${String(
+            Math.floor(remainingSec / 60)
+          ).padStart(2, '0')}:${String(remainingSec % 60).padStart(2, '0')} remaining)`,
         }));
-
-        idx += 1;
-        if (idx < checkpoints.length) {
-          scheduleSimTimeout(() => {
-            void stepFrame();
-          }, 950);
-        } else {
-          scheduleSimTimeout(() => {
-            if (!simStateRef.current.active || simStateRef.current.paused) return;
-            setSimState((prev) => ({
-              ...prev,
-              stage: 10,
-              arrivedOnScene: true,
-              statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
-            }));
-          }, 900);
-        }
-      };
-
-      await stepFrame();
+      }, 250);
     },
-    [pushToast, scheduleSimTimeout]
+    [completeTrackingArrival, persistSimUnitMilestone, pushToast, stopTrackingInterval]
   );
 
   const playDialogueSequence = useCallback(
@@ -832,6 +977,10 @@ export default function App() {
         setSimWorkspaceOpen(true);
         setSidebarCollapsed(true);
 
+        trackingRemainingMsRef.current = SIMULATION_TRACKING_DURATION_SEC * 1000;
+        trackingArrivalHandledRef.current = false;
+        trackingMilestonesSentRef.current.clear();
+
         setSimState({
           active: true,
           paused: false,
@@ -850,6 +999,11 @@ export default function App() {
           operatorTakenOver: false,
           dispatchApproved: false,
           trackingProgressPct: 0,
+          trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
+          trackingElapsedSec: 0,
+          trackingStatusText: 'Response unit awaiting dispatch.',
+          simulatedArrivalAt: undefined,
+          patientPickupStatus: 'PENDING',
           arrivedOnScene: false,
           completed: false,
           activeRoute: null,
@@ -1141,7 +1295,12 @@ export default function App() {
             setSimState((prev) => ({
               ...prev,
               stage: 9,
-              trackingProgressPct: 10,
+              trackingProgressPct: 0,
+              trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
+              trackingElapsedSec: 0,
+              trackingStatusText: 'Response unit has departed.',
+              patientPickupStatus: 'PENDING',
+              arrivedOnScene: false,
               activeRoute: routeToUse,
               statusMessage: SIMULATION_STAGES[8].nextExpectedAction,
             }));
@@ -1153,7 +1312,12 @@ export default function App() {
         setSimState((prev) => ({
           ...prev,
           stage: 9,
-          trackingProgressPct: 10,
+          trackingProgressPct: 0,
+          trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
+          trackingElapsedSec: 0,
+          trackingStatusText: 'Response unit has departed.',
+          patientPickupStatus: 'PENDING',
+          arrivedOnScene: false,
           activeRoute: routeToUse,
           statusMessage: SIMULATION_STAGES[8].nextExpectedAction,
         }));
@@ -1162,38 +1326,21 @@ export default function App() {
       }
 
       if (cur.stage === 9) {
-        // Fast-forward tracking directly to On Scene Arrival (Stage 10)
+        // Fast-forward tracking directly through Arrival & Hospital Pickup to Stage 10 (Closure)
         const unitId = cur.selectedUnitId || scenario.recommendedUnitId;
-        const res = await fetch('/api/simulation/unit-position', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            unitId,
-            lat: scenario.resolvedCoords.lat,
-            lng: scenario.resolvedCoords.lng,
-            availability: 'ON_SCENE',
-            incidentId: scenario.incidentId,
-            incidentStatus: 'ON_SCENE',
-            timelineTitle: 'Unit arrived On Scene (Simulation)',
-            timelineDescription: `Arrived at ${scenario.verifiedLocationDescription}.`,
-          }),
-        });
-        if (res.ok) {
-          const d = await res.json();
-          setUnits((prev) => prev.map((u) => (u.id === d.unit.id ? d.unit : u)));
-          if (d.incident) {
-            setIncidents((prev) =>
-              prev.map((i) => (i.id === d.incident.id ? d.incident : i))
-            );
-          }
+        if (!trackingArrivalHandledRef.current) {
+          await completeTrackingArrival(cur.scenarioId, unitId, true);
+        } else {
+          setSimState((prev) => ({
+            ...prev,
+            stage: 10,
+            trackingRemainingSec: 0,
+            trackingElapsedSec: SIMULATION_TRACKING_DURATION_SEC,
+            trackingProgressPct: 100,
+            arrivedOnScene: true,
+            statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
+          }));
         }
-        setSimState((prev) => ({
-          ...prev,
-          stage: 10,
-          trackingProgressPct: 100,
-          arrivedOnScene: true,
-          statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
-        }));
         return;
       }
 
@@ -1236,6 +1383,7 @@ export default function App() {
     activeRoute,
     answerSimulationCall,
     clearSimExecution,
+    completeTrackingArrival,
     operator.name,
     pushToast,
     runSimulationTracking,
@@ -1300,21 +1448,32 @@ export default function App() {
             );
           }, 150);
         } else if (prev.stage === 9 && prev.active && prev.selectedUnitId) {
-          const routeToUse =
-            prev.activeRoute ||
-            buildSimulatedCorridorRoute(
-              6.5068,
-              3.3775,
-              SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lat,
-              SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lng
-            );
-          scheduleSimTimeout(() => {
-            void runSimulationTracking(
-              prev.scenarioId,
-              prev.selectedUnitId!,
-              routeToUse
-            );
-          }, 150);
+          if (prev.arrivedOnScene) {
+            scheduleSimTimeout(() => {
+              setSimState((s) => ({
+                ...s,
+                stage: 10,
+                statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
+              }));
+            }, 600);
+          } else {
+            const routeToUse =
+              prev.activeRoute ||
+              buildSimulatedCorridorRoute(
+                6.5068,
+                3.3775,
+                SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lat,
+                SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lng
+              );
+            scheduleSimTimeout(() => {
+              void runSimulationTracking(
+                prev.scenarioId,
+                prev.selectedUnitId!,
+                routeToUse,
+                { resumeExisting: true }
+              );
+            }, 100);
+          }
         }
       }
       return {
@@ -1391,11 +1550,6 @@ export default function App() {
       ).length,
     },
     {
-      id: 'ai-intake',
-      label: 'AI Intake',
-      icon: <Bot className="w-4 h-4" />,
-    },
-    {
       id: 'conversation-centre',
       label: 'Conversation Centre',
       icon: <Headphones className="w-4 h-4" />,
@@ -1405,19 +1559,24 @@ export default function App() {
       ).length,
     },
     {
+      id: 'ai-intake',
+      label: 'AI Intake',
+      icon: <Bot className="w-4 h-4" />,
+    },
+    {
       id: 'response-units',
       label: 'Response Units',
       icon: <Truck className="w-4 h-4" />,
     },
     {
-      id: 'incident-history',
-      label: 'Incident History',
-      icon: <Archive className="w-4 h-4" />,
-    },
-    {
       id: 'analytics',
       label: 'Analytics',
       icon: <BarChart3 className="w-4 h-4" />,
+    },
+    {
+      id: 'incident-history',
+      label: 'Incident History',
+      icon: <Archive className="w-4 h-4" />,
     },
     {
       id: 'responsive-showcase',
@@ -1426,7 +1585,7 @@ export default function App() {
     },
     {
       id: 'settings',
-      label: 'Settings & Integrations',
+      label: 'Settings',
       icon: <Settings className="w-4 h-4" />,
     },
   ];
@@ -1836,7 +1995,12 @@ export default function App() {
                         ...prev,
                         paused: false,
                         stage: 9,
-                        trackingProgressPct: 10,
+                        trackingProgressPct: 0,
+                        trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
+                        trackingElapsedSec: 0,
+                        trackingStatusText: 'Response unit has departed.',
+                        patientPickupStatus: 'PENDING',
+                        arrivedOnScene: false,
                         activeRoute: routeToUse,
                         statusMessage: SIMULATION_STAGES[8].nextExpectedAction,
                       }));
@@ -1911,6 +2075,7 @@ export default function App() {
                 }}
                 onTakeOver={handleTakeOver}
                 onGoToIntake={() => navigateTo('ai-intake')}
+                onOpenHistory={() => navigateTo('incident-history')}
                 onOpenGuide={() => setGuideOpen(true)}
               />
             ) : section === 'live-incidents' ? (

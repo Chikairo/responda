@@ -1,5 +1,6 @@
 import {
   EmergencyCategory,
+  HospitalDestination,
   IncidentPriority,
   IncidentRecord,
   LocationSource,
@@ -8,7 +9,10 @@ import {
   SimulationScenarioId,
   SimulationStageNumber,
   TranscriptMessage,
+  UnitAvailability,
 } from '../types/responda';
+
+export const SIMULATION_TRACKING_DURATION_SEC = 60;
 
 export interface SimulationStageDefinition {
   stage: SimulationStageNumber;
@@ -129,6 +133,7 @@ export interface SimulationScenarioConfig {
   verifiedLocationDescription: string;
   landmark: string;
   resolvedCoords: { lat: number; lng: number; accuracyMeters: number };
+  hospitalDestination: HospitalDestination;
   peopleAffected: number;
   immediateDanger: boolean;
   dangerDetails: string;
@@ -162,6 +167,13 @@ export const SIMULATION_SCENARIOS: Record<
       'University Road / Abule Oja Junction by UNILAG Main Gate, Yaba, Lagos',
     landmark: 'UNILAG Main Gate',
     resolvedCoords: { lat: 6.5158, lng: 3.3845, accuracyMeters: 28 },
+    hospitalDestination: {
+      name: 'Lagos University Teaching Hospital (LUTH)',
+      area: 'Idi-Araba, Surulere / Yaba Axis',
+      lat: 6.5177,
+      lng: 3.3547,
+      isSimulatedDemo: true,
+    },
     peopleAffected: 2,
     immediateDanger: true,
     dangerDetails: 'Two injured occupants; jammed door and noticeable petrol odour near moving traffic.',
@@ -254,6 +266,13 @@ export const SIMULATION_SCENARIOS: Record<
       '45 Allen Avenue (By Alade Market Junction), Ikeja, Lagos',
     landmark: 'Allen Avenue Roundabout',
     resolvedCoords: { lat: 6.6018, lng: 3.3515, accuracyMeters: 24 },
+    hospitalDestination: {
+      name: 'Lagos State University Teaching Hospital (LASUTH)',
+      area: 'Ikeja GRA Axis',
+      lat: 6.5892,
+      lng: 3.3426,
+      isSimulatedDemo: true,
+    },
     peopleAffected: 1,
     immediateDanger: true,
     dangerDetails: 'Acute chest tightness and breathing difficulty; crowd gathering around patient.',
@@ -333,6 +352,13 @@ export const SIMULATION_SCENARIOS: Record<
       'Plot 18 Admiralty Way (Gate 2 Security Post), Lekki Phase 1, Lagos',
     landmark: 'Admiralty Circle',
     resolvedCoords: { lat: 6.4479, lng: 3.4678, accuracyMeters: 30 },
+    hospitalDestination: {
+      name: 'Reddington Hospital Lekki',
+      area: 'Lekki Phase 1 Axis',
+      lat: 6.4408,
+      lng: 3.4622,
+      isSimulatedDemo: true,
+    },
     peopleAffected: 3,
     immediateDanger: true,
     dangerDetails: 'Two intruders sighted inside rear compound yard; three staff locked in guardroom.',
@@ -610,6 +636,79 @@ export function interpolatePointAlongRoute(
   }
 
   return coordinates[coordinates.length - 1];
+}
+
+export interface TrackingMilestoneInfo {
+  milestoneKey: 'DEPARTED' | 'EN_ROUTE' | 'APPROACHING' | 'ARRIVED';
+  progressPct: number;
+  statusText: string;
+  availability: UnitAvailability;
+  timelineTitle: string;
+  timelineDescription: string;
+}
+
+export function getTrackingMilestoneForElapsed(
+  elapsedSec: number,
+  totalSec: number = SIMULATION_TRACKING_DURATION_SEC,
+  areaLabel: string = 'Lagos'
+): TrackingMilestoneInfo {
+  const clampedElapsed = Math.max(0, Math.min(totalSec, elapsedSec));
+  const progressPct = Math.min(100, Math.round((clampedElapsed / totalSec) * 100));
+
+  if (clampedElapsed >= totalSec) {
+    return {
+      milestoneKey: 'ARRIVED',
+      progressPct: 100,
+      statusText: 'Response unit has arrived at the incident location.',
+      availability: 'ON_SCENE',
+      timelineTitle: 'Response unit arrived (Simulation)',
+      timelineDescription: `Response unit has arrived at the incident location in ${areaLabel}.`,
+    };
+  }
+
+  if (clampedElapsed >= Math.round(totalSec * 0.67)) {
+    return {
+      milestoneKey: 'APPROACHING',
+      progressPct,
+      statusText: 'Response unit is approaching the incident location.',
+      availability: 'EN_ROUTE',
+      timelineTitle: 'Response unit approaching scene (Simulation)',
+      timelineDescription: `Emergency vehicle is approaching the ${areaLabel} incident location.`,
+    };
+  }
+
+  if (clampedElapsed >= Math.round(totalSec * 0.2)) {
+    return {
+      milestoneKey: 'EN_ROUTE',
+      progressPct,
+      statusText: 'Emergency vehicle is en route to the incident.',
+      availability: 'EN_ROUTE',
+      timelineTitle: 'Unit en route to incident (Simulation)',
+      timelineDescription: `Emergency vehicle is en route along the ${areaLabel} corridor.`,
+    };
+  }
+
+  return {
+    milestoneKey: 'DEPARTED',
+    progressPct,
+    statusText: 'Response unit has departed.',
+    availability: 'ACKNOWLEDGED',
+    timelineTitle: 'Response unit departed (Simulation)',
+    timelineDescription: `Assigned unit acknowledged dispatch and departed toward ${areaLabel}.`,
+  };
+}
+
+export function buildSimulatedHospitalTransferCoordinates(
+  incidentLat: number,
+  incidentLng: number,
+  hospital: HospitalDestination
+): [number, number][] {
+  return buildSimulatedCorridorRoute(
+    incidentLat,
+    incidentLng,
+    hospital.lat,
+    hospital.lng
+  ).coordinates!;
 }
 
 export interface LocationIntelligenceMethodStatus {

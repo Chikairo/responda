@@ -4,12 +4,15 @@ import { IncidentRecord } from '../types/responda';
 import {
   SIMULATION_SCENARIOS,
   SIMULATION_STAGES,
+  SIMULATION_TRACKING_DURATION_SEC,
   buildLocationIntelligenceMethods,
   buildScenarioTranscript,
   buildSimulatedCorridorRoute,
+  buildSimulatedHospitalTransferCoordinates,
   buildSimulationFinalSummary,
   calculateHaversineKm,
   createSimulationFleetUnits,
+  getTrackingMilestoneForElapsed,
   interpolatePointAlongRoute,
   rankUnitsForIncident,
 } from './simulationEngine';
@@ -64,7 +67,7 @@ test('SIMULATION_STAGES covers all 10 ordered stages', () => {
   });
 });
 
-test('SIMULATION_SCENARIOS defines all 3 Lagos scenarios with unique deterministic IDs and shrinking missing flags', () => {
+test('SIMULATION_SCENARIOS defines all 3 Lagos scenarios with unique deterministic IDs, shrinking flags, and demo hospitals', () => {
   const ids = Object.values(SIMULATION_SCENARIOS).map((s) => s.incidentId);
   assert.deepEqual(ids, ['INC-DEMO-2026-001', 'INC-DEMO-2026-002', 'INC-DEMO-2026-003']);
 
@@ -75,6 +78,11 @@ test('SIMULATION_SCENARIOS defines all 3 Lagos scenarios with unique determinist
         scenario.dialogue[scenario.dialogue.length - 1].remainingMissingFlags.length
     );
     assert.ok(scenario.resolvedCoords.lat > 6 && scenario.resolvedCoords.lng > 3);
+    assert.equal(scenario.hospitalDestination.isSimulatedDemo, true);
+    assert.ok(scenario.hospitalDestination.name.length > 0);
+    assert.ok(
+      scenario.hospitalDestination.lat > 6 && scenario.hospitalDestination.lng > 3
+    );
   }
 });
 
@@ -133,6 +141,50 @@ test('interpolatePointAlongRoute accurately interpolates 0%, 50%, and 100% along
   const corridor = buildSimulatedCorridorRoute(6.5068, 3.3775, 6.5158, 3.3845);
   assert.equal(corridor.isSimulatedFallback, true);
   assert.equal(corridor.coordinates?.length, 5);
+});
+
+test('60-second simulation tracking milestones progress cleanly from departed to arrived and never report arrival early', () => {
+  assert.equal(SIMULATION_TRACKING_DURATION_SEC, 60);
+
+  const departed = getTrackingMilestoneForElapsed(0, 60, 'Yaba');
+  assert.equal(departed.milestoneKey, 'DEPARTED');
+  assert.equal(departed.availability, 'ACKNOWLEDGED');
+  assert.equal(departed.statusText, 'Response unit has departed.');
+
+  const enRoute = getTrackingMilestoneForElapsed(20, 60, 'Yaba');
+  assert.equal(enRoute.milestoneKey, 'EN_ROUTE');
+  assert.equal(enRoute.availability, 'EN_ROUTE');
+  assert.equal(enRoute.statusText, 'Emergency vehicle is en route to the incident.');
+
+  const approaching = getTrackingMilestoneForElapsed(50, 60, 'Yaba');
+  assert.equal(approaching.milestoneKey, 'APPROACHING');
+  assert.equal(approaching.availability, 'EN_ROUTE');
+  assert.equal(
+    approaching.statusText,
+    'Response unit is approaching the incident location.'
+  );
+
+  const arrived = getTrackingMilestoneForElapsed(60, 60, 'Yaba');
+  assert.equal(arrived.milestoneKey, 'ARRIVED');
+  assert.equal(arrived.progressPct, 100);
+  assert.equal(arrived.availability, 'ON_SCENE');
+  assert.equal(
+    arrived.statusText,
+    'Response unit has arrived at the incident location.'
+  );
+
+  const yaba = SIMULATION_SCENARIOS['yaba-accident'];
+  const hospitalPts = buildSimulatedHospitalTransferCoordinates(
+    yaba.resolvedCoords.lat,
+    yaba.resolvedCoords.lng,
+    yaba.hospitalDestination
+  );
+  assert.equal(hospitalPts.length, 5);
+  assert.deepEqual(hospitalPts[0], [yaba.resolvedCoords.lat, yaba.resolvedCoords.lng]);
+  assert.deepEqual(hospitalPts[4], [
+    yaba.hospitalDestination.lat,
+    yaba.hospitalDestination.lng,
+  ]);
 });
 
 test('buildLocationIntelligenceMethods returns A–D methods and keeps Method D honest when unconfigured', () => {

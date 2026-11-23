@@ -40,6 +40,8 @@ interface LagosMapProps {
   showInfoCard?: boolean;
   radarCoords?: [number, number] | null;
   focusBoundsPoints?: [number, number][] | null;
+  hospitalMarker?: { name: string; area?: string; lat: number; lng: number } | null;
+  hospitalRouteCoordinates?: [number, number][] | null;
 }
 
 const LAGOS_CENTER: [number, number] = [6.505, 3.392];
@@ -119,6 +121,20 @@ function createUnitIcon(
   });
 }
 
+function createHospitalIcon(isDarkTiles: boolean): L.DivIcon {
+  const bg = isDarkTiles ? '#064E3B' : '#ECFDF5';
+  const border = '#10B981';
+  const text = isDarkTiles ? '#6EE7B7' : '#047857';
+  return L.divIcon({
+    className: 'responda-hospital-marker',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    html: `<div style="width:26px;height:26px;border-radius:8px;background:${bg};border:2px solid ${border};color:${text};font-family:'JetBrains Mono',monospace;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(15,23,42,0.35);">
+      H
+    </div>`,
+  });
+}
+
 export function LagosMap({
   incidents,
   units,
@@ -135,6 +151,8 @@ export function LagosMap({
   showInfoCard = true,
   radarCoords = null,
   focusBoundsPoints = null,
+  hospitalMarker = null,
+  hospitalRouteCoordinates = null,
 }: LagosMapProps) {
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -152,6 +170,7 @@ export function LagosMap({
   onPinMoveRef.current = onPinMove;
   const editablePinRef = useRef(editablePin);
   editablePinRef.current = editablePin;
+  const lastBoundsCountRef = useRef<string>('');
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -250,7 +269,30 @@ export function LagosMap({
       }).addTo(group);
     }
 
+    // Draw hospital onward route if provided
+    if (hospitalRouteCoordinates && hospitalRouteCoordinates.length > 1) {
+      L.polyline(hospitalRouteCoordinates, {
+        color: '#10B981',
+        weight: 3,
+        opacity: 0.85,
+        dashArray: '6 6',
+      }).addTo(group);
+    }
+
     const isDarkTiles = tileMode === 'dark';
+
+    // Draw hospital destination marker
+    if (hospitalMarker && Number.isFinite(hospitalMarker.lat) && Number.isFinite(hospitalMarker.lng)) {
+      const hMarker = L.marker([hospitalMarker.lat, hospitalMarker.lng], {
+        icon: createHospitalIcon(isDarkTiles),
+        zIndexOffset: 200,
+      });
+      hMarker.bindTooltip(
+        `${hospitalMarker.name} (Demo Hospital Destination)`,
+        { direction: 'top', offset: [0, -12] }
+      );
+      hMarker.addTo(group);
+    }
 
     // Draw unit markers
     for (const unit of units) {
@@ -303,27 +345,48 @@ export function LagosMap({
         zIndexOffset: 50,
       }).addTo(group);
     }
-  }, [incidents, units, selectedIncidentId, selectedUnitId, route, tileMode, radarCoords, onSelectIncident, onSelectUnit]);
+  }, [
+    incidents,
+    units,
+    selectedIncidentId,
+    selectedUnitId,
+    route,
+    hospitalMarker,
+    hospitalRouteCoordinates,
+    tileMode,
+    radarCoords,
+    onSelectIncident,
+    onSelectUnit,
+  ]);
 
-  // Frame route / incident + unit cleanly when focusBoundsPoints is supplied, or center on selected incident
+  const focusBoundsKey = focusBoundsPoints
+    ? focusBoundsPoints.map((p) => `${p[0].toFixed(4)},${p[1].toFixed(4)}`).join('|')
+    : '';
+
+  // Frame route / incident + unit cleanly when focusBoundsPoints changes significantly, or center on selected incident
   useEffect(() => {
     setCardDismissed(false);
     const map = mapRef.current;
     if (!map) return;
 
     if (focusBoundsPoints && focusBoundsPoints.length >= 2) {
-      const valid = focusBoundsPoints.filter(
-        (pt) => Number.isFinite(pt[0]) && Number.isFinite(pt[1])
-      );
-      if (valid.length >= 2) {
-        map.fitBounds(L.latLngBounds(valid), {
-          padding: [48, 48],
-          maxZoom: 15,
-          animate: false,
-        });
-        return;
+      if (lastBoundsCountRef.current !== focusBoundsKey) {
+        const valid = focusBoundsPoints.filter(
+          (pt) => Number.isFinite(pt[0]) && Number.isFinite(pt[1])
+        );
+        if (valid.length >= 2) {
+          lastBoundsCountRef.current = focusBoundsKey;
+          map.fitBounds(L.latLngBounds(valid), {
+            padding: [48, 48],
+            maxZoom: 15,
+            animate: false,
+          });
+        }
       }
+      return;
     }
+
+    lastBoundsCountRef.current = '';
 
     if (radarCoords && Number.isFinite(radarCoords[0]) && Number.isFinite(radarCoords[1])) {
       map.setView(radarCoords, 15, { animate: false });
@@ -337,7 +400,7 @@ export function LagosMap({
         animate: false,
       });
     }
-  }, [selectedIncidentId, incidents, focusBoundsPoints, radarCoords]);
+  }, [selectedIncidentId, incidents, focusBoundsKey, focusBoundsPoints, radarCoords]);
 
   useEffect(() => {
     if (selectedUnitId) setCardDismissed(false);

@@ -516,7 +516,7 @@ async function startServer(): Promise<void> {
 
     broadcastEvent('incident:updated', outcome.incident);
     broadcastEvent('units:sync', outcome.units);
-    res.json({ incident: outcome.incident });
+    res.json({ incident: outcome.incident, units: outcome.units });
   });
 
   // Human-Approved Dispatch
@@ -1223,6 +1223,7 @@ async function startServer(): Promise<void> {
       incidentStatus,
       timelineTitle,
       timelineDescription,
+      extraTimelineEvents,
     } = req.body as {
       unitId?: string;
       lat?: number;
@@ -1232,6 +1233,11 @@ async function startServer(): Promise<void> {
       incidentStatus?: IncidentStatus;
       timelineTitle?: string;
       timelineDescription?: string;
+      extraTimelineEvents?: Array<{
+        type?: IncidentRecord['timeline'][number]['type'];
+        title: string;
+        description: string;
+      }>;
     };
 
     if (!unitId || typeof lat !== 'number' || typeof lng !== 'number') {
@@ -1275,6 +1281,21 @@ async function startServer(): Promise<void> {
               timestamp: now,
               isSimulated: true,
             });
+          }
+          if (Array.isArray(extraTimelineEvents)) {
+            for (const extra of extraTimelineEvents) {
+              if (!extra?.title) continue;
+              incident.timeline.push({
+                id: `ev-sim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                type: extra.type || 'STATUS_CHANGED',
+                title: extra.title,
+                description: extra.description || '',
+                actor: unit.callsign,
+                actorRole: 'Responder (Simulation)',
+                timestamp: now,
+                isSimulated: true,
+              });
+            }
           }
         }
       }

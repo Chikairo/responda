@@ -109,7 +109,7 @@ export function IncidentStatusBadge({ status }: { status: IncidentStatus }) {
     },
     AWAITING_OPERATOR: {
       cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35',
-      label: 'Awaiting Operator',
+      label: 'Awaiting Review',
     },
     UNDER_REVIEW: {
       cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/35',

@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Bot,
+  Building2,
   CheckCircle2,
+  Clock,
   Crosshair,
   FileText,
   Headphones,
@@ -31,9 +33,11 @@ import {
   buildLocationIntelligenceMethods,
   buildScenarioTranscript,
   buildSimulatedCorridorRoute,
+  buildSimulatedHospitalTransferCoordinates,
   buildSimulationFinalSummary,
   rankUnitsForIncident,
   SIMULATION_SCENARIOS,
+  SIMULATION_TRACKING_DURATION_SEC,
 } from '../utils/simulationEngine';
 import {
   formatDistanceKm,
@@ -353,17 +357,55 @@ export function SimulationWorkspace({
     return null;
   }, [simState.activeRoute, selectedUnit, syntheticStageIncident.location.lat, syntheticStageIncident.location.lng]);
 
+  const hospitalTransferCoords = useMemo<[number, number][] | null>(() => {
+    const incLat = syntheticStageIncident.location.lat;
+    const incLng = syntheticStageIncident.location.lng;
+    if (typeof incLat !== 'number' || typeof incLng !== 'number') return null;
+    return buildSimulatedHospitalTransferCoordinates(
+      incLat,
+      incLng,
+      scenario.hospitalDestination
+    );
+  }, [
+    syntheticStageIncident.location.lat,
+    syntheticStageIncident.location.lng,
+    scenario.hospitalDestination,
+  ]);
+
+  const routeStartPoint = previewRoute?.coordinates?.[0] || null;
+
   const focusBoundsPoints = useMemo<[number, number][] | null>(() => {
     const incLat = syntheticStageIncident.location.lat;
     const incLng = syntheticStageIncident.location.lng;
-    if (typeof incLat !== 'number' || typeof incLng !== 'number' || !selectedUnit) {
+    if (typeof incLat !== 'number' || typeof incLng !== 'number') {
       return null;
     }
+    if (simState.stage === 9) {
+      const pts: [number, number][] = [
+        [incLat, incLng],
+        [scenario.hospitalDestination.lat, scenario.hospitalDestination.lng],
+      ];
+      if (routeStartPoint) {
+        pts.push(routeStartPoint);
+      } else if (selectedUnit) {
+        pts.push([selectedUnit.lat, selectedUnit.lng]);
+      }
+      return pts;
+    }
+    if (!selectedUnit) return null;
     return [
       [incLat, incLng],
       [selectedUnit.lat, selectedUnit.lng],
     ];
-  }, [syntheticStageIncident.location.lat, syntheticStageIncident.location.lng, selectedUnit]);
+  }, [
+    syntheticStageIncident.location.lat,
+    syntheticStageIncident.location.lng,
+    simState.stage,
+    scenario.hospitalDestination.lat,
+    scenario.hospitalDestination.lng,
+    routeStartPoint,
+    selectedUnit,
+  ]);
 
   const locationMethods = useMemo(
     () => buildLocationIntelligenceMethods(syntheticStageIncident, carrierConfigured),
@@ -1685,7 +1727,7 @@ export function SimulationWorkspace({
   }
 
   // ============================================================================
-  // STAGE 8 (internal 9) — LIVE RESPONSE TRACKING (MAP-FIRST + UNIT PROGRESSION)
+  // STAGE 8 (internal 9) — LIVE RESPONSE TRACKING (60s TIMER + HOSPITAL ROUTE)
   // ============================================================================
   if (simState.stage === 9) {
     const unitAvail = selectedUnit?.availability || 'ASSIGNED';
@@ -1698,7 +1740,7 @@ export function SimulationWorkspace({
       },
       {
         key: 'ACKNOWLEDGED',
-        label: 'Acknowledged',
+        label: 'Departed',
         done: ['EN_ROUTE', 'ON_SCENE'].includes(unitAvail),
         active: unitAvail === 'ACKNOWLEDGED',
       },
@@ -1710,11 +1752,15 @@ export function SimulationWorkspace({
       },
       {
         key: 'ON_SCENE',
-        label: 'On Scene',
-        done: unitAvail === 'ON_SCENE',
+        label: 'Arrived',
+        done: unitAvail === 'ON_SCENE' || simState.arrivedOnScene,
         active: false,
       },
     ];
+
+    const countdownText = formatTimer(simState.trackingRemainingSec);
+    const statusText =
+      simState.trackingStatusText || 'Response unit has departed.';
 
     return (
       <div
@@ -1731,7 +1777,7 @@ export function SimulationWorkspace({
                 : 'text-slate-600 dark:text-slate-300'
             }`}
           >
-            Live Response Map
+            Live Tracking Map
           </button>
           <button
             type="button"
@@ -1742,7 +1788,7 @@ export function SimulationWorkspace({
                 : 'text-slate-600 dark:text-slate-300'
             }`}
           >
-            Status &amp; Timeline
+            Timer &amp; Status ({countdownText})
           </button>
         </div>
 
@@ -1759,6 +1805,8 @@ export function SimulationWorkspace({
               selectedIncidentId={syntheticStageIncident.id}
               selectedUnitId={selectedUnit?.id || null}
               route={previewRoute}
+              hospitalMarker={scenario.hospitalDestination}
+              hospitalRouteCoordinates={hospitalTransferCoords}
               focusBoundsPoints={focusBoundsPoints}
               heightClass="h-[380px] lg:h-full min-h-[380px]"
               showLegend={false}
@@ -1766,7 +1814,7 @@ export function SimulationWorkspace({
             />
           </div>
 
-          {/* Compact Side Tracking Panel */}
+          {/* Right Live Countdown & Hospital Transfer Panel */}
           <aside
             className={`lg:col-span-4 flex-col min-h-0 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] overflow-hidden ${
               mobilePane === 'secondary' ? 'flex' : 'hidden lg:flex'
@@ -1779,12 +1827,56 @@ export function SimulationWorkspace({
                   Live Response Tracking
                 </h2>
               </div>
-              <span className="font-mono text-xs font-bold text-cyan-700 dark:text-cyan-300 tabular-nums">
-                {simState.trackingProgressPct}%
+              <span className="font-mono text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                SIMULATED TIMER
               </span>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 text-xs">
+              {/* 60-Second Countdown Clock */}
+              <div
+                data-testid="sim-tracking-countdown"
+                className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3.5 flex items-center justify-between gap-3"
+              >
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>Simulated Arrival Countdown</span>
+                  </div>
+                  <div className="mt-1 font-display text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-50">
+                    {countdownText}
+                  </div>
+                </div>
+                <div className="text-right space-y-0.5">
+                  <div className="font-mono text-xs font-bold text-cyan-700 dark:text-cyan-300 tabular-nums">
+                    {simState.trackingProgressPct}%
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                    Elapsed: {simState.trackingElapsedSec}s / {SIMULATION_TRACKING_DURATION_SEC}s
+                  </div>
+                </div>
+              </div>
+
+              {/* Arrival + Hospital Pickup Confirmation (at 0s) */}
+              {simState.arrivedOnScene && (
+                <div
+                  data-testid="sim-arrival-pickup-banner"
+                  className="rounded-xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-500/40 p-3.5 space-y-1.5"
+                >
+                  <div className="flex items-center gap-2 font-display font-bold text-emerald-900 dark:text-emerald-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>RESPONSE UNIT ARRIVED</span>
+                  </div>
+                  <div className="font-mono text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                    PATIENT PICKED UP — EN ROUTE TO HOSPITAL
+                  </div>
+                  <p className="text-[11px] text-emerald-900/90 dark:text-emerald-100/90">
+                    Simulated pickup recorded. Transporting to{' '}
+                    <strong>{scenario.hospitalDestination.name}</strong> (Demo Destination).
+                  </p>
+                </div>
+              )}
+
               {/* 4-Step Progression */}
               <div className="grid grid-cols-4 gap-1.5">
                 {trackSteps.map((st) => (
@@ -1803,22 +1895,27 @@ export function SimulationWorkspace({
                 ))}
               </div>
 
-              <div className="space-y-1">
+              {/* Progress Bar + Live Status Text */}
+              <div className="space-y-1.5">
+                <div className="font-semibold text-slate-900 dark:text-slate-100">
+                  {statusText}
+                </div>
                 <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-[#0B1220] overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-cyan-500 transition-all duration-500"
+                    className="h-full rounded-full bg-cyan-500 transition-all duration-300"
                     style={{ width: `${simState.trackingProgressPct}%` }}
                   />
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   {previewRoute?.isSimulatedFallback
-                    ? 'Tracking along clearly labelled simulated Lagos corridor'
-                    : 'Tracking along OpenRouteService geometry'}
+                    ? 'Simulated Lagos response corridor (real driving ETA not fabricated)'
+                    : 'OpenRouteService geometry + simulated 60s demo progression'}
                 </div>
               </div>
 
-              <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-1.5">
-                <div className="flex items-center justify-between">
+              {/* Unit, Incident Scene & Designated Demo Hospital Waypoints */}
+              <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-slate-900 dark:text-slate-100">
                     {selectedUnit?.callsign}
                   </span>
@@ -1827,22 +1924,31 @@ export function SimulationWorkspace({
                   )}
                 </div>
                 <div className="text-slate-600 dark:text-slate-300">
-                  Destination:{' '}
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    Incident Scene:{' '}
+                  </span>
                   {syntheticStageIncident.location.correctedDescription ||
                     syntheticStageIncident.location.description}
                 </div>
-                {selectedUnit && (
-                  <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                    Unit Coords: {selectedUnit.lat.toFixed(5)}, {selectedUnit.lng.toFixed(5)}
+                <div className="pt-1.5 border-t border-slate-200 dark:border-[#26364B] flex items-start gap-2 text-emerald-800 dark:text-emerald-300">
+                  <Building2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold">
+                      Hospital Destination: {scenario.hospitalDestination.name}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {scenario.hospitalDestination.area} · Demo Destination
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
 
+              {/* Live Timeline */}
               <div className="space-y-1.5">
                 <div className="font-semibold text-slate-900 dark:text-slate-100">
                   Live Timeline ({syntheticStageIncident.timeline.length})
                 </div>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
                   {syntheticStageIncident.timeline
                     .slice()
                     .reverse()
@@ -1886,6 +1992,23 @@ export function SimulationWorkspace({
     previewRoute
   );
 
+  const arrivalTimelineEvent = syntheticStageIncident.timeline.find(
+    (e) => e.type === 'UNIT_ON_SCENE'
+  );
+  const simulatedArrivalTimeIso =
+    simState.simulatedArrivalAt ||
+    arrivalTimelineEvent?.timestamp ||
+    syntheticStageIncident.updatedAt;
+
+  const formatClockTime = (iso?: string) =>
+    iso
+      ? new Date(iso).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      : 'Recorded';
+
   if (simState.completed) {
     const timeline = syntheticStageIncident.timeline;
     const findEv = (type: string) => timeline.find((e) => e.type === type);
@@ -1901,17 +2024,12 @@ export function SimulationWorkspace({
         time: syntheticStageIncident.createdAt,
       },
       {
-        title: 'Location Identified & Verified',
+        title: 'Location Verified',
         detail: `${finalSummary.locationLine}`,
         time:
           syntheticStageIncident.location.verifiedAt ||
           findEv('LOCATION_VERIFIED')?.timestamp ||
           syntheticStageIncident.updatedAt,
-      },
-      {
-        title: 'Incident Created',
-        detail: `${syntheticStageIncident.id} (${syntheticStageIncident.priority})`,
-        time: findEv('INCIDENT_CREATED')?.timestamp || syntheticStageIncident.createdAt,
       },
       {
         title: 'Operator Takeover',
@@ -1930,11 +2048,14 @@ export function SimulationWorkspace({
           syntheticStageIncident.updatedAt,
       },
       {
-        title: 'Unit Arrived',
-        detail: `Status transitioned Assigned → Acknowledged → En Route → On Scene`,
-        time:
-          findEv('UNIT_ON_SCENE')?.timestamp ||
-          syntheticStageIncident.updatedAt,
+        title: 'Response Unit Arrived',
+        detail: `60s simulated tracking completed at ${scenario.landmark}`,
+        time: simulatedArrivalTimeIso,
+      },
+      {
+        title: 'Patient Transport (Demo)',
+        detail: `Patient picked up — En route to ${scenario.hospitalDestination.name}`,
+        time: simulatedArrivalTimeIso,
       },
       {
         title: 'Incident Closed',
@@ -1977,11 +2098,7 @@ export function SimulationWorkspace({
                     0{idx + 1}. {step.title}
                   </span>
                   <span className="font-mono tabular-nums">
-                    {new Date(step.time).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
+                    {formatClockTime(step.time)}
                   </span>
                 </div>
                 <p className="text-slate-700 dark:text-slate-200 leading-snug">
@@ -1992,8 +2109,8 @@ export function SimulationWorkspace({
           </div>
 
           <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
-            <strong className="text-slate-900 dark:text-slate-100">Routing Note: </strong>
-            {finalSummary.routingNote}
+            <strong className="text-slate-900 dark:text-slate-100">Routing &amp; Hospital Note: </strong>
+            {finalSummary.routingNote} · Demo hospital destination: {scenario.hospitalDestination.name}.
           </div>
         </div>
 
@@ -2020,7 +2137,42 @@ export function SimulationWorkspace({
     );
   }
 
-  // Stage 10 pre-closure: Arrival Confirmation & Explicit Human Closure Gate
+  // Stage 10 pre-closure: Arrival Confirmation, Patient Pickup & Explicit Human Closure Gate
+  const summaryRows: Array<{ label: string; value: string }> = [
+    { label: 'Incident reference', value: syntheticStageIncident.id },
+    { label: 'Emergency category', value: syntheticStageIncident.category },
+    {
+      label: 'Reported location',
+      value:
+        syntheticStageIncident.location.correctedDescription ||
+        syntheticStageIncident.location.description,
+    },
+    { label: 'Time received', value: formatClockTime(syntheticStageIncident.createdAt) },
+    { label: 'Time dispatched', value: formatClockTime(syntheticStageIncident.dispatchedAt) },
+    { label: 'Time of simulated arrival', value: formatClockTime(simulatedArrivalTimeIso) },
+    {
+      label: 'Response unit assigned',
+      value: selectedUnit
+        ? `${selectedUnit.callsign} (${selectedUnit.unitType})`
+        : 'Assigned demo unit',
+    },
+    {
+      label: 'Patient pickup status',
+      value: 'Patient picked up — En route to hospital (Simulated)',
+    },
+    {
+      label: 'Hospital destination',
+      value: `${scenario.hospitalDestination.name} (Demo Destination)`,
+    },
+    {
+      label: 'Final incident status',
+      value:
+        syntheticStageIncident.status === 'CLOSED'
+          ? 'Closed'
+          : 'On Scene / Ready for Operator Closure',
+    },
+  ];
+
   return (
     <div
       data-testid="sim-stage-arrival-closure"
@@ -2031,29 +2183,31 @@ export function SimulationWorkspace({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-50">
-              Unit Arrival Confirmed — On Scene
+              RESPONSE UNIT ARRIVED · PATIENT PICKED UP
             </h2>
           </div>
           <IncidentStatusBadge status={syntheticStageIncident.status} />
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 text-xs">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-xs">
           <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/35 p-3.5 space-y-1">
             <div className="font-bold text-emerald-900 dark:text-emerald-200">
-              {selectedUnit?.callsign} arrived On Scene at{' '}
-              {syntheticStageIncident.location.correctedDescription ||
-                syntheticStageIncident.location.description}
+              PATIENT PICKED UP — EN ROUTE TO HOSPITAL (Simulated)
             </div>
             <p className="text-slate-700 dark:text-slate-300">
-              {finalSummary.headline} · {finalSummary.unitLine}
+              {selectedUnit?.callsign} arrived at{' '}
+              {syntheticStageIncident.location.correctedDescription ||
+                syntheticStageIncident.location.description}{' '}
+              and initiated simulated transport to{' '}
+              <strong>{scenario.hospitalDestination.name}</strong>.
             </p>
           </div>
 
           <div className="space-y-1.5">
             <div className="font-semibold text-slate-900 dark:text-slate-100">
-              Arrival &amp; Operations Audit Timeline ({syntheticStageIncident.timeline.length} events)
+              Operations &amp; Transport Audit Timeline ({syntheticStageIncident.timeline.length} events)
             </div>
-            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
               {syntheticStageIncident.timeline
                 .slice()
                 .reverse()
@@ -2067,11 +2221,7 @@ export function SimulationWorkspace({
                         {ev.title}
                       </span>
                       <span className="font-mono tabular-nums">
-                        {new Date(ev.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
+                        {formatClockTime(ev.timestamp)}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
@@ -2087,53 +2237,38 @@ export function SimulationWorkspace({
       <aside className="lg:col-span-5 flex flex-col min-h-0 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-[#26364B]">
           <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-50">
-            Final Incident Summary &amp; Operator Closure
+            Final Incident Summary &amp; Closure
           </h2>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 text-xs">
-          <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3.5 space-y-1.5">
-            <div>
-              <span className="text-slate-500 dark:text-slate-400">Incident: </span>
-              <strong className="text-slate-900 dark:text-slate-100">
-                {finalSummary.headline}
-              </strong>
-            </div>
-            <div>
-              <span className="text-slate-500 dark:text-slate-400">Location: </span>
-              <span className="text-slate-800 dark:text-slate-200">
-                {finalSummary.locationLine}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500 dark:text-slate-400">Assigned Unit: </span>
-              <span className="text-slate-800 dark:text-slate-200">
-                {finalSummary.unitLine}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500 dark:text-slate-400">Routing: </span>
-              <span className="text-slate-700 dark:text-slate-300">
-                {finalSummary.routingNote}
-              </span>
-            </div>
-          </div>
+          <dl className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] divide-y divide-slate-200 dark:divide-[#26364B]">
+            {summaryRows.map((row) => (
+              <div
+                key={row.label}
+                className="px-3 py-2 flex items-start justify-between gap-3"
+              >
+                <dt className="text-slate-500 dark:text-slate-400 shrink-0">
+                  {row.label}
+                </dt>
+                <dd className="font-medium text-slate-900 dark:text-slate-100 text-right">
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
 
           <label className="block space-y-1">
             <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
               Operator Closure Note
             </span>
             <textarea
-              rows={3}
+              rows={2}
               value={closureReason}
               onChange={(e) => setClosureReason(e.target.value)}
               className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
             />
           </label>
-
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Responda requires explicit human operator confirmation to close an emergency incident record.
-          </p>
         </div>
 
         <div className="p-4 border-t border-slate-200 dark:border-[#26364B]">

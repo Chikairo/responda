@@ -255,6 +255,14 @@ export type SimulationCallStatus =
   | 'OPERATOR_CONNECTED'
   | 'ENDED';
 
+export interface HospitalDestination {
+  name: string;
+  area: string;
+  lat: number;
+  lng: number;
+  isSimulatedDemo: true;
+}
+
 export interface SimulationRuntimeState {
   active: boolean;
   paused: boolean;
@@ -273,6 +281,11 @@ export interface SimulationRuntimeState {
   operatorTakenOver: boolean;
   dispatchApproved: boolean;
   trackingProgressPct: number;
+  trackingRemainingSec: number;
+  trackingElapsedSec: number;
+  trackingStatusText: string;
+  simulatedArrivalAt?: string;
+  patientPickupStatus?: 'PENDING' | 'PICKED_UP_EN_ROUTE_TO_HOSPITAL';
   arrivedOnScene: boolean;
   completed: boolean;
   activeRoute: RouteResult | null;
