@@ -3,68 +3,79 @@ import type {
   IncidentPriority,
   IncidentRecord,
   IncidentStatus,
+  MedicalEmergencyCategory,
   ResponseUnit,
   UnitAvailability,
   UserRole,
 } from '../types/responda.ts';
 
 export const INCIDENT_STATUS_ORDER: IncidentStatus[] = [
-  'NEW',
-  'AI_INTAKE',
-  'AWAITING_OPERATOR',
-  'UNDER_REVIEW',
-  'VERIFIED',
-  'UNIT_ASSIGNED',
-  'RESPONDING',
-  'ON_SCENE',
-  'RESOLVED',
-  'CLOSED',
+  'New',
+  'Under Review',
+  'Dispatched',
+  'Patient Transport',
+  'Closed',
 ];
 
-export const EMERGENCY_CATEGORIES: EmergencyCategory[] = [
+export const MEDICAL_CATEGORIES: MedicalEmergencyCategory[] = [
   'Medical',
   'Road accident',
-  'Fire',
-  'Security',
-  'Rescue',
-  'Disaster',
-  'Environmental hazard',
-  'Other urgent incident',
+  'Other medical emergency',
 ];
 
+export const EMERGENCY_CATEGORIES: EmergencyCategory[] = MEDICAL_CATEGORIES;
+
 export const PRIORITY_WEIGHT: Record<IncidentPriority, number> = {
-  CRITICAL: 4,
-  HIGH: 3,
-  MEDIUM: 2,
-  LOW: 1,
+  Critical: 4,
+  Urgent: 3,
+  Unassessed: 2,
+  Standard: 1,
 };
 
+// Operations Staff permissions (dispatch, intake, triage, transport, closure)
 export function canTakeOver(role: UserRole): boolean {
-  return role === 'Administrator' || role === 'Call Operator' || role === 'Dispatcher';
+  return role === 'Operations Staff';
 }
 
 export function canVerifyIncident(role: UserRole): boolean {
-  return role === 'Administrator' || role === 'Call Operator' || role === 'Dispatcher';
+  return role === 'Operations Staff';
 }
 
 export function canApproveDispatch(role: UserRole): boolean {
-  return role === 'Administrator' || role === 'Dispatcher';
+  return role === 'Operations Staff';
 }
 
 export function canUpdateIncidentStatus(role: UserRole): boolean {
-  return role === 'Administrator' || role === 'Dispatcher' || role === 'Call Operator';
+  return role === 'Operations Staff';
 }
 
 export function canUpdateUnitStatus(role: UserRole): boolean {
-  return role === 'Administrator' || role === 'Dispatcher' || role === 'Responder';
+  return role === 'Operations Staff';
 }
 
 export function canAddNote(role: UserRole): boolean {
-  return true;
+  return role === 'Operations Staff';
+}
+
+// Organisation Administrator permissions (staff, fleet registration, org settings, integrations)
+export function canManageStaff(role: UserRole): boolean {
+  return role === 'Organisation Administrator';
+}
+
+export function canManageUnits(role: UserRole): boolean {
+  return role === 'Organisation Administrator';
+}
+
+export function canManageOrganisation(role: UserRole): boolean {
+  return role === 'Organisation Administrator';
+}
+
+export function canManageIntegrations(role: UserRole): boolean {
+  return role === 'Organisation Administrator';
 }
 
 export function isActiveIncidentStatus(status: IncidentStatus): boolean {
-  return status !== 'RESOLVED' && status !== 'CLOSED';
+  return status !== 'Closed';
 }
 
 export function validateStatusTransition(
@@ -76,25 +87,21 @@ export function validateStatusTransition(
     return { valid: true };
   }
 
-  // Never allow automatic transition into UNIT_ASSIGNED or RESPONDING without human approval and assigned unit
-  if ((to === 'UNIT_ASSIGNED' || to === 'RESPONDING') && (!options.hasHumanApproval || !options.hasAssignedUnit)) {
+  if (from === 'Closed') {
     return {
       valid: false,
-      reason: 'Human dispatcher approval and an assigned response unit are required before moving to UNIT_ASSIGNED or RESPONDING.',
+      reason: 'Closed incidents are permanently archived in Incident History and remain read-only.',
     };
   }
 
-  if (to === 'ON_SCENE' && !options.hasAssignedUnit) {
+  if (
+    (to === 'Dispatched' || to === 'Patient Transport') &&
+    (!options.hasHumanApproval || !options.hasAssignedUnit)
+  ) {
     return {
       valid: false,
-      reason: 'An assigned response unit is required before marking ON_SCENE.',
-    };
-  }
-
-  if (from === 'CLOSED' && to !== 'UNDER_REVIEW') {
-    return {
-      valid: false,
-      reason: 'Closed incidents can only be reopened into UNDER_REVIEW.',
+      reason:
+        'Human operator approval and an assigned active medical unit are required before moving to Dispatched or Patient Transport.',
     };
   }
 
@@ -105,13 +112,11 @@ export function mapUnitAvailabilityToIncidentStatus(
   availability: UnitAvailability
 ): IncidentStatus | null {
   switch (availability) {
-    case 'ASSIGNED':
-    case 'ACKNOWLEDGED':
-      return 'UNIT_ASSIGNED';
-    case 'EN_ROUTE':
-      return 'RESPONDING';
-    case 'ON_SCENE':
-      return 'ON_SCENE';
+    case 'Responding':
+    case 'At Scene':
+      return 'Dispatched';
+    case 'Transporting':
+      return 'Patient Transport';
     default:
       return null;
   }
@@ -150,9 +155,10 @@ export function computeAverageAckMinutes(incidents: IncidentRecord[]): number | 
 export function computeAverageResolutionMinutes(incidents: IncidentRecord[]): number | null {
   const diffs: number[] = [];
   for (const inc of incidents) {
-    if (inc.resolvedAt && inc.createdAt) {
+    const endIso = inc.closedAt || inc.resolvedAt;
+    if (endIso && inc.createdAt) {
       const start = Date.parse(inc.createdAt);
-      const end = Date.parse(inc.resolvedAt);
+      const end = Date.parse(endIso);
       if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
         diffs.push((end - start) / 60000);
       }
@@ -166,6 +172,7 @@ export interface DashboardMetrics {
   totalToday: number;
   activeCount: number;
   criticalCount: number;
+  unassessedCount: number;
   awaitingReviewCount: number;
   availableUnitsCount: number;
   respondingUnitsCount: number;
@@ -178,25 +185,42 @@ export function computeDashboardMetrics(
   referenceNow: Date = new Date()
 ): DashboardMetrics {
   const todayStr = referenceNow.toISOString().slice(0, 10);
-  const totalToday = incidents.filter((i) => i.createdAt.slice(0, 10) === todayStr).length;
-  const activeIncidents = incidents.filter((i) => isActiveIncidentStatus(i.status));
-  const criticalCount = activeIncidents.filter((i) => i.priority === 'CRITICAL').length;
-  const awaitingReviewCount = activeIncidents.filter(
-    (i) => i.status === 'NEW' || i.status === 'AI_INTAKE' || i.status === 'AWAITING_OPERATOR'
+  const inScopeIncidents = incidents.filter((i) => !i.legacyOutOfScope);
+  const totalToday = inScopeIncidents.filter(
+    (i) => i.createdAt.slice(0, 10) === todayStr
   ).length;
-  const availableUnitsCount = units.filter((u) => u.availability === 'AVAILABLE').length;
-  const respondingUnitsCount = units.filter(
-    (u) => u.availability === 'ASSIGNED' || u.availability === 'ACKNOWLEDGED' || u.availability === 'EN_ROUTE' || u.availability === 'ON_SCENE'
+  const activeIncidents = inScopeIncidents.filter((i) => isActiveIncidentStatus(i.status));
+  const criticalCount = activeIncidents.filter((i) => i.priority === 'Critical').length;
+  const unassessedCount = activeIncidents.filter((i) => i.priority === 'Unassessed').length;
+  const awaitingReviewCount = activeIncidents.filter(
+    (i) =>
+      i.status === 'New' ||
+      i.priority === 'Unassessed' ||
+      (i.status === 'Under Review' && !i.assignedUnitId)
+  ).length;
+
+  const activeFleetUnits = units.filter(
+    (u) => u.registrationStatus === 'Active' && !u.legacyOutOfScope
+  );
+  const availableUnitsCount = activeFleetUnits.filter(
+    (u) => u.availability === 'Available'
+  ).length;
+  const respondingUnitsCount = activeFleetUnits.filter(
+    (u) =>
+      u.availability === 'Responding' ||
+      u.availability === 'At Scene' ||
+      u.availability === 'Transporting'
   ).length;
 
   return {
-    totalToday: totalToday > 0 ? totalToday : incidents.length,
+    totalToday: totalToday > 0 ? totalToday : inScopeIncidents.length,
     activeCount: activeIncidents.length,
     criticalCount,
+    unassessedCount,
     awaitingReviewCount,
     availableUnitsCount,
     respondingUnitsCount,
-    avgAcceptanceMinutes: computeAverageAcceptanceMinutes(incidents),
+    avgAcceptanceMinutes: computeAverageAcceptanceMinutes(inScopeIncidents),
   };
 }
 
@@ -215,7 +239,7 @@ export function computeCategoryBreakdown(
 export function computePriorityBreakdown(
   incidents: IncidentRecord[]
 ): Array<{ priority: IncidentPriority; count: number }> {
-  const order: IncidentPriority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const order: IncidentPriority[] = ['Critical', 'Urgent', 'Standard', 'Unassessed'];
   return order.map((priority) => ({
     priority,
     count: incidents.filter((i) => i.priority === priority).length,
@@ -233,30 +257,22 @@ export function computeStatusBreakdown(
 
 export function computeUnitUtilisation(units: ResponseUnit[]): {
   available: number;
-  assigned: number;
-  responding: number;
+  dispatched: number;
   unavailable: number;
+  inactive: number;
 } {
+  const active = units.filter((u) => u.registrationStatus === 'Active' && !u.legacyOutOfScope);
   return {
-    available: units.filter((u) => u.availability === 'AVAILABLE').length,
-    assigned: units.filter((u) => u.availability === 'ASSIGNED' || u.availability === 'ACKNOWLEDGED').length,
-    responding: units.filter((u) => u.availability === 'EN_ROUTE' || u.availability === 'ON_SCENE').length,
-    unavailable: units.filter((u) => u.availability === 'UNAVAILABLE').length,
+    available: active.filter((u) => u.availability === 'Available').length,
+    dispatched: active.filter(
+      (u) =>
+        u.availability === 'Responding' ||
+        u.availability === 'At Scene' ||
+        u.availability === 'Transporting'
+    ).length,
+    unavailable: active.filter((u) => u.availability === 'Unavailable').length,
+    inactive: units.filter((u) => u.registrationStatus === 'Inactive' || u.legacyOutOfScope).length,
   };
-}
-
-export function computeHourlyActivity(incidents: IncidentRecord[]): Array<{ hour: string; count: number }> {
-  const buckets = Array.from({ length: 24 }, (_, h) => ({
-    hour: `${String(h).padStart(2, '0')}:00`,
-    count: 0,
-  }));
-  for (const inc of incidents) {
-    const dt = new Date(inc.createdAt);
-    if (!Number.isNaN(dt.getTime())) {
-      buckets[dt.getHours()].count += 1;
-    }
-  }
-  return buckets;
 }
 
 export function sortIncidents(

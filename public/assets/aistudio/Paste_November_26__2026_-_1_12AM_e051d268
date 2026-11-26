@@ -1,0 +1,1442 @@
+# RESPONDA
+## Master Product, Architecture and Pitch-Demo Implementation Brief
+**For Google AI Studio — Build Mode**
+
+**Project:** Responda — AI-Assisted Medical Emergency Intake and Response Coordination Platform  
+**Initial Market:** Lagos, Nigeria  
+**Primary Customers:** Private ambulance providers and private medical emergency-response organisations  
+**Document Purpose:** Consolidate the latest product decisions, correct outdated architectural assumptions, and guide the existing application toward a coherent, functional pitch demonstration.
+
+---
+
+# 1. PRODUCT OVERVIEW
+
+## 1.1 What Responda is
+
+Responda is an AI-assisted medical emergency intake, location intelligence and response coordination platform designed for private medical emergency-response organisations.
+
+It helps an organisation manage the journey from an incoming emergency report to incident assessment, location verification, response-unit assignment, dispatch approval, response coordination, patient transport and incident closure.
+
+The platform brings these activities into one operational environment.
+
+Responda is not an ambulance service, hospital, public emergency hotline or consumer emergency application. It does not own ambulances or employ medical responders. It provides operational software that helps participating organisations coordinate their existing medical response resources.
+
+Its initial focus is Lagos, Nigeria.
+
+## 1.2 The problem Responda addresses
+
+Medical emergency reports can arrive with incomplete information, unclear locations and limited visibility into the availability of response resources.
+
+This creates operational difficulties:
+- Important information may be missed during initial calls.
+- Call handlers may spend time manually collecting and organising information.
+- Emergency locations may be described using landmarks rather than precise addresses.
+- Incident information may be scattered across calls, messages and manual records.
+- Operators may have difficulty identifying suitable available response units.
+- Dispatch decisions and response progress may be difficult to monitor centrally.
+- Incident records and the sequence of actions may not be consistently documented.
+
+Responda provides a coordinated workflow for handling these responsibilities.
+
+## 1.3 What the platform must demonstrate
+
+The pitch demonstration should convincingly show that Responda can:
+
+1. Receive a medical emergency report.
+2. Use AI to conduct an initial, structured intake.
+3. Extract and organise important information.
+4. Resolve and assess the incident location using available location sources.
+5. Transfer control to a human operator.
+6. Present the incident for human assessment and confirmation.
+7. Help the operator identify a suitable response unit.
+8. Require human approval before dispatch.
+9. Coordinate the response through arrival and patient transport.
+10. Preserve a structured record and close the incident.
+
+The central value proposition is the coordination of the entire response workflow, not merely an AI chatbot or a map displaying ambulances.
+
+---
+
+# 2. IMPORTANT ARCHITECTURAL EVOLUTION
+
+The application has evolved from an earlier, more fragmented workspace structure into a simpler operational architecture.
+
+Google AI Studio must follow the latest decisions below rather than recreate older arrangements.
+
+## 2.1 Earlier architecture versus current architecture
+
+The earlier proposal contained four separate operational workspaces:
+
+- Command Centre
+- Incident Management
+- AI Intake
+- Response Coordination
+
+This arrangement has been simplified.
+
+**Current decision:** AI Intake and Response Coordination are not independent primary workspaces. Their responsibilities are incorporated into the Incident Management Workspace.
+
+The current Operations Staff navigation has four destinations:
+
+1. Command Centre
+2. Incident Management
+3. Response Units
+4. Incident History
+
+The Administrator has a separate management environment.
+
+This avoids fragmenting one emergency response across too many pages.
+
+## 2.2 Changes to the workflow
+
+The original product concept used a six-step journey:
+
+- Report initiation
+- Adaptive AI intake
+- Multi-source location resolution
+- Structured incident creation and operator takeover
+- Human-approved dispatch
+- Response tracking and formal closure
+
+The earlier simulation also presented nine sequential stages.
+
+The current design preserves the underlying activities but groups them into five operational milestones within one Incident Management Workspace.
+
+The nine-stage simulation must not be mistaken for nine separate pages or nine top-level incident statuses.
+
+## 2.3 Current architectural principles
+
+- Keep the application operationally focused.
+- Do not create separate pages for every action in an incident.
+- Use one incident workspace to manage the full response.
+- Separate incident priority from incident status.
+- Separate unit registration status from unit operational status.
+- Keep human operators in control of consequential decisions.
+- Preserve audit history.
+- Avoid building enterprise features that are unnecessary for the pitch demonstration.
+- Preserve existing working functionality while applying the architectural changes.
+
+---
+
+# 3. USER ROLES AND ACCESS CONTROL
+
+The MVP has only two roles.
+
+## 3.1 Operations Staff
+
+Operations Staff handle incoming emergency reports and coordinate the response.
+
+Their responsibilities include:
+
+- Monitoring incoming reports.
+- Reviewing AI-assisted intake.
+- Taking over an incident.
+- Reviewing medical information.
+- Verifying incident locations.
+- Confirming or adjusting incident priority.
+- Confirming incident details.
+- Reviewing available response units.
+- Selecting an appropriate unit.
+- Approving dispatch.
+- Monitoring response progress.
+- Recording arrival and patient pickup.
+- Monitoring hospital transport.
+- Closing incidents.
+
+Operations Staff navigation:
+
+1. Command Centre
+2. Incident Management
+3. Response Units
+4. Incident History
+
+## 3.2 Organisation Administrator
+
+The Administrator manages the organisation's Responda environment.
+
+Responsibilities include:
+
+- Managing staff accounts and access.
+- Registering medical response units.
+- Configuring unit capabilities and assigned crew.
+- Managing organisation information and configuration.
+- Managing available integrations.
+
+Administrator navigation:
+
+1. Admin Overview
+2. Staff Management
+3. Unit Management
+4. Organisation Settings
+5. Integrations
+
+Administrators do not automatically receive incident-dispatch permissions simply because they administer the organisation.
+
+## 3.3 Roles deliberately excluded from the MVP
+
+Do not introduce a separate Operations Supervisor role.
+
+The initial deployment can operate with Operations Staff and an Organisation Administrator. Supervisory permissions may be introduced later if the organisation's operational structure requires them.
+
+Do not introduce individual Responda accounts for every ambulance crew member in the MVP.
+
+Medical crew records and software user accounts are different things.
+
+---
+
+# 4. COMMAND CENTRE
+
+## 4.1 Purpose
+
+The Command Centre is the Operations Staff's operational overview.
+
+It should help an operator understand the current situation quickly:
+
+- How many incidents are active?
+- How many incidents require attention?
+- How many response units are available?
+- How many units are already responding?
+- Where are the incidents and response units with usable location information?
+
+It is not intended to duplicate the full Incident Management Workspace.
+
+## 4.2 Essential summary metrics
+
+Display only these core metrics:
+
+- Active Incidents
+- Units Available
+- Units Dispatched/Responding
+- Incidents Awaiting Attention
+
+Avoid unnecessary metric cards and decorative statistics.
+
+## 4.3 Operational map
+
+The map must be a functional part of the Command Centre.
+
+It should display:
+
+**Medical incidents**
+- Open incidents with usable location data.
+- Priority indicators.
+- Incident references.
+- Relevant incident statuses.
+
+**Response units**
+- Registered units with usable location information.
+- Operational status.
+- Current assignment where applicable.
+- Location freshness.
+
+Use restrained semantic colours for incident priority:
+
+- Critical
+- Urgent
+- Standard
+- Unassessed
+
+Unit markers should communicate their operational state without confusing it with incident priority.
+
+Selecting an incident marker should display a concise information panel containing:
+- Incident reference.
+- Medical emergency category.
+- Priority.
+- Location.
+- Incident status.
+- Assigned response unit.
+
+Selecting a unit marker should display:
+- Unit ID.
+- Unit type.
+- Operational status.
+- Current assignment.
+- Last reported location.
+
+The map should support:
+- Zooming and panning.
+- A visible legend.
+- Focusing on a selected incident or unit.
+- Fitting relevant markers into view.
+- Appropriate filters.
+
+Show routes for dispatched units only when valid routing and location data are available.
+
+Do not invent live routes or travel-time estimates.
+
+### Location freshness
+
+The application must distinguish:
+
+- Live location, when genuinely supported.
+- Last-known location.
+- Manually reported location.
+- Unavailable location.
+
+Show the source and timestamp when available.
+
+A unit with stale location information must not be presented as though it is being tracked live.
+
+### Layout
+
+On desktop, the map and active incident list should share the main workspace.
+
+The map should occupy approximately 55–60% of the main working area, with the incident list alongside it.
+
+On smaller screens, prioritise the incident list and provide the map below it or through a view switch.
+
+## 4.4 Active incident list
+
+Display all open incidents, including:
+
+- New
+- Under Review
+- Dispatched
+- Patient Transport
+
+Closed incidents must not appear in the active incident list.
+
+Each row should show:
+
+- Incident reference.
+- Medical emergency category.
+- Priority.
+- Location.
+- Status.
+- Assigned unit, if any.
+- Reported time.
+
+Selecting an incident should open its full Incident Management Workspace.
+
+Provide a clear action to view all active incidents.
+
+---
+
+# 5. INCIDENT MANAGEMENT
+
+This is the most important operational workspace in Responda.
+
+It must contain the complete incident management process, from incoming report to closure.
+
+It must not be fragmented into separate AI Intake, Location, Dispatch and Response Coordination pages.
+
+## 5.1 Two connected views
+
+Incident Management contains:
+
+1. Incident List
+2. Individual Incident Workspace
+
+### Incident List
+
+Displays all open incidents regardless of their current stage.
+
+Filters:
+- All Open
+- New
+- Under Review
+- Dispatched
+- Patient Transport
+
+Additional filters:
+- Priority.
+- Medical emergency category.
+- Date.
+
+Selecting an incident opens its workspace.
+
+Closed incidents are accessed through Incident History.
+
+## 5.2 Individual Incident Workspace
+
+The workspace uses a hybrid layout:
+
+- A stage-aware Workflow panel is the primary working area.
+- Other incident information is available through tabs.
+- An incident queue is accessible through a collapsible left-side drawer.
+- An expandable timeline is available through a right-side panel.
+
+The operator should be able to switch between incidents without losing the working state of each incident.
+
+The interface must support multiple open incidents while keeping one incident in focus at a time.
+
+### Persistent incident header
+
+Always show:
+
+- Incident reference.
+- Medical emergency category.
+- Priority.
+- Current status.
+- Report time.
+- Assigned response unit, where applicable.
+
+### Five-milestone progress tracker
+
+Use exactly five grouped milestones:
+
+1. Report and Intake
+2. Assessment and Verification
+3. Unit Dispatch
+4. Response and Transport
+5. Closure
+
+These milestones represent the full lifecycle of an incident.
+
+They are not five separate pages.
+
+### Four workspace tabs
+
+Use exactly four tabs:
+
+1. Workflow
+2. Medical Details
+3. Location
+4. Response
+
+**Workflow** is the primary tab.
+
+Its content should adapt to the incident's current stage.
+
+The remaining tabs allow the operator to inspect information without losing their workflow context.
+
+## 5.3 Workflow milestone responsibilities
+
+### Milestone 1 — Report and Intake
+
+Responsibilities:
+- Receive the emergency report.
+- Present the incoming call or report information.
+- Run AI-assisted intake.
+- Display the conversation or transcript.
+- Extract relevant incident information.
+- Capture caller information.
+- Collect the medical emergency description.
+- Identify missing or unclear information.
+- Make the incident available for human takeover.
+
+The AI should ask relevant follow-up questions based on the information already provided.
+
+Do not make it a rigid questionnaire that asks the same questions regardless of context.
+
+### Milestone 2 — Assessment and Verification
+
+Responsibilities:
+- Allow an operator to take over.
+- Review the AI-generated information.
+- Review the medical emergency description.
+- Review extracted caller details.
+- Verify the location.
+- Confirm or adjust priority.
+- Confirm the incident information.
+
+The operator must be able to correct information extracted by AI.
+
+Changes should be recorded.
+
+### Milestone 3 — Unit Dispatch
+
+Responsibilities:
+- Display suitable available response units.
+- Show their capabilities.
+- Show relevant location and assignment information.
+- Allow the operator to select a unit.
+- Present a dispatch review.
+- Require explicit human dispatch approval.
+
+Selecting a unit does not mean the unit has been dispatched.
+
+The unit's operational status must not change to Responding until dispatch is confirmed.
+
+### Milestone 4 — Response and Transport
+
+Responsibilities:
+- Show confirmed dispatch.
+- Show the assigned response unit.
+- Display its available location information.
+- Record response progress.
+- Record arrival at the incident scene.
+- Record patient pickup.
+- Record hospital destination.
+- Record the start of patient transport.
+- Record hospital arrival when confirmed.
+
+Arrival, patient pickup and transport are distinct operational events.
+
+Do not collapse them into one event.
+
+### Milestone 5 — Closure
+
+Responsibilities:
+- Capture the outcome.
+- Record relevant closure notes.
+- Confirm the final response events.
+- Preserve the final timestamps.
+- Close the existing incident record.
+
+Closing an incident must update its existing record. Do not create a duplicate record.
+
+A closed incident moves to Incident History.
+
+## 5.4 Expandable incident timeline
+
+The right-side expandable panel contains the incident's chronological history.
+
+It should record:
+
+- Initial report.
+- Conversation and transcript events.
+- AI-extracted information.
+- AI actions.
+- Operator takeover.
+- Operator edits.
+- Priority changes.
+- Location verification.
+- Unit selection.
+- Dispatch approval.
+- Dispatch confirmation.
+- Location updates.
+- Arrival.
+- Patient pickup.
+- Hospital destination.
+- Transport.
+- Hospital arrival, where confirmed.
+- Incident closure.
+
+Each event should show a timestamp and its source or actor.
+
+The timeline is an audit record, not an editable replacement for the incident's current state.
+
+---
+
+# 6. INCIDENT PRIORITY AND STATUS
+
+These are separate concepts and must remain separate throughout the application.
+
+## 6.1 Priority
+
+Priority describes the seriousness of the medical emergency.
+
+Use:
+
+- Critical
+- Urgent
+- Standard
+- Unassessed
+
+AI may suggest a priority based on clinically reviewed rules and the information collected.
+
+The Operations Staff member must confirm or adjust it.
+
+Insufficient information must not automatically produce Standard priority.
+
+Use Unassessed and flag the incident for operator attention when the information is insufficient.
+
+AI must never silently downgrade priority or make independent clinical decisions.
+
+A qualified medical professional must review the clinical triage rules before live operational use.
+
+## 6.2 Incident status
+
+Use exactly five top-level incident statuses:
+
+| Status | Meaning |
+|---|---|
+| New | Incoming report, AI intake and initial information/location assessment |
+| Under Review | Human takeover, assessment, verification, unit selection and dispatch approval |
+| Dispatched | Dispatch confirmed, unit responding and arrival |
+| Patient Transport | Patient picked up and being transported to a hospital |
+| Closed | Response concluded and incident closed |
+
+Detailed activities and timestamps belong in the incident timeline, not in additional top-level statuses.
+
+For example, do not create separate statuses for:
+- Call in progress.
+- AI processing.
+- Location pending.
+- Awaiting operator.
+- Awaiting dispatch approval.
+- Unit en route.
+- Unit arrived.
+- Patient picked up.
+- Hospital reached.
+
+These are workflow activities or timeline events.
+
+---
+
+# 7. RESPONSE UNITS — OPERATIONS STAFF VIEW
+
+## 7.1 Purpose
+
+This page allows Operations Staff to monitor the organisation's registered medical response resources and identify suitable units for dispatch.
+
+It is an operational page, not a registration or configuration page.
+
+Registration and administrative configuration belong in Administrator Unit Management.
+
+## 7.2 Unit definition
+
+For the MVP, a response unit is a combined deployable resource consisting of:
+
+- An ambulance or medical response vehicle.
+- Its assigned medical crew.
+
+Treat this combination as one response unit for operational purposes.
+
+## 7.3 Main page
+
+Display these summary statuses:
+
+- Available
+- Responding
+- At Scene
+- Transporting
+- Unavailable
+
+Provide:
+- Search.
+- Relevant filters.
+- List View.
+- Map View.
+
+**List View must be the default.**
+
+Users can toggle between List View and Map View.
+
+Each unit entry should display:
+- Unit ID.
+- Unit type.
+- Operational status.
+- Current location.
+- Current assignment.
+- Last location update/freshness.
+
+## 7.4 Unit details panel
+
+Selecting a unit opens a details panel showing:
+
+- Unit ID and type.
+- Registered medical capabilities.
+- Current operational status.
+- Current assignment.
+- Last reported location.
+- Location source and timestamp.
+- Location freshness.
+- Current activity.
+
+Operations Staff may make permitted temporary availability changes, with a reason.
+
+These changes must be recorded in the relevant audit history.
+
+Operations Staff must not edit registration details, medical capabilities or assigned crew records.
+
+## 7.5 Operational status rules
+
+Use these exact statuses:
+
+| Status | Meaning |
+|---|---|
+| Available | Unit can be assigned |
+| Responding | Dispatch has been confirmed and the unit is travelling to the incident |
+| At Scene | Arrival has been confirmed |
+| Transporting | Patient pickup has been recorded and the unit is transporting the patient |
+| Unavailable | Unit cannot currently be assigned |
+
+System-driven status changes must be tied to confirmed events:
+
+- Selecting a unit does not make it Responding.
+- Confirmed dispatch changes it to Responding.
+- Confirmed arrival changes it to At Scene.
+- Recorded patient pickup and transport change it to Transporting.
+- The unit becomes Available only after the response has concluded and it has been cleared for service.
+
+Manual overrides require a reason and audit record.
+
+### Important distinction
+
+Connectivity and location freshness are separate from operational status.
+
+A unit can be Available but have stale location information.
+
+Do not label an unavailable location as live or assume that a unit is offline merely because its location has not refreshed.
+
+## 7.6 Features excluded from this page
+
+Do not build these for the MVP:
+
+- Fuel management.
+- Mileage tracking.
+- Vehicle maintenance scheduling.
+- Procurement.
+- Crew shifts.
+- Payroll.
+- Driver performance.
+- Advanced GPS analytics.
+- Predictive unit allocation.
+
+---
+
+# 8. INCIDENT HISTORY
+
+This page contains closed incidents.
+
+Its purpose is to make previous response records accessible and reviewable.
+
+It should provide:
+- Incident reference.
+- Medical emergency category.
+- Priority.
+- Location.
+- Assigned response unit.
+- Reported date and time.
+- Closure date and time.
+- Outcome.
+
+Provide search and relevant filters.
+
+Selecting a historical incident should open its record in a read-only historical view, including its timeline.
+
+Do not allow users to accidentally reopen or overwrite a closed incident through ordinary history browsing.
+
+---
+
+# 9. ADMINISTRATOR UNIT MANAGEMENT
+
+**This page has been reviewed and locked.**
+
+It manages the organisation's registered medical response units.
+
+It is different from the Operations Staff Response Units page.
+
+- Response Units: operational monitoring and availability.
+- Unit Management: registration and administrative configuration.
+
+## 9.1 Main page
+
+Use a table as the default view.
+
+Provide:
+- Search by unit ID or name.
+- Filters by unit type and registration status.
+- View unit details.
+- Register a new unit.
+- Edit unit details.
+- Deactivate a unit.
+- Reactivate a unit.
+
+Do not turn this page into a fleet analytics dashboard.
+
+## 9.2 Registration form
+
+Use four sections.
+
+### A. Unit identification
+- Unique unit ID.
+- Unit name or call sign.
+- Response category.
+- Vehicle registration.
+- Operational base.
+
+### B. Medical capabilities and equipment
+
+Use predefined capabilities with an option to add additional equipment or capabilities.
+
+Examples of predefined capabilities:
+- Basic Life Support (BLS).
+- Advanced Life Support (ALS).
+- Patient transport.
+- Oxygen support.
+- Defibrillation.
+
+The organisation must explicitly confirm its actual capabilities.
+
+Never infer medical capabilities merely from the vehicle category.
+
+### C. Assigned medical crew
+
+Record individual crew members directly against the unit.
+
+Capture:
+- Crew member name.
+- Medical role.
+- Relevant qualification.
+
+There is no separate medical personnel directory in the MVP.
+
+Do not confuse these medical crew records with Responda software user accounts.
+
+### D. Registration and availability
+
+Capture:
+- Registration status.
+- Operational base/configuration.
+- Administrative notes.
+
+Registration status must remain separate from operational status.
+
+## 9.3 Unit details
+
+Use four sections:
+
+1. Overview
+2. Capabilities
+3. Crew
+4. Activity
+
+The Administrator can edit the first three.
+
+Activity is read-only history.
+
+## 9.4 Registration status
+
+Use:
+
+- Active
+- Inactive
+
+An inactive unit cannot be assigned to an incident.
+
+Deactivating a unit with an active assignment must be blocked or require the assignment to be safely resolved first.
+
+## 9.5 Retired units
+
+Do not permanently delete retired units.
+
+Deactivate them and preserve their records and history.
+
+## 9.6 Permissions
+
+Operations Staff:
+- View units.
+- View capabilities and crew information.
+- Monitor operational status.
+- Select and dispatch suitable units.
+- Make permitted temporary availability changes.
+
+Administrator:
+- Register units.
+- Edit unit information.
+- Configure capabilities.
+- Manage assigned crew records.
+- Activate and deactivate units.
+
+An Administrator does not dispatch a unit merely by virtue of being an Administrator.
+
+---
+
+# 10. ADMINISTRATOR STAFF MANAGEMENT
+
+## 10.1 Purpose
+
+Manage the people who have access to the organisation's Responda workspace.
+
+This is software account management, not medical crew management or staff scheduling.
+
+## 10.2 Main page
+
+Use a staff table showing:
+
+- Staff member.
+- Email.
+- Assigned role.
+- Account status.
+- Date added.
+- Last active.
+- Available actions.
+
+Provide:
+- Search by name or email.
+- Filter by role.
+- Filter by account status.
+- Add Staff Member.
+- View staff details.
+- Change role.
+- Deactivate account.
+- Reactivate account.
+
+## 10.3 Roles
+
+Only two roles:
+
+- Operations Staff.
+- Organisation Administrator.
+
+Do not create an additional Supervisor role.
+
+## 10.4 Adding staff
+
+Use a straightforward invitation form:
+
+- Full name.
+- Email address.
+- Assigned role.
+
+The invited person should receive an invitation and complete account setup through the authentication system.
+
+Do not have administrators create and share passwords for other users.
+
+An active Organisation Administrator may invite another Organisation Administrator.
+
+Protect the organisation from losing its last active administrator.
+
+## 10.5 Account safeguards
+
+- Inactive users cannot sign in.
+- Account deactivation must not delete historical actions.
+- Role changes must be recorded.
+- Deactivations and reactivations must be recorded.
+- Historical incident actions must retain their original actor attribution.
+- Prevent an administrator from accidentally removing the last active administrator.
+
+---
+
+# 11. ADMIN OVERVIEW, ORGANISATION SETTINGS AND INTEGRATIONS
+
+These areas remain part of the Administrator environment, but they should not distract from the core operational demonstration.
+
+## 11.1 Admin Overview
+
+Keep this page simple.
+
+It should provide a quick overview of the organisation's configuration, registered units and staff accounts.
+
+Avoid building advanced analytics without real operational data.
+
+Do not duplicate the Operations Staff Command Centre.
+
+## 11.2 Organisation Settings
+
+Provide the organisation-level configuration needed for the MVP.
+
+Keep this focused on:
+- Organisation identity and contact information.
+- Operational configuration.
+- Relevant organisation preferences.
+- Account or access-related configuration where appropriate.
+
+Do not introduce complicated configuration options that are not required for the demonstration.
+
+## 11.3 Integrations
+
+Show the integrations relevant to the Responda architecture and their actual configuration state.
+
+Distinguish:
+- Connected and working.
+- Configured but not verified.
+- Not configured.
+- Simulated for demonstration.
+
+Do not display a provider as connected simply because its name appears in the interface.
+
+The actual state of an integration must determine what the UI communicates.
+
+---
+
+# 12. THE PITCH-DEMO SIMULATION
+
+The existing simulation is an important part of the demonstration and should be preserved.
+
+It must demonstrate the complete journey of a medical emergency report.
+
+The original nine-stage simulation is retained as an execution sequence, but the user-facing application groups it into the five Incident Management milestones.
+
+## 12.1 Existing nine-stage sequence
+
+1. Incoming Call
+2. AI Intake
+3. Location Resolution
+4. Human Takeover
+5. Incident Review
+6. Response Unit Selection
+7. Dispatch Approval
+8. Live Tracking
+9. Arrival and Closure
+
+These stages must map to the five milestones:
+
+| Simulation stage | Incident milestone |
+|---|---|
+| Incoming Call | Report and Intake |
+| AI Intake | Report and Intake |
+| Location Resolution | Assessment and Verification |
+| Human Takeover | Assessment and Verification |
+| Incident Review | Assessment and Verification |
+| Response Unit Selection | Unit Dispatch |
+| Dispatch Approval | Unit Dispatch |
+| Live Tracking | Response and Transport |
+| Arrival and Closure | Response and Transport / Closure |
+
+The interface must not create nine separate pages or nine top-level statuses.
+
+## 12.2 Example scenario
+
+The demonstration uses a simulated road accident along a road in Yaba, Lagos.
+
+The caller reports a road accident involving two potentially injured people and describes the location using a nearby landmark.
+
+The demonstration should show how Responda:
+
+- Receives the report.
+- Conducts an AI-assisted conversation.
+- Identifies the type of emergency.
+- Collects the number of potentially injured people.
+- Requests additional relevant details.
+- Captures the caller's location description.
+- Resolves the location as far as available information permits.
+- Creates a structured incident.
+- Transfers control to the operator.
+- Presents the incident for review.
+- Allows selection of a suitable response unit.
+- Requests dispatch approval.
+- Simulates the unit's response.
+- Records arrival.
+- Records patient pickup.
+- Records hospital transport.
+- Closes the incident.
+
+The scenario is medical-only.
+
+Do not introduce police, security or fire dispatch into this workflow.
+
+## 12.3 Make the simulation observable
+
+The simulation must not appear as a sequence of disconnected progress messages.
+
+During execution, the operator should be able to understand what is happening.
+
+The Command Centre and Incident Management Workspace should reflect meaningful changes as the simulation progresses.
+
+Examples:
+- A new incident appears in the incident queue.
+- The active incident count updates.
+- The incident marker appears when a valid simulated location is available.
+- The incident priority and status become visible.
+- AI intake information appears in the incident record.
+- Human takeover is visibly recorded.
+- Unit selection is reflected in the incident.
+- Dispatch approval changes the unit's operational status.
+- The map and incident list reflect the response.
+- Arrival and pickup are recorded as distinct events.
+- Transport is reflected in the incident workflow.
+- Closure moves the incident into Incident History.
+
+The timeline should update with each meaningful event.
+
+Do not make the simulation a single screen that only displays the current stage and team or a sequence of generic progress messages.
+
+## 12.4 Tracking countdown
+
+The earlier demonstration work included a 60-second live-tracking countdown.
+
+Preserve the intended demonstration behavior if it is already implemented and working.
+
+However:
+- Label it as simulated tracking.
+- Do not imply that an actual ambulance is transmitting GPS.
+- Do not fabricate a real-world response time.
+- Do not present a simulated route as a verified live route.
+
+When the simulated tracking sequence completes, show the corresponding arrival event and continue through pickup, transport and closure.
+
+## 12.5 Simulation and production distinction
+
+The demonstration must clearly distinguish between:
+- A real incoming telephone call.
+- A simulated incoming call.
+- Real AI processing.
+- Simulated AI processing, if applicable.
+- A real unit location.
+- A simulated unit location.
+- Real dispatch.
+- Simulated dispatch.
+
+Never claim that the prototype has contacted an ambulance, hospital or emergency service unless that action genuinely occurred through a verified integration.
+
+The pitch demo should be convincing because the workflow is coherent and observable, not because simulated capabilities are presented as real.
+
+---
+
+# 13. LOCATION INTELLIGENCE AND LOCATION SAFETY
+
+Location intelligence is a major part of Responda's value proposition.
+
+It must be implemented and represented accurately.
+
+## 13.1 Possible location sources
+
+The architecture should allow for multiple location sources:
+
+- Caller-provided address.
+- Caller-described landmark.
+- Handset GPS, where available through an authorised and supported mechanism.
+- Authorised network/carrier-derived location.
+- Operator-corrected or verified location.
+
+Every location should carry relevant provenance information.
+
+Where available, capture:
+- Source.
+- Timestamp.
+- Accuracy or uncertainty.
+- Verification status.
+
+## 13.2 Ordinary phone calls
+
+An ordinary cellular voice call does not automatically provide Responda with the caller's GPS coordinates.
+
+A caller may be able to make a voice call without mobile data, but this does not mean Responda can automatically obtain their location.
+
+Carrier-derived location requires an authorised telecom or emergency-location-provider integration.
+
+Handset GPS depends on device capability, permissions and an authorised implementation.
+
+No usable cellular connection means ordinary call-based reporting cannot work.
+
+## 13.3 Fallback
+
+When precise location is unavailable:
+
+1. Collect the caller's described address or landmark.
+2. Attempt to resolve the location where supported.
+3. Display the location source and uncertainty.
+4. Allow the operator to verify or correct it.
+5. Preserve the verification record.
+
+Never silently convert an uncertain landmark into a confirmed precise location.
+
+## 13.4 Current prototype limitations
+
+The carrier-location integration is not configured.
+
+If unavailable, display a clear message such as:
+
+"Carrier location integration not configured."
+
+Do not simulate carrier triangulation as though it is operational.
+
+Do not claim continuous GPS tracking unless an actual working location feed exists.
+
+If routing is unavailable, label the displayed route as simulated.
+
+---
+
+# 14. AI RESPONSIBILITIES AND HUMAN CONTROL
+
+AI is an assistant to the emergency intake process, not the final decision-maker.
+
+## 14.1 AI responsibilities
+
+AI may:
+- Conduct an adaptive intake conversation.
+- Ask relevant follow-up questions.
+- Extract information from the conversation.
+- Structure the information into incident fields.
+- Identify missing or unclear details.
+- Suggest a priority based on reviewed rules.
+- Summarise the report for the operator.
+- Help organise location descriptions.
+
+## 14.2 Human responsibilities
+
+A human operator must:
+- Take over and review the incident.
+- Correct extracted information.
+- Verify location information.
+- Confirm or adjust priority.
+- Confirm incident details.
+- Select the response unit.
+- Approve dispatch.
+- Confirm operational events.
+- Close the incident.
+
+## 14.3 Actions AI must never perform autonomously
+
+AI must never:
+- Make a definitive medical diagnosis.
+- Decide that emergency assistance is unnecessary.
+- Silently downgrade an incident.
+- Independently dispatch a response unit.
+- Independently cancel an emergency response.
+- Present uncertain information as verified fact.
+
+Human access and intervention must remain available throughout the process.
+
+---
+
+# 15. TECHNICAL ARCHITECTURE AND INTEGRATION STATE
+
+The current project architecture includes:
+
+| Layer | Technology / Responsibility |
+|---|---|
+| Frontend | React, TypeScript, Tailwind CSS |
+| Backend | Node.js, Express.js |
+| Authentication and data | Firebase Authentication and Firestore |
+| AI | Google Gemini / Gemini Live |
+| Maps | Leaflet and OpenStreetMap |
+| Routing | OpenRouteService |
+| Development environment | Google AI Studio Build Mode |
+| Version control | GitHub |
+
+Preserve existing working integrations and functionality.
+
+Do not replace working components simply to introduce a different architecture.
+
+## 15.1 Telephony
+
+The current simulation uses browser speech synthesis, not a real telephone connection.
+
+The architecture may retain a provider-independent telephony adapter for future integration.
+
+However, the current application must not claim to be receiving real telephone calls.
+
+Africa's Talking and Termii were previously considered in the architecture but have been removed from the active integration plan.
+
+Do not reintroduce them as live integrations without a separate decision.
+
+## 15.2 Location and routing
+
+Leaflet and OpenStreetMap are retained for mapping.
+
+OpenRouteService is retained where its integration is working.
+
+Do not fabricate route data or travel-time estimates when routing is unavailable.
+
+## 15.3 Authentication and persistence
+
+Firebase Authentication and Firestore are retained.
+
+Preserve existing authentication and data functionality.
+
+Incident state, unit state and audit history should be consistent across the application.
+
+Do not build disconnected mock data into individual pages if the existing application already has a shared state or persistence layer.
+
+---
+
+# 16. SECURITY, PRIVACY AND AUDITABILITY
+
+Responda handles potentially sensitive emergency and medical information.
+
+The application should be designed with privacy and operational accountability in mind.
+
+Requirements:
+- Role-based access control.
+- Appropriate protection of incident and caller information.
+- Secure authentication.
+- Appropriate data handling and retention.
+- Clear attribution of operator and system actions.
+- Audit history for important changes.
+- Appropriate protection of integrations and credentials.
+- Nigerian Data Protection Act (NDPA) considerations.
+
+The pitch prototype should not imply that regulatory compliance or production-grade security has been fully certified merely because the interface contains security-related settings.
+
+---
+
+# 17. FEATURES OUTSIDE THE CURRENT MVP
+
+Do not spend development time implementing the following unless explicitly requested later:
+
+- A consumer emergency application.
+- A public 112 replacement.
+- Police, crime, fire or security dispatch.
+- Autonomous emergency dispatch.
+- Autonomous clinical diagnosis.
+- A separate Operations Supervisor role.
+- A separate medical personnel directory.
+- Individual Responda accounts for every medical crew member.
+- Advanced fleet analytics.
+- Predictive unit allocation.
+- Vehicle maintenance and fuel management.
+- Crew scheduling and payroll.
+- Advanced performance analytics.
+- Advanced enterprise reporting.
+- Unverified real-time GPS tracking.
+- Unconfigured carrier location services.
+- Unverified telephony integrations.
+
+The immediate objective is a coherent, functional pitch demonstration.
+
+---
+
+# 18. REQUIRED UI/UX DIRECTION
+
+The interface should feel like a professional emergency operations and command platform.
+
+It must communicate:
+- Urgency.
+- Trust.
+- Precision.
+- Operational clarity.
+- Human control.
+
+Avoid the appearance of a generic AI dashboard or an ordinary CRUD administration system.
+
+## 18.1 General design requirements
+
+- Clear visual hierarchy.
+- Consistent navigation.
+- Strong distinction between operational and administrative workspaces.
+- Clear incident priority and status indicators.
+- Legible information density.
+- Meaningful use of maps and timelines.
+- Consistent component behaviour.
+- Responsive desktop and mobile layouts.
+- Clear empty, loading, error and unavailable states.
+- Confirmation for consequential actions.
+
+Do not add visual complexity just to make the application look more sophisticated.
+
+## 18.2 Operational clarity
+
+At any point, an Operations Staff member should be able to answer:
+
+- Which incident am I handling?
+- What has happened so far?
+- What information is still missing?
+- What is the incident's priority?
+- Where is the incident?
+- Has the location been verified?
+- Has a unit been selected?
+- Has dispatch been approved?
+- What is the unit currently doing?
+- What action is required next?
+
+The interface should make these answers easy to find.
+
+---
+
+# 19. IMPLEMENTATION INSTRUCTIONS FOR GOOGLE AI STUDIO
+
+The following instructions are important.
+
+## 19.1 First inspect the existing application
+
+Before modifying code or pages:
+
+1. Inspect the current application structure.
+2. Identify all existing pages and components.
+3. Identify the current routing and navigation.
+4. Inspect the simulation workflow.
+5. Identify the existing incident data model.
+6. Identify the existing response-unit data model.
+7. Inspect authentication and data persistence.
+8. Identify which integrations are genuinely working.
+9. Identify existing functionality that must be preserved.
+10. Identify inconsistencies between the existing application and this specification.
+
+Do not immediately rebuild the application from scratch.
+
+## 19.2 Preserve existing working functionality
+
+The current project already contains development work and a working simulation.
+
+Do not casually discard or replace:
+- Existing working simulation logic.
+- Existing AI conversation functionality.
+- Existing incident creation.
+- Existing map functionality.
+- Existing routing functionality.
+- Existing authentication.
+- Existing data persistence.
+- Existing reusable UI components.
+
+Where changes are required, modify the existing implementation carefully.
+
+## 19.3 Apply the latest architecture
+
+The latest architecture in this document takes precedence over older page proposals.
+
+In particular:
+
+- AI Intake is incorporated into Incident Management.
+- Response Coordination is incorporated into Incident Management.
+- Operations Staff has four navigation destinations.
+- Administrator has five navigation destinations.
+- Incident Management uses five milestones.
+- Incident Management has four tabs.
+- The incident queue is a collapsible left drawer.
+- The incident timeline is an expandable right-side panel.
+- Incident priority and status remain separate.
+- Unit registration and operational status remain separate.
+- Only two MVP roles exist.
+
+## 19.4 Avoid unnecessary feature expansion
+
+Do not interpret this document as a request to build every possible emergency-response feature.
+
+Prioritise the responsibilities needed to demonstrate Responda's core value.
+
+Do not introduce new pages, statuses, roles, integrations or complex workflows without a clear requirement.
+
+## 19.5 Maintain consistent data and state
+
+The same incident must retain its information as it moves through the workflow.
+
+The same response unit must have a consistent operational state across:
+- Command Centre.
+- Incident Management.
+- Response Units.
+- Incident History, where relevant.
+- Administrator Unit Management.
+
+Actions in one area must be reflected in the appropriate other areas.
+
+For example:
+- A newly created incident must appear in the Command Centre and Incident List.
+- A confirmed dispatch must update the incident and response unit.
+- Arrival must update the incident timeline and unit status.
+- Patient pickup must be recorded distinctly.
+- Closure must move the incident out of the active queue and into Incident History.
+
+Avoid duplicate records and inconsistent state.
+
+## 19.6 Validate the complete demonstration
+
+After the architecture and required changes are implemented, test the complete demonstration from beginning to end.
+
+Use the Yaba road accident scenario.
+
+Verify that:
+1. The incoming report appears.
+2. AI intake works.
+3. Relevant information is extracted.
+4. Location information is handled honestly.
+5. The incident is created.
+6. The operator can take over.
+7. The operator can review and verify information.
+8. Priority can be confirmed or adjusted.
+9. Suitable response units are displayed.
+10. A unit can be selected.
+11. Dispatch requires explicit human approval.
+12. The unit changes to Responding only after confirmed dispatch.
+13. Tracking is clearly identified as simulated where appropriate.
+14. Arrival is recorded.
+15. Patient pickup is recorded separately.
+16. Hospital transport is recorded.
+17. The incident can be closed.
+18. The closed incident appears in Incident History.
+19. The incident timeline preserves the sequence of events.
+20. All relevant dashboard counts, maps and unit statuses remain consistent.
+
+---
+
+# 20. FINAL PRODUCT PRINCIPLE
+
+Responda should demonstrate one connected operational system.
+
+The journey must be understandable from the moment an emergency report arrives until the incident is concluded.
+
+AI reduces the burden of initial information collection and organisation.
+
+Location intelligence helps establish where assistance is needed.
+
+The human operator verifies the information, makes the consequential decisions and approves dispatch.
+
+The platform then helps coordinate the organisation's existing medical response resources and preserves the record of what happened.
+
+**The product is not simply an AI that answers emergency calls. It is an AI-assisted operational coordination platform that connects emergency intake, location verification, human decision-making, medical response resources and incident accountability.**
+
+That is the product Google AI Studio must help us demonstrate.

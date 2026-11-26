@@ -1,342 +1,234 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Search, ShieldAlert, UserCheck } from 'lucide-react';
 import {
+  Archive,
+  ArrowRight,
+  Lock,
+  Search,
+} from 'lucide-react';
+import type {
   IncidentPriority,
   IncidentRecord,
   ResponseUnit,
   UserRole,
 } from '../types/responda';
-import {
-  canTakeOver,
-  EMERGENCY_CATEGORIES,
-  formatRelativeTime,
-  isActiveIncidentStatus,
-  sortIncidents,
-} from '../utils/incidentLogic';
+import { formatRelativeTime, sortIncidents } from '../utils/incidentLogic';
+import { IncidentWorkspace } from './IncidentWorkspace';
 import {
   IncidentStatusBadge,
+  LegacyBadge,
   LocationSourceBadge,
   PriorityBadge,
   VerificationBadge,
 } from './StatusBadges';
 
 interface LiveIncidentsViewProps {
-  mode: 'live' | 'history';
   incidents: IncidentRecord[];
   units: ResponseUnit[];
   userRole: UserRole;
-  onOpenWorkspace: (id: string) => void;
-  onTakeOver: (id: string) => void;
+  operatorName: string;
+  authFetch: typeof fetch;
+  carrierConfigured: boolean;
 }
 
 export function LiveIncidentsView({
-  mode,
   incidents,
   units,
   userRole,
-  onOpenWorkspace,
-  onTakeOver,
+  operatorName,
+  authFetch,
+  carrierConfigured,
 }: LiveIncidentsViewProps) {
   const [search, setSearch] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState<IncidentPriority | 'ALL'>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | IncidentPriority>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [sortBy, setSortBy] = useState<'newest' | 'priority'>(
-    mode === 'live' ? 'priority' : 'newest'
-  );
+  const [includeLegacy, setIncludeLegacy] = useState(true);
+  const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
 
-  const rows = useMemo(() => {
+  const archivedIncidents = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = incidents.filter((inc) => {
-      const active = isActiveIncidentStatus(inc.status);
-      if (mode === 'live' && !active) return false;
-      if (mode === 'history' && active) return false;
+    const list = incidents.filter((inc) => {
+      if (inc.status !== 'Closed' && !inc.legacyOutOfScope) return false;
+      if (!includeLegacy && inc.legacyOutOfScope) return false;
       if (priorityFilter !== 'ALL' && inc.priority !== priorityFilter) return false;
       if (categoryFilter !== 'ALL' && inc.category !== categoryFilter) return false;
       if (q) {
-        const hay = [
-          inc.id,
-          inc.category,
-          inc.summary,
-          inc.location.description,
-          inc.location.area,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
+        const hay = `${inc.id} ${inc.category} ${inc.summary} ${
+          inc.outcome || ''
+        } ${inc.location.area || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-    return sortIncidents(filtered, sortBy);
-  }, [incidents, mode, search, priorityFilter, categoryFilter, sortBy]);
+    return sortIncidents(list, 'newest');
+  }, [incidents, includeLegacy, priorityFilter, categoryFilter, search]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    incidents
+      .filter((i) => i.status === 'Closed' || i.legacyOutOfScope)
+      .forEach((i) => set.add(i.category));
+    return Array.from(set);
+  }, [incidents]);
+
+  const selectedIncident = selectedArchiveId
+    ? archivedIncidents.find((i) => i.id === selectedArchiveId) || null
+    : null;
+
+  if (selectedIncident) {
+    const noop = async () => {};
+    return (
+      <IncidentWorkspace
+        incident={selectedIncident}
+        incidents={archivedIncidents}
+        units={units}
+        userRole={userRole}
+        operatorName={operatorName}
+        authFetch={authFetch}
+        readOnly={true}
+        carrierConfigured={carrierConfigured}
+        onBack={() => setSelectedArchiveId(null)}
+        onSelectIncident={(id) => setSelectedArchiveId(id)}
+        onTakeOver={noop}
+        onUpdateMedicalDetails={noop}
+        onVerifyLocation={noop}
+        onUpdateStatus={noop}
+        onDispatchUnit={noop}
+        onTransportEvent={noop}
+        onAddNote={noop}
+        onSendOperatorMessage={noop}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-50">
-            {mode === 'live' ? 'Live Incidents Queue' : 'Incident History & Archive'}
+          <h1 className="font-display text-lg font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+            <Archive className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+            <span>Incident History (Read-Only Archive)</span>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {mode === 'live'
-              ? 'All open incidents requiring human review, verification, or active field coordination.'
-              : 'Resolved and closed emergency records with preserved transcripts and audit trails.'}
+            Completed medical incidents and preserved legacy records. Archived cases cannot be edited or reopened.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search incidents..."
-              aria-label="Search incidents"
-              className="rounded-lg bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 dark:bg-[#111C2E] dark:border-[#26364B] pl-8 pr-3 py-1.5 text-xs dark:text-slate-100 dark:placeholder:text-slate-500"
-            />
-          </div>
-
-          <select
-            aria-label="Filter priority"
-            value={priorityFilter}
-            onChange={(e) =>
-              setPriorityFilter(e.target.value as IncidentPriority | 'ALL')
-            }
-            className="rounded-lg bg-white border border-slate-200 text-slate-800 dark:bg-[#111C2E] dark:border-[#26364B] px-2.5 py-1.5 text-xs dark:text-slate-200"
-          >
-            <option value="ALL">All Priorities</option>
-            <option value="CRITICAL">Critical</option>
-            <option value="HIGH">High</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="LOW">Low</option>
-          </select>
-
-          <select
-            aria-label="Filter category"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-lg bg-white border border-slate-200 text-slate-800 dark:bg-[#111C2E] dark:border-[#26364B] px-2.5 py-1.5 text-xs dark:text-slate-200"
-          >
-            <option value="ALL">All Categories</option>
-            {EMERGENCY_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <select
-            aria-label="Sort list"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'newest' | 'priority')}
-            className="rounded-lg bg-white border border-slate-200 text-slate-800 dark:bg-[#111C2E] dark:border-[#26364B] px-2.5 py-1.5 text-xs dark:text-slate-200"
-          >
-            <option value="newest">Newest First</option>
-            <option value="priority">Highest Priority</option>
-          </select>
-        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-300">
+          <Lock className="w-3.5 h-3.5" />
+          <span>{archivedIncidents.length} Archived Records</span>
+        </span>
       </div>
 
-      {mode === 'live' && rows.length > 0 && (
-        <div className="rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] px-4 py-3 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-xs">
-          <span>
-            Showing <strong className="text-slate-900 dark:text-slate-100">{rows.length}</strong> open incident{rows.length === 1 ? '' : 's'}. Urgent and awaiting-takeover cases appear at the top — click <strong className="text-blue-700 dark:text-blue-300">Open Workspace</strong> to verify location or assign a unit.
-          </span>
-          <span className="font-mono text-[11px] text-amber-800 dark:text-amber-300 font-semibold">
-            {rows.filter((r) => r.status === 'AWAITING_OPERATOR' || r.status === 'AI_INTAKE' || r.status === 'NEW').length} awaiting takeover
-          </span>
+      {/* Filters */}
+      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 grid grid-cols-1 sm:grid-cols-4 gap-2.5 shadow-2xs dark:shadow-none">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search ID, outcome, area..."
+            className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+          />
         </div>
-      )}
 
-      {rows.length === 0 ? (
-        <div className="rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] p-10 text-center space-y-2 shadow-xs">
-          <ShieldAlert className="w-8 h-8 text-slate-400 dark:text-slate-500 mx-auto" />
-          <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            {mode === 'live' ? 'No active incidents match your filters' : 'No closed or resolved incidents found'}
+        <select
+          aria-label="Filter archive by priority"
+          value={priorityFilter}
+          onChange={(e) => setPriorityFilter(e.target.value as 'ALL' | IncidentPriority)}
+          className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
+        >
+          <option value="ALL">All Priorities</option>
+          <option value="Critical">Critical</option>
+          <option value="Urgent">Urgent</option>
+          <option value="Standard">Standard</option>
+          <option value="Unassessed">Unassessed</option>
+        </select>
+
+        <select
+          aria-label="Filter archive by category"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
+        >
+          <option value="ALL">All Categories</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+
+        <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={includeLegacy}
+            onChange={(e) => setIncludeLegacy(e.target.checked)}
+          />
+          <span>Include Legacy / Out-of-Scope</span>
+        </label>
+      </div>
+
+      {/* Archive List */}
+      <div className="space-y-2.5">
+        {archivedIncidents.length === 0 ? (
+          <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+            No archived incidents match the current filters.
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {mode === 'live'
-              ? 'New reports submitted via AI Intake will appear here immediately.'
-              : 'Resolved and closed cases appear here once field operations conclude.'}
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Mobile Vertical Cards (< md) */}
-          <div className="md:hidden space-y-3">
-            {rows.map((inc) => {
-              const assignedUnit = inc.assignedUnitId
-                ? units.find((u) => u.id === inc.assignedUnitId)
-                : null;
-              const needsTakeover =
-                inc.status === 'AWAITING_OPERATOR' ||
-                inc.status === 'AI_INTAKE' ||
-                inc.status === 'NEW';
-
-              return (
-                <div
-                  key={inc.id}
-                  className="rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] p-4 space-y-3 text-xs shadow-xs"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{inc.id}</span>
-                        <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                          {formatRelativeTime(inc.createdAt)}
-                        </span>
-                      </div>
-                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
-                        {inc.category}
-                      </div>
-                    </div>
-                    <PriorityBadge priority={inc.priority} />
-                  </div>
-
-                  <p className="text-slate-600 dark:text-slate-300 leading-snug">
-                    {inc.location.correctedDescription || inc.location.description}
-                  </p>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    <IncidentStatusBadge status={inc.status} />
-                    <LocationSourceBadge source={inc.location.source} />
-                    <VerificationBadge status={inc.location.verificationStatus} />
-                  </div>
-
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Operator: {inc.assignedOperator || 'Unassigned'}
-                    {assignedUnit ? ` · Unit: ${assignedUnit.callsign}` : ''}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
-                    {mode === 'live' && needsTakeover && canTakeOver(userRole) && (
-                      <button
-                        type="button"
-                        onClick={() => onTakeOver(inc.id)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:border-amber-500/40 dark:text-amber-300 font-semibold"
-                      >
-                        <UserCheck className="w-4 h-4" />
-                        <span>Take Over Incident</span>
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onOpenWorkspace(inc.id)}
-                      className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold"
-                    >
-                      <span>Open Workspace</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+        ) : (
+          archivedIncidents.map((inc) => (
+            <div
+              key={inc.id}
+              onClick={() => setSelectedArchiveId(inc.id)}
+              className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] hover:border-blue-400 dark:hover:border-blue-500/50 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer shadow-2xs dark:shadow-none transition-colors"
+            >
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+                    {inc.id}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    {inc.category}
+                  </span>
+                  <PriorityBadge priority={inc.priority} />
+                  <IncidentStatusBadge status={inc.status} />
+                  <LocationSourceBadge source={inc.location.source} />
+                  <VerificationBadge status={inc.location.verificationStatus} />
+                  {inc.legacyOutOfScope && <LegacyBadge />}
                 </div>
-              );
-            })}
-          </div>
+                <p className="text-xs text-slate-700 dark:text-slate-300">{inc.summary}</p>
+                {inc.outcome && (
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    Outcome: {inc.outcome}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>Closed {formatRelativeTime(inc.closedAt || inc.updatedAt)}</span>
+                  <span>·</span>
+                  <span>{inc.location.correctedDescription || inc.location.description}</span>
+                  {inc.hospitalDestination && (
+                    <>
+                      <span>·</span>
+                      <span>Hospital: {inc.hospitalDestination.name}</span>
+                    </>
+                  )}
+                </div>
+              </div>
 
-          {/* Desktop & Tablet Table (>= md) */}
-          <div className="hidden md:block rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 dark:border-[#26364B] dark:bg-[#0B1220]/70 dark:text-slate-400">
-                  <th className="py-3 px-4 font-semibold">Incident</th>
-                  <th className="py-3 px-4 font-semibold">Priority</th>
-                  <th className="py-3 px-4 font-semibold">Location &amp; Source</th>
-                  <th className="py-3 px-4 font-semibold">Status</th>
-                  <th className="py-3 px-4 font-semibold">Operator / Unit</th>
-                  <th className="py-3 px-4 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-[#26364B]">
-                {rows.map((inc) => {
-                  const assignedUnit = inc.assignedUnitId
-                    ? units.find((u) => u.id === inc.assignedUnitId)
-                    : null;
-                  const needsTakeover =
-                    inc.status === 'AWAITING_OPERATOR' ||
-                    inc.status === 'AI_INTAKE' ||
-                    inc.status === 'NEW';
-
-                  return (
-                    <tr
-                      key={inc.id}
-                      className="hover:bg-slate-50 dark:hover:bg-[#172438]/60 transition-colors"
-                    >
-                      <td className="py-3 px-4 max-w-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                            {inc.id}
-                          </span>
-                          <span className="text-slate-400 dark:text-slate-500">·</span>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {inc.category}
-                          </span>
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
-                          {inc.summary}
-                        </p>
-                        <div className="font-mono text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                          {formatRelativeTime(inc.createdAt)}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <PriorityBadge priority={inc.priority} />
-                      </td>
-
-                      <td className="py-3 px-4 max-w-xs">
-                        <div className="text-slate-800 dark:text-slate-200 line-clamp-1">
-                          {inc.location.correctedDescription || inc.location.description}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          <LocationSourceBadge source={inc.location.source} />
-                          <VerificationBadge status={inc.location.verificationStatus} />
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <IncidentStatusBadge status={inc.status} />
-                      </td>
-
-                      <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
-                        <div>{inc.assignedOperator || 'Unassigned'}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {assignedUnit ? assignedUnit.callsign : 'No unit assigned'}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          {mode === 'live' && needsTakeover && canTakeOver(userRole) && (
-                            <button
-                              type="button"
-                              onClick={() => onTakeOver(inc.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:border-amber-500/40 dark:text-amber-300 font-semibold whitespace-nowrap"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" />
-                              <span>Take Over</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => onOpenWorkspace(inc.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 dark:bg-blue-600/20 dark:hover:bg-blue-600/35 dark:border-blue-500/35 dark:text-blue-300 font-semibold whitespace-nowrap"
-                          >
-                            <span>Workspace</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </>
-      )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedArchiveId(inc.id);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200 shrink-0"
+              >
+                <span>Inspect Read-Only</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

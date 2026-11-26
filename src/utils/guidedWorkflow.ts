@@ -1,56 +1,65 @@
 import type { IncidentRecord, ResponseUnit } from '../types/responda.ts';
-import { isActiveIncidentStatus } from './incidentLogic.ts';
+import { isActiveIncidentStatus, PRIORITY_WEIGHT } from './incidentLogic.ts';
 
 export type WorkflowActionType =
   | 'GATHER_INFO'
-  | 'VERIFY_LOCATION'
   | 'TAKE_OVER'
+  | 'VERIFY_LOCATION'
+  | 'ASSESS_PRIORITY'
   | 'SELECT_UNIT'
   | 'APPROVE_DISPATCH'
   | 'TRACK_RESPONSE'
   | 'CLOSE_INCIDENT'
   | 'COMPLETED';
 
-export interface WorkflowStepItem {
+export type IncidentWorkspaceTabId =
+  | 'workflow'
+  | 'medical-details'
+  | 'location'
+  | 'response';
+
+export interface WorkflowMilestoneItem {
   number: number;
   id:
-    | 'new'
-    | 'gather'
-    | 'verify_location'
-    | 'review'
-    | 'select_unit'
-    | 'approve_dispatch'
-    | 'track'
-    | 'close';
+    | 'report_intake'
+    | 'assessment_verification'
+    | 'unit_dispatch'
+    | 'response_transport'
+    | 'closure';
   label: string;
   shortLabel: string;
   status: 'done' | 'current' | 'upcoming';
 }
 
 export interface IncidentWorkflowGuidance {
-  currentStepIndex: number; // 0-based index into the 8 steps
-  steps: WorkflowStepItem[];
+  currentMilestoneIndex: number; // 0..4
+  milestones: WorkflowMilestoneItem[];
   whatIsHappening: string;
   needsAttention: string;
   nextActionLabel: string;
   nextActionDescription: string;
   nextActionType: WorkflowActionType;
-  nextTabTarget: 'overview' | 'transcript' | 'location' | 'units' | 'timeline' | 'notes';
+  nextTabTarget: IncidentWorkspaceTabId;
 }
 
-const STEP_DEFINITIONS: Array<{
-  id: WorkflowStepItem['id'];
+const MILESTONE_DEFINITIONS: Array<{
+  id: WorkflowMilestoneItem['id'];
   label: string;
   shortLabel: string;
 }> = [
-  { id: 'new', label: 'New Incident', shortLabel: 'New' },
-  { id: 'gather', label: 'Gather Information', shortLabel: 'Gather' },
-  { id: 'verify_location', label: 'Verify Location', shortLabel: 'Location' },
-  { id: 'review', label: 'Review Incident', shortLabel: 'Review' },
-  { id: 'select_unit', label: 'Select Unit', shortLabel: 'Unit' },
-  { id: 'approve_dispatch', label: 'Approve Dispatch', shortLabel: 'Approve' },
-  { id: 'track', label: 'Track Response', shortLabel: 'Track' },
-  { id: 'close', label: 'Close Incident', shortLabel: 'Close' },
+  { id: 'report_intake', label: '1. Report and Intake', shortLabel: 'Report & Intake' },
+  {
+    id: 'assessment_verification',
+    label: '2. Assessment and Verification',
+    shortLabel: 'Assessment',
+  },
+  { id: 'unit_dispatch', label: '3. Unit Dispatch', shortLabel: 'Unit Dispatch' },
+  {
+    id: 'response_transport',
+    label: '4. Response and Transport',
+    shortLabel: 'Response & Transport',
+  },
+  { id: 'closure', label: '5. Closure', shortLabel: 'Closure' },
 ];
 
 export function computeIncidentWorkflow(
@@ -60,128 +69,148 @@ export function computeIncidentWorkflow(
 ): IncidentWorkflowGuidance {
   const hasHumanControl = Boolean(incident.assignedOperator) || !incident.aiIntakeActive;
   const locationVerified = incident.location.verificationStatus === 'VERIFIED';
+  const priorityAssessed = incident.priority !== 'Unassessed';
   const hasDispatchApproved = Boolean(incident.assignedUnitId && incident.dispatchedAt);
-  const isResolvedOrClosed =
-    incident.status === 'RESOLVED' || incident.status === 'CLOSED';
-  const isClosed = incident.status === 'CLOSED';
+  const isClosed = incident.status === 'Closed';
+  const isTransport = incident.status === 'Patient Transport' || Boolean(incident.transportStartedAt);
+  const hospitalArrived = Boolean(incident.hospitalArrivedAt);
 
-  let currentStepIndex = 0;
+  let currentMilestoneIndex = 0;
   let whatIsHappening = '';
   let needsAttention = '';
   let nextActionLabel = '';
   let nextActionDescription = '';
   let nextActionType: WorkflowActionType = 'TAKE_OVER';
-  let nextTabTarget: IncidentWorkflowGuidance['nextTabTarget'] = 'overview';
+  let nextTabTarget: IncidentWorkspaceTabId = 'workflow';
 
   if (isClosed) {
-    currentStepIndex = 7;
+    currentMilestoneIndex = 4;
     whatIsHappening = `Incident ${incident.id} (${incident.category}) is closed and archived with full audit history.`;
-    needsAttention = 'No immediate operator action is required.';
-    nextActionLabel = 'View Audit Timeline';
-    nextActionDescription = 'Review the preserved conversation transcript, dispatch timestamps, and closure notes.';
+    needsAttention = 'Read-only archived record in Incident History.';
+    nextActionLabel = 'Review Archived Record';
+    nextActionDescription = 'Inspect preserved medical details, hospital outcome, and audit timeline.';
     nextActionType = 'COMPLETED';
-    nextTabTarget = 'timeline';
-  } else if (incident.status === 'RESOLVED') {
-    currentStepIndex = 7;
-    whatIsHappening = `Field work for ${incident.id} (${incident.category}) is marked resolved and ready for final case closure.`;
-    needsAttention = 'Confirm final notes and formally close the incident record.';
+    nextTabTarget = 'workflow';
+  } else if (hospitalArrived) {
+    currentMilestoneIndex = 4;
+    whatIsHappening = `${assignedUnit?.callsign || 'Assigned unit'} confirmed hospital arrival${
+      incident.hospitalDestination ? ` at ${incident.hospitalDestination.name}` : ''
+    }.`;
+    needsAttention = 'Record final patient handover outcome and formally close the incident.';
     nextActionLabel = 'Close Incident';
-    nextActionDescription = 'Confirm with a brief closure summary so this incident moves cleanly to Incident History.';
+    nextActionDescription =
+      'Complete closure summary to release the unit and archive this record to Incident History.';
     nextActionType = 'CLOSE_INCIDENT';
-    nextTabTarget = 'overview';
-  } else if (
-    hasDispatchApproved ||
-    incident.status === 'UNIT_ASSIGNED' ||
-    incident.status === 'RESPONDING' ||
-    incident.status === 'ON_SCENE'
-  ) {
-    if (assignedUnit?.availability === 'ON_SCENE' || incident.status === 'ON_SCENE') {
-      currentStepIndex = 7;
-      whatIsHappening = `${assignedUnit?.callsign || 'Assigned unit'} is on scene at ${incident.location.area || 'Lagos'}.`;
-      needsAttention = 'Confirm scene completion and mark the incident resolved or closed once safe.';
-      nextActionLabel = 'Close Incident';
-      nextActionDescription = 'Record final outcome and close the incident after unit clearance.';
-      nextActionType = 'CLOSE_INCIDENT';
-      nextTabTarget = 'units';
-    } else {
-      currentStepIndex = 6;
-      whatIsHappening = `${assignedUnit?.callsign || 'Assigned unit'} is ${
-        assignedUnit?.availability === 'EN_ROUTE' || incident.status === 'RESPONDING'
-          ? 'en route to the incident'
-          : assignedUnit?.availability === 'ACKNOWLEDGED'
-          ? 'acknowledged and preparing to move'
-          : 'assigned and awaiting unit acknowledgement'
+    nextTabTarget = 'workflow';
+  } else if (hasDispatchApproved || incident.status === 'Dispatched' || isTransport) {
+    currentMilestoneIndex = 3;
+    if (isTransport) {
+      whatIsHappening = `${assignedUnit?.callsign || 'Medical unit'} is transporting patient${
+        incident.hospitalDestination ? ` to ${incident.hospitalDestination.name}` : ''
       }.`;
-      needsAttention = 'Monitor responder progress on the map and keep status updates current.';
-      nextActionLabel = 'Track Unit Response';
-      nextActionDescription = 'Update or monitor unit acknowledgement, en-route progress, and arrival on scene.';
+      needsAttention = 'Confirm hospital arrival once handover at emergency reception occurs.';
+      nextActionLabel = 'Confirm Hospital Arrival';
+      nextActionDescription = 'Update patient transport milestones on the Response tab.';
       nextActionType = 'TRACK_RESPONSE';
-      nextTabTarget = 'units';
-    }
-  } else if (!hasHumanControl && (incident.status === 'NEW' || incident.status === 'AI_INTAKE' || incident.status === 'AWAITING_OPERATOR')) {
-    if (incident.transcript.length <= 1 && incident.status === 'NEW') {
-      currentStepIndex = 1;
-      whatIsHappening = `New ${incident.priority.toLowerCase()} ${incident.category.toLowerCase()} report received.`;
-      needsAttention = 'Initial caller details are still being gathered.';
-      nextActionLabel = 'Take Over & Review Details';
-      nextActionDescription = 'Accept human operator control to review caller messages and confirm missing facts.';
-      nextActionType = 'TAKE_OVER';
-      nextTabTarget = 'transcript';
+      nextTabTarget = 'response';
+    } else if (assignedUnit?.availability === 'At Scene' || incident.arrivedAtSceneAt) {
+      whatIsHappening = `${assignedUnit?.callsign || 'Medical unit'} is at scene in ${
+        incident.location.area || 'Lagos'
+      }.`;
+      needsAttention = incident.patientPickedUpAt
+        ? incident.hospitalDestination
+          ? `Start patient transport to ${incident.hospitalDestination.name}.`
+          : 'Select and confirm destination hospital before starting patient transport.'
+        : 'Confirm patient pickup, select receiving hospital, and start transport or close if treated on scene.';
+      nextActionLabel = 'Manage Scene & Transport';
+      nextActionDescription = 'Record patient pickup, confirm hospital destination, or close case.';
+      nextActionType = 'TRACK_RESPONSE';
+      nextTabTarget = 'response';
     } else {
-      currentStepIndex = 3;
-      whatIsHappening = `AI intake collected a ${incident.priority.toLowerCase()} ${incident.category.toLowerCase()} report and is waiting for a human operator.`;
-      needsAttention = 'No unit has been dispatched. A human operator must take over before dispatch.';
-      nextActionLabel = 'Take Over Incident';
-      nextActionDescription = 'Click Take Over to stop automated AI intake and take full human control.';
-      nextActionType = 'TAKE_OVER';
-      nextTabTarget = 'overview';
+      whatIsHappening = `${assignedUnit?.callsign || 'Medical unit'} is responding to ${
+        incident.location.area || 'Lagos'
+      }.`;
+      needsAttention = 'Monitor responder progress and confirm arrival at scene.';
+      nextActionLabel = 'Track Unit Response';
+      nextActionDescription = 'Monitor response route and record Arrived at Scene on the Response tab.';
+      nextActionType = 'TRACK_RESPONSE';
+      nextTabTarget = 'response';
     }
-  } else if (!locationVerified) {
-    currentStepIndex = 2;
-    whatIsHappening = `Operator ${incident.assignedOperator || 'on duty'} is reviewing ${incident.id}, but the exact Lagos location is not yet verified.`;
-    needsAttention = `Location is currently ${incident.location.verificationStatus.toLowerCase()} (${incident.location.source.replace(/_/g, ' ').toLowerCase()}).`;
-    nextActionLabel = 'Verify Location';
-    nextActionDescription = 'Confirm the street, nearby landmark, and map pin on the Location tab before sending a unit.';
-    nextActionType = 'VERIFY_LOCATION';
-    nextTabTarget = 'location';
+  } else if (!hasHumanControl && incident.status === 'New') {
+    currentMilestoneIndex = 0;
+    whatIsHappening = `New ${incident.priority.toLowerCase()} ${incident.category.toLowerCase()} report received.`;
+    needsAttention =
+      incident.priority === 'Unassessed'
+        ? 'Insufficient assessment details — human operator takeover and priority assessment required.'
+        : 'Human operator takeover is required before verification and unit dispatch.';
+    nextActionLabel = 'Take Over Incident';
+    nextActionDescription =
+      'Assume human operator control to review medical details and verify location.';
+    nextActionType = 'TAKE_OVER';
+    nextTabTarget = 'workflow';
+  } else if (!priorityAssessed || !locationVerified) {
+    currentMilestoneIndex = 1;
+    if (!priorityAssessed && !locationVerified) {
+      whatIsHappening = `Operator ${incident.assignedOperator || 'on duty'} is reviewing ${incident.id}.`;
+      needsAttention = 'Priority is Unassessed and exact Lagos location is unverified.';
+      nextActionLabel = 'Assess Priority & Verify Location';
+      nextActionDescription =
+        'Confirm clinical priority on Medical Details and verify location on the Location tab.';
+      nextActionType = 'VERIFY_LOCATION';
+      nextTabTarget = 'medical-details';
+    } else if (!priorityAssessed) {
+      whatIsHappening = `Location for ${incident.id} is verified, but clinical priority remains Unassessed.`;
+      needsAttention = 'Set priority (Critical, Urgent, or Standard) based on patient details.';
+      nextActionLabel = 'Assess Priority';
+      nextActionDescription = 'Review chief complaint and consciousness details to assign priority.';
+      nextActionType = 'ASSESS_PRIORITY';
+      nextTabTarget = 'medical-details';
+    } else {
+      whatIsHappening = `Operator ${incident.assignedOperator || 'on duty'} is reviewing ${incident.id}, pending exact location verification.`;
+      needsAttention = `Location is currently ${incident.location.verificationStatus.toLowerCase()} (${incident.location.source
+        .replace(/_/g, ' ')
+        .toLowerCase()}).`;
+      nextActionLabel = 'Verify Location';
+      nextActionDescription =
+        'Confirm street, nearby landmark, and Lagos map pin on the Location tab before dispatch.';
+      nextActionType = 'VERIFY_LOCATION';
+      nextTabTarget = 'location';
+    }
   } else if (!candidateUnitSelected) {
-    currentStepIndex = 4;
-    whatIsHappening = `Location for ${incident.id} is verified at ${incident.location.area || 'Lagos'} and ready for response coordination.`;
-    needsAttention = 'No response unit has been selected yet.';
+    currentMilestoneIndex = 2;
+    whatIsHappening = `Location verified at ${incident.location.area || 'Lagos'} (${incident.priority} priority).`;
+    needsAttention = 'No medical response unit has been selected yet.';
     nextActionLabel = 'Select Response Unit';
-    nextActionDescription = 'Compare available Lagos ambulances or patrol units and select the closest fit.';
+    nextActionDescription = 'Compare active medical units by capability and distance on the Response tab.';
     nextActionType = 'SELECT_UNIT';
-    nextTabTarget = 'units';
+    nextTabTarget = 'response';
   } else {
-    currentStepIndex = 5;
-    whatIsHappening = `Location is verified and a candidate response unit is selected for ${incident.id}.`;
-    needsAttention = 'Human dispatcher confirmation is required before the unit can be sent.';
+    currentMilestoneIndex = 2;
+    whatIsHappening = `Location verified and candidate unit selected for ${incident.id}.`;
+    needsAttention = 'Human operator dispatch approval is required before deploying the unit.';
     nextActionLabel = 'Approve Dispatch';
-    nextActionDescription = 'Review the unit and route, then confirm human dispatch approval.';
+    nextActionDescription = 'Confirm selected medical unit and approve dispatch.';
     nextActionType = 'APPROVE_DISPATCH';
-    nextTabTarget = 'units';
+    nextTabTarget = 'response';
   }
 
   const hasGatherInfo =
     incident.transcript.some((m) => m.speaker === 'CALLER') ||
     Boolean(incident.description?.trim());
 
-  const stepDoneMap: Record<WorkflowStepItem['id'], boolean> = {
-    new: true,
-    gather: hasGatherInfo,
-    verify_location: locationVerified,
-    review: hasHumanControl,
-    select_unit: Boolean(incident.assignedUnitId) || candidateUnitSelected,
-    approve_dispatch: hasDispatchApproved,
-    track: isResolvedOrClosed || incident.status === 'ON_SCENE' || assignedUnit?.availability === 'ON_SCENE',
-    close: isClosed,
+  const milestoneDoneMap: Record<WorkflowMilestoneItem['id'], boolean> = {
+    report_intake: hasGatherInfo && hasHumanControl,
+    assessment_verification: hasHumanControl && locationVerified && priorityAssessed,
+    unit_dispatch: hasDispatchApproved,
+    response_transport: isClosed || hospitalArrived,
+    closure: isClosed,
   };
 
-  const steps: WorkflowStepItem[] = STEP_DEFINITIONS.map((def, idx) => {
-    let status: WorkflowStepItem['status'] = 'upcoming';
-    if (stepDoneMap[def.id]) {
+  const milestones: WorkflowMilestoneItem[] = MILESTONE_DEFINITIONS.map((def, idx) => {
+    let status: WorkflowMilestoneItem['status'] = 'upcoming';
+    if (milestoneDoneMap[def.id]) {
       status = 'done';
-    } else if (idx === currentStepIndex) {
+    } else if (idx === currentMilestoneIndex) {
       status = 'current';
     }
     return {
@@ -194,8 +223,8 @@ export function computeIncidentWorkflow(
   });
 
   return {
-    currentStepIndex,
-    steps,
+    currentMilestoneIndex,
+    milestones,
     whatIsHappening,
     needsAttention,
     nextActionLabel,
@@ -218,34 +247,39 @@ export function computeCommandBriefing(
   incidents: IncidentRecord[],
   units: ResponseUnit[]
 ): CommandBriefingSummary {
-  const active = incidents.filter((i) => isActiveIncidentStatus(i.status));
-  const criticalActive = active.filter((i) => i.priority === 'CRITICAL');
-  const awaitingTakeover = active.filter(
-    (i) => i.status === 'NEW' || i.status === 'AI_INTAKE' || i.status === 'AWAITING_OPERATOR'
-  );
+  const active = incidents.filter((i) => !i.legacyOutOfScope && isActiveIncidentStatus(i.status));
+  const criticalActive = active.filter((i) => i.priority === 'Critical');
+  const unassessedActive = active.filter((i) => i.priority === 'Unassessed');
+  const awaitingTakeover = active.filter((i) => i.status === 'New');
   const unverifiedOwned = active.filter(
     (i) =>
-      Boolean(i.assignedOperator) &&
-      i.location.verificationStatus !== 'VERIFIED' &&
+      i.status === 'Under Review' &&
+      (i.location.verificationStatus !== 'VERIFIED' || i.priority === 'Unassessed') &&
       !i.assignedUnitId
   );
   const readyForDispatch = active.filter(
     (i) =>
       i.location.verificationStatus === 'VERIFIED' &&
+      i.priority !== 'Unassessed' &&
       !i.assignedUnitId &&
-      i.status !== 'RESOLVED'
+      i.status === 'Under Review'
   );
-  const availableUnits = units.filter((u) => u.availability === 'AVAILABLE').length;
+  const availableUnits = units.filter(
+    (u) =>
+      u.registrationStatus === 'Active' &&
+      !u.legacyOutOfScope &&
+      u.availability === 'Available'
+  ).length;
 
   const whatIsHappening =
     active.length === 0
-      ? `All current cases are resolved. ${availableUnits} response units are available across Lagos.`
-      : `${active.length} active incident${active.length === 1 ? '' : 's'} (${criticalActive.length} critical) and ${availableUnits} available response unit${availableUnits === 1 ? '' : 's'} across Lagos.`;
+      ? `All current medical cases are closed. ${availableUnits} active medical units are available across Lagos.`
+      : `${active.length} active medical incident${active.length === 1 ? '' : 's'} (${criticalActive.length} Critical${
+          unassessedActive.length > 0 ? `, ${unassessedActive.length} Unassessed` : ''
+        }) and ${availableUnits} available medical unit${availableUnits === 1 ? '' : 's'}.`;
 
-  // Pick highest priority incident requiring action
-  const priorityRank = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
   const sortTop = (arr: IncidentRecord[]) =>
-    [...arr].sort((a, b) => priorityRank[b.priority] - priorityRank[a.priority])[0] || null;
+    [...arr].sort((a, b) => PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority])[0] || null;
 
   const topAwaiting = sortTop(awaitingTakeover);
   const topUnverified = sortTop(unverifiedOwned);
@@ -255,8 +289,10 @@ export function computeCommandBriefing(
   if (topAwaiting) {
     return {
       whatIsHappening,
-      needsAttention: `${awaitingTakeover.length} report${awaitingTakeover.length === 1 ? '' : 's'} waiting for human operator takeover — starting with ${topAwaiting.id} (${topAwaiting.category}, ${topAwaiting.priority}).`,
-      nextStepText: `Take over ${topAwaiting.id} to review caller details and verify its Lagos location.`,
+      needsAttention: `${awaitingTakeover.length} new report${
+        awaitingTakeover.length === 1 ? '' : 's'
+      } awaiting operator takeover — starting with ${topAwaiting.id} (${topAwaiting.category}, ${topAwaiting.priority}).`,
+      nextStepText: `Open ${topAwaiting.id} in Incident Management, take over control, and verify location & clinical priority.`,
       focusIncident: topAwaiting,
       focusAction: 'TAKE_OVER',
       focusActionLabel: `Take Over ${topAwaiting.id}`,
@@ -266,30 +302,32 @@ export function computeCommandBriefing(
   if (topUnverified) {
     return {
       whatIsHappening,
-      needsAttention: `${topUnverified.id} (${topUnverified.category}) has an unverified location that needs confirmation before dispatch.`,
-      nextStepText: `Open ${topUnverified.id} and confirm the exact street, landmark, or map pin.`,
+      needsAttention: `${topUnverified.id} (${topUnverified.category}) needs ${
+        topUnverified.priority === 'Unassessed' ? 'clinical priority assessment and ' : ''
+      }location verification before dispatch.`,
+      nextStepText: `Open ${topUnverified.id} to verify exact Lagos coordinates and confirm priority.`,
       focusIncident: topUnverified,
       focusAction: 'VERIFY_LOCATION',
-      focusActionLabel: `Verify ${topUnverified.id} Location`,
+      focusActionLabel: `Verify ${topUnverified.id}`,
     };
   }
 
   if (topDispatch) {
     return {
       whatIsHappening,
-      needsAttention: `${topDispatch.id} (${topDispatch.category}) is verified and waiting for a human-approved unit assignment.`,
-      nextStepText: `Open ${topDispatch.id} to choose the nearest available unit and approve dispatch.`,
+      needsAttention: `${topDispatch.id} (${topDispatch.category}, ${topDispatch.priority}) is verified and ready for unit assignment.`,
+      nextStepText: `Select an active medical unit and approve dispatch for ${topDispatch.id}.`,
       focusIncident: topDispatch,
       focusAction: 'ASSIGN_UNIT',
-      focusActionLabel: `Assign Unit to ${topDispatch.id}`,
+      focusActionLabel: `Dispatch ${topDispatch.id}`,
     };
   }
 
   if (topActive) {
     return {
       whatIsHappening,
-      needsAttention: `${topActive.id} (${topActive.category}) is currently ${topActive.status.replace(/_/g, ' ').toLowerCase()}.`,
-      nextStepText: `Monitor unit arrival on the map or open ${topActive.id} to update response status or close when finished.`,
+      needsAttention: `${topActive.id} (${topActive.category}) is currently ${topActive.status}.`,
+      nextStepText: `Monitor response or transport milestones on ${topActive.id} until closure.`,
       focusIncident: topActive,
       focusAction: 'OPEN',
       focusActionLabel: `Open ${topActive.id}`,
@@ -298,10 +336,10 @@ export function computeCommandBriefing(
 
   return {
     whatIsHappening,
-    needsAttention: 'No incidents currently require urgent operator takeover or dispatch.',
-    nextStepText: 'Start a new AI Intake call or run the guided Lagos demo scenario to practise the workflow.',
+    needsAttention: 'No open medical incidents require immediate action.',
+    nextStepText: 'Start a new emergency intake in Incident Management or run the 9-stage demo simulation.',
     focusIncident: null,
     focusAction: 'OPEN',
-    focusActionLabel: 'Start AI Intake',
+    focusActionLabel: 'Open Incident Management',
   };
 }

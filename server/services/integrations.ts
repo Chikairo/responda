@@ -9,7 +9,6 @@ import { voiceProvider } from './voiceProvider.ts';
 export function getIntegrationStatuses(): IntegrationStatus[] {
   const geminiLive = isGeminiConfigured();
   const orsConfigured = Boolean(process.env.OPENROUTESERVICE_API_KEY?.trim());
-  const firebaseConfigured = Boolean(process.env.FIREBASE_PROJECT_ID?.trim());
   const carrierConfigured = Boolean(process.env.CARRIER_LOCATION_ENDPOINT?.trim());
   const voiceStatus = voiceProvider.getStatusSummary();
 
@@ -17,35 +16,34 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
     {
       id: 'gemini',
       name: 'Gemini AI & Live Voice',
-      category: 'AI Intake & Structured Triage',
+      category: 'AI Medical Intake & Triage',
       configured: geminiLive,
-      mode: geminiLive ? 'LIVE' : 'DEMO_FALLBACK',
-      statusLabel: geminiLive ? 'Connected (gemini-4-hydrogen / gemini-3.8-live)' : 'Demo Fallback Active',
+      state: geminiLive ? 'CONFIGURED_UNVERIFIED' : 'SIMULATED',
+      statusLabel: geminiLive
+        ? 'Configured (Run test to verify)'
+        : 'Simulated for demonstration',
       details: geminiLive
-        ? 'Server-side @google/genai client configured for structured intake extraction and Gemini Live audio bridge.'
-        : 'GEMINI_API_KEY is not set. Live Gemini calls return configuration guidance; Simulated Demo Intake mode remains available.',
+        ? 'GEMINI_API_KEY detected on the server for structured medical intake and Gemini Live audio bridge.'
+        : 'GEMINI_API_KEY is not set. Live Gemini intake is unavailable; Simulated Demo Intake mode remains active.',
       envVars: ['GEMINI_API_KEY'],
       setupSteps: [
         'Add GEMINI_API_KEY in AI Studio Settings > Secrets.',
-        'Restart the server to enable live structured intake and Gemini Live microphone voice sessions.',
+        'Use Test Connection below to verify server-side access.',
       ],
     },
     {
-      id: 'firebase',
-      name: 'Firebase Auth & Cloud Firestore',
-      category: 'Persistence & Identity',
-      configured: firebaseConfigured,
-      mode: firebaseConfigured ? 'LIVE' : 'DEMO_FALLBACK',
-      statusLabel: firebaseConfigured
-        ? `Configured (${process.env.FIREBASE_PROJECT_ID})`
-        : 'Local Persistent Store (Demo)',
-      details: firebaseConfigured
-        ? 'Firebase project identifier configured.'
-        : 'Using local server-side atomic JSON persistence (data/responda-db.json) and demo role accounts for competition testing.',
-      envVars: ['FIREBASE_PROJECT_ID'],
+      id: 'persistence',
+      name: 'Atomic Server Persistence & Auth',
+      category: 'Data Storage & Session Validation',
+      configured: true,
+      state: 'CONNECTED',
+      statusLabel: 'Connected and working',
+      details:
+        'Server-side atomic JSON persistence (data/responda-db.json) with schema migration backups and HMAC-SHA256 Bearer session verification.',
+      envVars: ['RESPONDA_SESSION_SECRET (optional override)'],
       setupSteps: [
-        'Provision a Firebase project with Authentication and Firestore enabled.',
-        'Set FIREBASE_PROJECT_ID and service credentials in environment secrets.',
+        'Backups of legacy schemas are stored automatically in data/.',
+        'Set RESPONDA_SESSION_SECRET in Secrets to persist sessions across restarts.',
       ],
     },
     {
@@ -53,16 +51,16 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
       name: 'OpenStreetMap & OpenRouteService',
       category: 'Maps & Driving Routing',
       configured: orsConfigured,
-      mode: orsConfigured ? 'LIVE' : 'DEMO_FALLBACK',
+      state: orsConfigured ? 'CONFIGURED_UNVERIFIED' : 'SIMULATED',
       statusLabel: orsConfigured
-        ? 'Live Routing Active'
-        : 'Map Active · Routing Key Not Configured',
+        ? 'Configured (Run test to verify)'
+        : 'Simulated for demonstration',
       details: orsConfigured
         ? 'OpenStreetMap Leaflet tiles active with OpenRouteService server-side driving routes.'
-        : 'Interactive OpenStreetMap tiles are active. OpenRouteService API key is not configured—simulated demo corridor routes are clearly labelled when active.',
+        : 'Interactive OpenStreetMap tiles are active. OPENROUTESERVICE_API_KEY is not set—simulated demo corridor routes are clearly labelled when active.',
       envVars: ['OPENROUTESERVICE_API_KEY'],
       setupSteps: [
-        'Obtain a free API key from openrouteservice.org.',
+        'Obtain an API key from openrouteservice.org.',
         'Set OPENROUTESERVICE_API_KEY in server environment secrets.',
       ],
     },
@@ -71,14 +69,14 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
       name: 'Voice Provider Adapter (Provider-Independent)',
       category: 'Telephony & Voice Intake',
       configured: voiceStatus.realTelephonyConfigured,
-      mode: voiceStatus.realTelephonyConfigured ? 'LIVE' : 'NOT_CONFIGURED',
-      statusLabel: 'Real telephone integration not configured.',
+      state: voiceStatus.realTelephonyConfigured ? 'CONNECTED' : 'NOT_CONFIGURED',
+      statusLabel: 'Not configured',
       details:
-        'Using Local Simulation Voice Adapter. RESPONDA isolates AI intake and dispatch behind a replaceable VoiceProviderAdapter interface ready for future Nigerian telephony providers such as Voicebip or PressOne Signals.',
+        'Using Local Simulation Voice Adapter. RESPONDA isolates AI intake and dispatch behind a replaceable VoiceProviderAdapter interface ready for future Nigerian telephony providers.',
       envVars: ['VoiceProviderAdapter (Local Simulation Active)'],
       setupSteps: [
-        'Implement VoiceProviderAdapter for your chosen telephony partner (e.g. Voicebip or PressOne Signals).',
-        'Bind incoming call webhooks, speech transcription, and human handover callbacks to /api/telephony/*.',
+        'Implement VoiceProviderAdapter for your chosen telephony partner.',
+        'Bind incoming call webhooks and handover callbacks to /api/telephony/*.',
       ],
     },
     {
@@ -86,10 +84,10 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
       name: 'Network / Carrier Location Provider',
       category: 'Authorised MNO AML / Cell Location',
       configured: carrierConfigured,
-      mode: carrierConfigured ? 'LIVE' : 'NOT_CONFIGURED',
+      state: carrierConfigured ? 'CONFIGURED_UNVERIFIED' : 'NOT_CONFIGURED',
       statusLabel: carrierConfigured
-        ? 'Authorised Endpoint Configured'
-        : 'Carrier location integration not configured',
+        ? 'Configured (Run test to verify)'
+        : 'Not configured',
       details:
         'Carrier location integration not configured. Responda never fabricates cell-tower coordinates or infers GPS from a caller telephone number.',
       envVars: ['CARRIER_LOCATION_ENDPOINT'],
@@ -172,8 +170,6 @@ export async function calculateDrivingRoute(params: {
     }
   }
 
-  // Never invent real driving ETAs when no routing provider is configured.
-  // Only return a visual simulated corridor line if caller explicitly requested a simulated demo overlay.
   if (params.allowSimulatedOverlay) {
     const mid1Lat = params.fromLat + (params.toLat - params.fromLat) * 0.33 + 0.0028;
     const mid1Lng = params.fromLng + (params.toLng - params.fromLng) * 0.33 - 0.0022;

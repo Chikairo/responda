@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlertTriangle, CheckCircle2, ShieldCheck, Truck, X } from 'lucide-react';
-import { IncidentRecord, ResponseUnit, RouteResult } from '../types/responda';
+import type { IncidentRecord, ResponseUnit, RouteResult } from '../types/responda';
 import { formatDistanceKm, formatDurationMinutes } from '../utils/incidentLogic';
 
 interface DispatchConfirmModalProps {
@@ -36,8 +36,11 @@ export function DispatchConfirmModal({
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-[#26364B]">
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h2 id="dispatch-modal-title" className="font-display text-base font-bold text-slate-900 dark:text-slate-50">
-              Confirm Human-Approved Dispatch
+            <h2
+              id="dispatch-modal-title"
+              className="font-display text-base font-bold text-slate-900 dark:text-slate-50"
+            >
+              Confirm Human-Approved Medical Dispatch
             </h2>
           </div>
           <button
@@ -59,7 +62,7 @@ export function DispatchConfirmModal({
               </span>
             </div>
             <div className="flex items-start justify-between gap-4">
-              <span className="text-slate-500 dark:text-slate-400 shrink-0">Destination</span>
+              <span className="text-slate-500 dark:text-slate-400 shrink-0">Scene Destination</span>
               <span className="text-right text-slate-900 dark:text-slate-100">
                 {incident.location.correctedDescription || incident.location.description}
               </span>
@@ -71,22 +74,41 @@ export function DispatchConfirmModal({
                 {unit.callsign} ({unit.unitType})
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Unit Base</span>
-              <span className="text-slate-700 dark:text-slate-200">
-                {unit.locationName}, {unit.area}
+            <div className="flex items-center justify-between gap-4 text-xs">
+              <span className="text-slate-500 dark:text-slate-400 shrink-0">
+                Registration & Base
+              </span>
+              <span className="text-right text-slate-700 dark:text-slate-200">
+                {unit.vehicleRegistration} · {unit.operationalBase}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 text-xs">
+              <span className="text-slate-500 dark:text-slate-400 shrink-0">
+                Medical Capabilities
+              </span>
+              <span className="text-right text-slate-700 dark:text-slate-200">
+                {unit.medicalCapabilities.join(', ')}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 text-xs">
+              <span className="text-slate-500 dark:text-slate-400 shrink-0">Assigned Crew</span>
+              <span className="text-right text-slate-700 dark:text-slate-200">
+                {unit.crewDescription}
               </span>
             </div>
             {route && route.available && !route.isSimulatedFallback && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400">OpenRouteService Estimate</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  OpenRouteService Estimate
+                </span>
                 <span className="font-mono text-blue-700 dark:text-blue-300">
-                  {formatDistanceKm(route.distanceMeters)} · {formatDurationMinutes(route.durationSeconds)}
+                  {formatDistanceKm(route.distanceMeters)} ·{' '}
+                  {formatDurationMinutes(route.durationSeconds)}
                 </span>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400">Authorising Dispatcher</span>
+            <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-[#26364B]">
+              <span className="text-slate-500 dark:text-slate-400">Authorising Staff</span>
               <span className="text-slate-900 dark:text-slate-100 font-medium">{operatorName}</span>
             </div>
           </div>
@@ -95,7 +117,7 @@ export function DispatchConfirmModal({
             <div className="flex items-start gap-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 p-3 text-xs text-amber-800 dark:text-amber-200">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <span>
-                Location is currently marked UNVERIFIED ({incident.location.source}). Verify on the Location tab if possible before or alongside dispatch.
+                Location is currently marked UNVERIFIED ({incident.location.source}). Organisation policy may require verifying location before dispatch.
               </span>
             </div>
           )}
@@ -112,7 +134,7 @@ export function DispatchConfirmModal({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g., Approach via Herbert Macaulay Way; confirm gate access on arrival."
+              placeholder="e.g., Approach via Herbert Macaulay Way; prepare ALS trauma kit."
               className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
             />
           </div>

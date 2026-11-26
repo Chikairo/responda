@@ -1,66 +1,53 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
   Archive,
-  BarChart3,
   Bell,
-  Bot,
-  Headphones,
+  Building2,
   HelpCircle,
   LayoutDashboard,
   Menu,
-  Monitor,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   PhoneCall,
-  Play,
-  Radio,
-  Settings,
+  PlugZap,
   ShieldCheck,
   Sun,
   Truck,
+  Users,
   Wifi,
   WifiOff,
   X,
 } from 'lucide-react';
-import {
+import type {
+  AdminSection,
   AppSection,
+  ClinicalDetails,
+  HospitalDestination,
   IncidentPriority,
   IncidentRecord,
   IncidentStatus,
   IntegrationStatus,
+  MedicalEmergencyCategory,
   NotificationLog,
-  OperatorProfile,
+  OperationsSection,
+  OrganisationSettings,
   ResponseUnit,
   RouteResult,
   SimulationRuntimeState,
   SimulationScenarioId,
   SimulationStageNumber,
+  StaffAccount,
   UnitAvailability,
-  UserRole,
 } from './types/responda';
-import { AiIntakeWorkspace } from './components/AiIntakeWorkspace';
-import { AnalyticsView } from './components/AnalyticsView';
-import { CommandCentre } from './components/CommandCentre';
-import {
-  ConversationCentreView,
-  WorkflowDestinationTab,
-} from './components/ConversationCentreView';
-import { IncidentWorkspace } from './components/IncidentWorkspace';
-import { LiveIncidentsView } from './components/LiveIncidentsView';
-import { OperatorGuideModal } from './components/OperatorGuideModal';
-import { ResponseUnitsView } from './components/ResponseUnitsView';
-import { ResponsiveShowcaseView } from './components/ResponsiveShowcaseView';
-import { SettingsIntegrationsView } from './components/SettingsIntegrationsView';
-import { SimulationControlPanel } from './components/SimulationControlPanel';
-import { SimulationWorkspace } from './components/SimulationWorkspace';
-import { RespondaLogo } from './components/StatusBadges';
+import type { IncidentWorkspaceTabId } from './utils/guidedWorkflow';
+import { isActiveIncidentStatus } from './utils/incidentLogic';
 import {
   buildSimulatedCorridorRoute,
   getTrackingMilestoneForElapsed,
   interpolatePointAlongRoute,
+  LAGOS_HOSPITAL_DESTINATIONS,
   rankUnitsForIncident,
   SIMULATION_SCENARIOS,
   SIMULATION_STAGES,
@@ -73,37 +60,19 @@ import {
   speakSimulationTurn,
   stopAllSpeech,
 } from './utils/voiceSynthesis';
-
-const DEMO_PROFILES: Record<UserRole, OperatorProfile> = {
-  Administrator: {
-    id: 'op-admin',
-    name: 'Dr. Tunde Bakare',
-    role: 'Administrator',
-    organisation: 'Lagos Private Response Command (Demo)',
-    badgeCode: 'ADM-01',
-  },
-  'Call Operator': {
-    id: 'op-call',
-    name: 'Amina Bello',
-    role: 'Call Operator',
-    organisation: 'Lagos Private Response Command (Demo)',
-    badgeCode: 'OPR-04',
-  },
-  Dispatcher: {
-    id: 'op-disp',
-    name: 'Seyi Ogunleye',
-    role: 'Dispatcher',
-    organisation: 'Lagos Private Response Command (Demo)',
-    badgeCode: 'DSP-02',
-  },
-  Responder: {
-    id: 'op-resp',
-    name: 'Unit Lead Chinedu',
-    role: 'Responder',
-    organisation: 'Lagos Metro EMS (Demo)',
-    badgeCode: 'EMS-09',
-  },
-};
+import { AdminOverviewView } from './components/AdminOverviewView';
+import { CommandCentre } from './components/CommandCentre';
+import { IncidentManagementView } from './components/IncidentManagementView';
+import type { IncidentWorkspaceDraft } from './components/IncidentWorkspace';
+import { LiveIncidentsView } from './components/LiveIncidentsView';
+import { OperatorGuideModal } from './components/OperatorGuideModal';
+import { OrganisationSettingsView } from './components/OrganisationSettingsView';
+import { ResponseUnitsView } from './components/ResponseUnitsView';
+import { SettingsIntegrationsView } from './components/SettingsIntegrationsView';
+import { SimulationControlPanel } from './components/SimulationControlPanel';
+import { StaffManagementView } from './components/StaffManagementView';
+import { RespondaLogo } from './components/StatusBadges';
+import { UnitManagementView } from './components/UnitManagementView';
 
 interface ToastMessage {
   id: string;
@@ -111,17 +80,39 @@ interface ToastMessage {
   tone: 'info' | 'success' | 'error';
 }
 
+const DEFAULT_ORG_SETTINGS: OrganisationSettings = {
+  name: 'Lagos Private Medical Command (Demo)',
+  city: 'Lagos',
+  contactEmail: 'ops@responda.demo',
+  contactPhone: '+234-800-RESPONDA',
+  defaultOperationalArea: 'Yaba, Ikeja, Surulere & Lagos Island',
+  requireLocationVerificationBeforeDispatch: true,
+  clinicalTriageNotice:
+    'Medical emergency prototype only. Never deploys units or selects hospitals without human operator approval.',
+};
+
 export default function App() {
+  // Server-issued Bearer session kept strictly in React state (never localStorage/sessionStorage)
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [currentAccount, setCurrentAccount] = useState<StaffAccount | null>(null);
+  const [staffAccounts, setStaffAccounts] = useState<StaffAccount[]>([]);
+  const [organisationSettings, setOrganisationSettings] =
+    useState<OrganisationSettings>(DEFAULT_ORG_SETTINGS);
+
+  const authTokenRef = useRef<string | null>(null);
+  authTokenRef.current = authToken;
+
   const [section, setSection] = useState<AppSection>('command-centre');
-  const [workspaceIncidentId, setWorkspaceIncidentId] = useState<string | null>(null);
-  const [workspaceInitialTab, setWorkspaceInitialTab] =
-    useState<WorkflowDestinationTab>('overview');
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [workspaceTab, setWorkspaceTab] = useState<IncidentWorkspaceTabId>('workflow');
+  const [intakeMode, setIntakeMode] = useState(false);
+
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>('INC-2026-1048');
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [activeRoute, setActiveRoute] = useState<RouteResult | null>(null);
-
-  const [userRole, setUserRole] = useState<UserRole>('Dispatcher');
-  const operator = DEMO_PROFILES[userRole];
+  const [draftsByIncidentId, setDraftsByIncidentId] = useState<
+    Record<string, IncidentWorkspaceDraft>
+  >({});
 
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
   const [units, setUnits] = useState<ResponseUnit[]>([]);
@@ -131,9 +122,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -157,12 +149,33 @@ export default function App() {
     });
   }, []);
 
-  // 10-Stage Live Simulation Engine State
+  const pushToast = useCallback(
+    (text: string, tone: 'info' | 'success' | 'error' = 'info') => {
+      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setToasts((prev) => [...prev.slice(-1), { id, text, tone }]);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4200);
+    },
+    []
+  );
+
+  const authFetch: typeof fetch = useCallback(
+    (input, init) => {
+      const token = authTokenRef.current;
+      const headers = new Headers(init?.headers || {});
+      if (token && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      return fetch(input, { ...init, headers });
+    },
+    []
+  );
+
+  // Synced 9-Stage Live Simulation Engine State
   const [selectedScenario, setSelectedScenario] =
     useState<SimulationScenarioId>('yaba-accident');
   const [simBusy, setSimBusy] = useState(false);
-  const [simWorkspaceOpen, setSimWorkspaceOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [simState, setSimState] = useState<SimulationRuntimeState>(() => ({
     active: false,
     paused: false,
@@ -185,10 +198,14 @@ export default function App() {
     trackingElapsedSec: 0,
     trackingStatusText: '',
     simulatedArrivalAt: undefined,
-    patientPickupStatus: 'PENDING',
     arrivedOnScene: false,
+    patientPickedUp: false,
+    confirmedHospital: null,
+    transportStarted: false,
+    hospitalArrived: false,
     completed: false,
     activeRoute: null,
+    hospitalRoute: null,
     statusMessage: '',
   }));
 
@@ -239,7 +256,7 @@ export default function App() {
     };
   }, [clearSimExecution]);
 
-  // Call duration clock while simulation call is active
+  // Call duration clock during active simulation call
   useEffect(() => {
     if (
       !simState.active ||
@@ -258,36 +275,36 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [simState.active, simState.paused, simState.callStatus]);
 
-  const pushToast = useCallback(
-    (text: string, tone: 'info' | 'success' | 'error' = 'info') => {
-      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      setToasts((prev) => [...prev.slice(-1), { id, text, tone }]);
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 4000);
-    },
-    []
-  );
-
-  const fetchBootstrap = useCallback(async () => {
+  const fetchBootstrap = useCallback(async (explicitToken?: string) => {
+    const token = explicitToken ?? authTokenRef.current;
+    if (!token) return;
     try {
       setLoadError(null);
-      const res = await fetch('/api/bootstrap');
+      const res = await fetch('/api/bootstrap', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as {
         incidents: IncidentRecord[];
         units: ResponseUnit[];
         notifications: NotificationLog[];
+        staffAccounts: StaffAccount[];
+        organisationSettings: OrganisationSettings;
         integrations: IntegrationStatus[];
       };
       setIncidents(data.incidents);
       setUnits(data.units);
       setNotifications(data.notifications);
+      setStaffAccounts(data.staffAccounts);
+      setOrganisationSettings(data.organisationSettings);
       setIntegrations(data.integrations);
       setSelectedIncidentId((prev) =>
         prev && data.incidents.some((i) => i.id === prev)
           ? prev
-          : data.incidents[0]?.id || null
+          : data.incidents.find((i) => !i.legacyOutOfScope && isActiveIncidentStatus(i.status))
+              ?.id ||
+            data.incidents[0]?.id ||
+            null
       );
     } catch (err) {
       setLoadError(
@@ -300,14 +317,69 @@ export default function App() {
     }
   }, []);
 
+  const issueAndActivateDemoSession = useCallback(
+    async (accountId: string) => {
+      const res = await fetch('/api/auth/demo-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not establish demo session.');
+      }
+      authTokenRef.current = data.token;
+      setAuthToken(data.token);
+      setCurrentAccount(data.account);
+      await fetchBootstrap(data.token);
+      return data.account as StaffAccount;
+    },
+    [fetchBootstrap]
+  );
+
+  // Initial server-validated demo auth bootstrap
   useEffect(() => {
-    fetchBootstrap();
-  }, [fetchBootstrap]);
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadError(null);
+        const accRes = await fetch('/api/auth/accounts');
+        if (!accRes.ok) throw new Error(`HTTP ${accRes.status}`);
+        const accData = (await accRes.json()) as { accounts: StaffAccount[] };
+        if (cancelled) return;
+        setStaffAccounts(accData.accounts);
+
+        const defaultAccount =
+          accData.accounts.find(
+            (a) => a.accountStatus === 'ACTIVE' && a.role === 'Operations Staff'
+          ) || accData.accounts.find((a) => a.accountStatus === 'ACTIVE');
+
+        if (!defaultAccount) {
+          throw new Error('No active staff accounts available.');
+        }
+
+        await issueAndActivateDemoSession(defaultAccount.id);
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(
+            err instanceof Error
+              ? `Failed to start RESPONDA session: ${err.message}`
+              : 'Failed to load RESPONDA.'
+          );
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [issueAndActivateDemoSession]);
 
   // Live Clock
   useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 30000);
-    return () => clearInterval(t);
+    const t = window.setInterval(() => setClock(new Date()), 30000);
+    return () => window.clearInterval(t);
   }, []);
 
   // Real-time WebSocket Event Sync
@@ -337,37 +409,48 @@ export default function App() {
           };
           if (msg.event === 'incident:created') {
             const inc = msg.payload as IncidentRecord;
-            setIncidents((prev) => {
-              if (prev.some((i) => i.id === inc.id)) return prev;
-              return [inc, ...prev];
-            });
+            setIncidents((prev) =>
+              prev.some((i) => i.id === inc.id) ? prev : [inc, ...prev]
+            );
           } else if (msg.event === 'incident:updated') {
             const inc = msg.payload as IncidentRecord;
-            setIncidents((prev) =>
-              prev.map((i) => (i.id === inc.id ? inc : i))
-            );
+            setIncidents((prev) => prev.map((i) => (i.id === inc.id ? inc : i)));
           } else if (msg.event === 'unit:updated') {
             const unit = msg.payload as ResponseUnit;
-            setUnits((prev) =>
-              prev.map((u) => (u.id === unit.id ? unit : u))
-            );
+            setUnits((prev) => {
+              const exists = prev.some((u) => u.id === unit.id);
+              return exists
+                ? prev.map((u) => (u.id === unit.id ? unit : u))
+                : [...prev, unit];
+            });
           } else if (msg.event === 'units:sync') {
             setUnits(msg.payload as ResponseUnit[]);
           } else if (msg.event === 'notification:created') {
             const notif = msg.payload as NotificationLog;
-            setNotifications((prev) => {
-              if (prev.some((n) => n.id === notif.id)) return prev;
-              return [notif, ...prev];
+            setNotifications((prev) =>
+              prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev]
+            );
+          } else if (msg.event === 'staff:updated') {
+            const acc = msg.payload as StaffAccount;
+            setStaffAccounts((prev) => {
+              const exists = prev.some((s) => s.id === acc.id);
+              return exists ? prev.map((s) => (s.id === acc.id ? acc : s)) : [...prev, acc];
             });
+          } else if (msg.event === 'organisation:updated') {
+            setOrganisationSettings(msg.payload as OrganisationSettings);
           } else if (msg.event === 'state:reset') {
             const fresh = msg.payload as {
               incidents: IncidentRecord[];
               units: ResponseUnit[];
               notifications: NotificationLog[];
+              staffAccounts?: StaffAccount[];
+              organisationSettings?: OrganisationSettings;
             };
             setIncidents(fresh.incidents);
             setUnits(fresh.units);
             setNotifications(fresh.notifications);
+            if (fresh.staffAccounts) setStaffAccounts(fresh.staffAccounts);
+            if (fresh.organisationSettings) setOrganisationSettings(fresh.organisationSettings);
           }
         } catch {
           // ignore parse error
@@ -392,20 +475,26 @@ export default function App() {
     };
   }, []);
 
-  const authHeaders = useMemo(
-    () => ({
-      'Content-Type': 'application/json',
-      'x-responda-role': userRole,
-      'x-responda-operator': operator.name,
-    }),
-    [userRole, operator.name]
+  const userRole = currentAccount?.role || 'Operations Staff';
+  const operatorName = currentAccount?.name || 'Operations Staff';
+
+  const handleUpdateDraft = useCallback(
+    (incidentId: string, patch: Partial<IncidentWorkspaceDraft>) => {
+      setDraftsByIncidentId((prev) => ({
+        ...prev,
+        [incidentId]: {
+          ...(prev[incidentId] || {}),
+          ...patch,
+        },
+      }));
+    },
+    []
   );
 
-  // Operational API handlers
+  // Operational API handlers (all via authFetch)
   const handleTakeOver = async (id: string) => {
-    const res = await fetch(`/api/incidents/${id}/takeover`, {
+    const res = await authFetch(`/api/incidents/${id}/takeover`, {
       method: 'POST',
-      headers: authHeaders,
     });
     const data = await res.json();
     if (!res.ok) {
@@ -416,15 +505,40 @@ export default function App() {
     if (simStateRef.current.active && simStateRef.current.incidentId === id) {
       setSimState((prev) => ({
         ...prev,
-        stage: prev.stage === 5 ? 6 : prev.stage,
+        stage: prev.stage < 5 ? 5 : prev.stage,
         operatorTakenOver: true,
         callStatus: 'OPERATOR_CONNECTED',
-        statusMessage: 'Human operator takeover recorded — review incident details before unit selection.',
+        statusMessage: 'Human operator took over call — verify location & clinical priority.',
       }));
-      pushToast('Operator accepted incident — Simulation.', 'success');
-    } else {
-      pushToast(`Human operator takeover completed for ${id}.`, 'success');
     }
+    pushToast(`Human operator takeover completed for ${id}.`, 'success');
+  };
+
+  const handleUpdateMedicalDetails = async (
+    id: string,
+    payload: {
+      category?: MedicalEmergencyCategory;
+      priority?: IncidentPriority;
+      priorityReason?: string;
+      peopleAffected?: number | null;
+      immediateDanger?: boolean;
+      dangerDetails?: string;
+      clinicalDetails?: ClinicalDetails;
+      summary?: string;
+    }
+  ) => {
+    const res = await authFetch(`/api/incidents/${id}/medical-details`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      pushToast(data.error || 'Failed to update medical details.', 'error');
+      return;
+    }
+    setIncidents((prev) => prev.map((i) => (i.id === id ? data.incident : i)));
+    pushToast(`Medical assessment updated for ${id}.`, 'success');
   };
 
   const handleVerifyLocation = async (
@@ -436,38 +550,29 @@ export default function App() {
       lat?: number;
       lng?: number;
       markVerified: boolean;
-      summary?: string;
-      priority?: IncidentPriority;
-      peopleAffected?: number | null;
     }
   ) => {
-    const res = await fetch(`/api/incidents/${id}/verify-location`, {
+    const res = await authFetch(`/api/incidents/${id}/verify-location`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
-      pushToast(data.error || 'Verification failed', 'error');
+      pushToast(data.error || 'Location verification failed', 'error');
       return;
     }
     setIncidents((prev) => prev.map((i) => (i.id === id ? data.incident : i)));
     pushToast(
-      payload.markVerified
-        ? `Location verified for ${id}.`
-        : `Details saved for ${id}.`,
+      payload.markVerified ? `Location verified for ${id}.` : `Location draft saved for ${id}.`,
       'success'
     );
   };
 
-  const handleUpdateStatus = async (
-    id: string,
-    status: IncidentStatus,
-    reason: string
-  ) => {
-    const res = await fetch(`/api/incidents/${id}/status`, {
+  const handleUpdateStatus = async (id: string, status: IncidentStatus, reason: string) => {
+    const res = await authFetch(`/api/incidents/${id}/status`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, reason }),
     });
     const data = await res.json();
@@ -479,26 +584,14 @@ export default function App() {
     if (Array.isArray(data.units)) {
       setUnits(data.units);
     }
-    if (
-      status === 'CLOSED' &&
-      simStateRef.current.active &&
-      simStateRef.current.incidentId === id
-    ) {
-      clearSimExecution();
-      setSimState((prev) => ({
-        ...prev,
-        stage: 10,
-        callStatus: 'ENDED',
-        audioPlaying: false,
-        speakingSpeaker: null,
-        arrivedOnScene: true,
-        completed: true,
-        statusMessage: 'Simulation completed successfully.',
-      }));
-      pushToast('Simulation completed successfully.', 'success');
-    } else {
-      pushToast(`${id} status updated to ${status}.`, 'success');
+    if (status === 'Closed') {
+      setDraftsByIncidentId((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
+    pushToast(`${id} status updated to ${status}.`, 'success');
   };
 
   const handleDispatchUnit = async (
@@ -507,9 +600,9 @@ export default function App() {
     notes: string,
     notifySms: boolean
   ) => {
-    const res = await fetch(`/api/incidents/${incidentId}/dispatch`, {
+    const res = await authFetch(`/api/incidents/${incidentId}/dispatch`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         unitId,
         humanConfirmed: true,
@@ -522,36 +615,104 @@ export default function App() {
       pushToast(data.error || 'Dispatch rejected', 'error');
       return;
     }
-    setIncidents((prev) =>
-      prev.map((i) => (i.id === incidentId ? data.incident : i))
-    );
-    setUnits((prev) =>
-      prev.map((u) => (u.id === unitId ? data.unit : u))
-    );
+    setIncidents((prev) => prev.map((i) => (i.id === incidentId ? data.incident : i)));
+    setUnits((prev) => prev.map((u) => (u.id === unitId ? data.unit : u)));
     if (simStateRef.current.active && simStateRef.current.incidentId === incidentId) {
       setSimState((prev) => ({
         ...prev,
         selectedUnitId: unitId,
         dispatchApproved: true,
-        statusMessage: 'Dispatch approved by operator — Simulation.',
+        statusMessage: 'Dispatch approved — entering Stage 8 route & transport tracking.',
       }));
-      pushToast('Dispatch approved by operator — Simulation.', 'success');
-    } else {
-      pushToast(
-        `Dispatch approved: ${data.unit.callsign} assigned to ${incidentId}.`,
-        'success'
-      );
     }
+    pushToast(`Dispatch approved: ${data.unit.callsign} assigned to ${incidentId}.`, 'success');
   };
+
+  const handleTransportEvent = useCallback(
+    async (
+      id: string,
+      payload: {
+        event:
+          | 'ARRIVED_ON_SCENE'
+          | 'PATIENT_PICKED_UP'
+          | 'CONFIRM_HOSPITAL'
+          | 'TRANSPORT_STARTED'
+          | 'HOSPITAL_ARRIVED'
+          | 'CLOSE_INCIDENT';
+        hospitalDestination?: HospitalDestination;
+        outcomeText?: string;
+      }
+    ) => {
+      const res = await authFetch(`/api/incidents/${id}/transport-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        pushToast(data.error || 'Transport milestone update failed', 'error');
+        return;
+      }
+      if (data.incident) {
+        setIncidents((prev) => prev.map((i) => (i.id === id ? data.incident : i)));
+      }
+      if (data.unit) {
+        setUnits((prev) => prev.map((u) => (u.id === data.unit.id ? data.unit : u)));
+      }
+
+      if (simStateRef.current.active && simStateRef.current.incidentId === id) {
+        if (payload.event === 'ARRIVED_ON_SCENE') {
+          setSimState((prev) => ({ ...prev, arrivedOnScene: true }));
+        } else if (payload.event === 'PATIENT_PICKED_UP') {
+          setSimState((prev) => ({ ...prev, patientPickedUp: true }));
+        } else if (payload.event === 'CONFIRM_HOSPITAL') {
+          setSimState((prev) => ({
+            ...prev,
+            confirmedHospital: data.incident?.hospitalDestination || payload.hospitalDestination || null,
+          }));
+        } else if (payload.event === 'TRANSPORT_STARTED') {
+          setSimState((prev) => ({ ...prev, transportStarted: true }));
+        } else if (payload.event === 'HOSPITAL_ARRIVED') {
+          setSimState((prev) => ({ ...prev, hospitalArrived: true }));
+        } else if (payload.event === 'CLOSE_INCIDENT') {
+          clearSimExecution();
+          setSimState((prev) => ({
+            ...prev,
+            stage: 9,
+            callStatus: 'ENDED',
+            audioPlaying: false,
+            speakingSpeaker: null,
+            completed: true,
+            statusMessage: 'Simulation completed — incident archived read-only in Incident History.',
+          }));
+          setWorkspaceOpen(false);
+          setSection('incident-history');
+        }
+      }
+
+      if (payload.event === 'CLOSE_INCIDENT') {
+        setDraftsByIncidentId((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        pushToast(`Incident ${id} closed and archived to Incident History.`, 'success');
+      } else {
+        pushToast(`Recorded ${payload.event.replace(/_/g, ' ').toLowerCase()}.`, 'success');
+      }
+    },
+    [authFetch, clearSimExecution, pushToast]
+  );
 
   const handleUpdateUnitStatus = async (
     unitId: string,
-    availability: UnitAvailability | 'COMPLETED' | 'CANCELLED'
+    availability: UnitAvailability | 'CANCELLED',
+    note: string
   ) => {
-    const res = await fetch(`/api/units/${unitId}/status`, {
+    const res = await authFetch(`/api/units/${unitId}/status`, {
       method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify({ availability }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ availability, note }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -568,9 +729,9 @@ export default function App() {
   };
 
   const handleAddNote = async (id: string, text: string) => {
-    const res = await fetch(`/api/incidents/${id}/notes`, {
+    const res = await authFetch(`/api/incidents/${id}/notes`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
     const data = await res.json();
@@ -583,9 +744,9 @@ export default function App() {
   };
 
   const handleSendOperatorMessage = async (id: string, text: string) => {
-    const res = await fetch(`/api/incidents/${id}/transcript`, {
+    const res = await authFetch(`/api/incidents/${id}/transcript`, {
       method: 'POST',
-      headers: authHeaders,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
     const data = await res.json();
@@ -594,10 +755,13 @@ export default function App() {
       return;
     }
     setIncidents((prev) => prev.map((i) => (i.id === id ? data.incident : i)));
-    pushToast('Operator reply recorded in call transcript.', 'success');
+    pushToast('Operator reply recorded in transcript.', 'success');
   };
 
-  // 10-Stage Live Simulation Orchestrator
+  // =========================================================================
+  // SYNCED 9-STAGE SIMULATION ENGINE (Never locks operational navigation)
+  // =========================================================================
+
   const syncSimIncident = useCallback(
     async (opts: {
       scenarioId: SimulationScenarioId;
@@ -605,7 +769,7 @@ export default function App() {
       includeCoords: boolean;
       markLocationResolved: boolean;
     }): Promise<IncidentRecord | null> => {
-      const res = await fetch('/api/simulation/incident', {
+      const res = await authFetch('/api/simulation/incident', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(opts),
@@ -621,7 +785,7 @@ export default function App() {
       setSelectedIncidentId(data.incident.id);
       return data.incident;
     },
-    []
+    [authFetch]
   );
 
   const persistSimUnitMilestone = useCallback(
@@ -634,13 +798,8 @@ export default function App() {
       incidentStatus: IncidentStatus;
       timelineTitle: string;
       timelineDescription: string;
-      extraTimelineEvents?: Array<{
-        type?: IncidentRecord['timeline'][number]['type'];
-        title: string;
-        description: string;
-      }>;
     }) => {
-      const res = await fetch('/api/simulation/unit-position', {
+      const res = await authFetch('/api/simulation/unit-position', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -658,80 +817,32 @@ export default function App() {
         }
       }
     },
-    []
+    [authFetch]
   );
 
   const completeTrackingArrival = useCallback(
-    async (
-      scenarioId: SimulationScenarioId,
-      unitId: string,
-      advanceImmediately: boolean = false
-    ) => {
+    async (scenarioId: SimulationScenarioId) => {
       if (trackingArrivalHandledRef.current) return;
       trackingArrivalHandledRef.current = true;
       stopTrackingInterval();
       trackingRemainingMsRef.current = 0;
 
       const scenario = SIMULATION_SCENARIOS[scenarioId];
-      const arrivalIso = new Date().toISOString();
-
-      await persistSimUnitMilestone({
-        unitId,
-        lat: scenario.resolvedCoords.lat,
-        lng: scenario.resolvedCoords.lng,
-        availability: 'ON_SCENE',
-        incidentId: scenario.incidentId,
-        incidentStatus: 'ON_SCENE',
-        timelineTitle: 'Response unit arrived (Simulation)',
-        timelineDescription: `Response unit has arrived at the incident location (${scenario.verifiedLocationDescription}).`,
-        extraTimelineEvents: [
-          {
-            type: 'STATUS_CHANGED',
-            title: 'Patient picked up — En route to hospital (Simulation)',
-            description: `Simulated patient pickup recorded. En route to ${scenario.hospitalDestination.name} (Demo Destination).`,
-          },
-        ],
-      });
+      await handleTransportEvent(scenario.incidentId, { event: 'ARRIVED_ON_SCENE' });
 
       setSimState((prev) => ({
         ...prev,
         trackingProgressPct: 100,
         trackingRemainingSec: 0,
         trackingElapsedSec: SIMULATION_TRACKING_DURATION_SEC,
-        trackingStatusText: 'Response unit has arrived at the incident location.',
+        trackingStatusText: 'Response unit arrived at scene.',
         arrivedOnScene: true,
-        simulatedArrivalAt: arrivalIso,
-        patientPickupStatus: 'PICKED_UP_EN_ROUTE_TO_HOSPITAL',
-        stage: advanceImmediately ? 10 : prev.stage,
-        statusMessage: advanceImmediately
-          ? SIMULATION_STAGES[9].nextExpectedAction
-          : `RESPONSE UNIT ARRIVED — PATIENT PICKED UP — EN ROUTE TO HOSPITAL (${scenario.hospitalDestination.name} · Simulated).`,
+        simulatedArrivalAt: new Date().toISOString(),
+        statusMessage:
+          'Unit arrived at scene — confirm patient pickup, choose destination hospital, and start transport.',
       }));
-
-      pushToast(
-        `Response unit arrived — patient picked up (en route to ${scenario.hospitalDestination.name} · Demo).`,
-        'success'
-      );
-
-      if (!advanceImmediately) {
-        scheduleSimTimeout(() => {
-          if (
-            !simStateRef.current.active ||
-            simStateRef.current.paused ||
-            simStateRef.current.stage !== 9
-          ) {
-            return;
-          }
-          setSimState((prev) => ({
-            ...prev,
-            stage: 10,
-            arrivedOnScene: true,
-            statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
-          }));
-        }, 2500);
-      }
     },
-    [persistSimUnitMilestone, pushToast, scheduleSimTimeout, stopTrackingInterval]
+    [handleTransportEvent, stopTrackingInterval]
   );
 
   const runSimulationTracking = useCallback(
@@ -773,9 +884,7 @@ export default function App() {
           trackingProgressPct: 0,
           trackingStatusText: startMilestone.statusText,
           arrivedOnScene: false,
-          simulatedArrivalAt: undefined,
-          patientPickupStatus: 'PENDING',
-          statusMessage: `${startMilestone.statusText} (01:00 simulated countdown active)`,
+          statusMessage: `${startMilestone.statusText} (01:00 simulated tracking active)`,
         }));
 
         await persistSimUnitMilestone({
@@ -784,21 +893,21 @@ export default function App() {
           lng: startLng,
           availability: startMilestone.availability,
           incidentId: scenario.incidentId,
-          incidentStatus: 'RESPONDING',
+          incidentStatus: 'Dispatched',
           timelineTitle: startMilestone.timelineTitle,
           timelineDescription: startMilestone.timelineDescription,
         });
       }
 
       if (trackingArrivalHandledRef.current || trackingRemainingMsRef.current <= 0) {
-        void completeTrackingArrival(scenarioId, unitId);
+        void completeTrackingArrival(scenarioId);
         return;
       }
 
       trackingLastTickRef.current = Date.now();
       trackingIntervalRef.current = window.setInterval(() => {
         const cur = simStateRef.current;
-        if (!cur.active || cur.paused || cur.stage !== 9) {
+        if (!cur.active || cur.paused || cur.stage !== 8) {
           stopTrackingInterval();
           return;
         }
@@ -813,7 +922,10 @@ export default function App() {
         const remainingSec = Math.ceil(nextRemainingMs / 1000);
         const elapsedSec = Math.max(
           0,
-          Math.min(SIMULATION_TRACKING_DURATION_SEC, SIMULATION_TRACKING_DURATION_SEC - remainingSec)
+          Math.min(
+            SIMULATION_TRACKING_DURATION_SEC,
+            SIMULATION_TRACKING_DURATION_SEC - remainingSec
+          )
         );
         const exactPct = Math.min(
           100,
@@ -828,11 +940,14 @@ export default function App() {
 
         const [lat, lng] = interpolatePointAlongRoute(coords, exactPct);
         setUnits((prev) =>
-          prev.map((u) => (u.id === unitId ? { ...u, lat, lng, availability: milestone.availability } : u))
+          prev.map((u) =>
+            u.id === unitId ? { ...u, lat, lng, availability: milestone.availability } : u
+          )
         );
 
         if (
-          (milestone.milestoneKey === 'EN_ROUTE' || milestone.milestoneKey === 'APPROACHING') &&
+          (milestone.milestoneKey === 'EN_ROUTE' ||
+            milestone.milestoneKey === 'APPROACHING') &&
           !trackingMilestonesSentRef.current.has(milestone.milestoneKey)
         ) {
           trackingMilestonesSentRef.current.add(milestone.milestoneKey);
@@ -842,17 +957,14 @@ export default function App() {
             lng,
             availability: milestone.availability,
             incidentId: scenario.incidentId,
-            incidentStatus: 'RESPONDING',
+            incidentStatus: 'Dispatched',
             timelineTitle: milestone.timelineTitle,
             timelineDescription: milestone.timelineDescription,
           });
-          if (milestone.milestoneKey === 'EN_ROUTE') {
-            pushToast('Emergency vehicle is en route — Simulation.', 'info');
-          }
         }
 
         if (nextRemainingMs <= 0) {
-          void completeTrackingArrival(scenarioId, unitId);
+          void completeTrackingArrival(scenarioId);
           return;
         }
 
@@ -868,7 +980,7 @@ export default function App() {
         }));
       }, 250);
     },
-    [completeTrackingArrival, persistSimUnitMilestone, pushToast, stopTrackingInterval]
+    [completeTrackingArrival, persistSimUnitMilestone, stopTrackingInterval]
   );
 
   const playDialogueSequence = useCallback(
@@ -880,40 +992,46 @@ export default function App() {
           return;
         }
         if (turnIdx >= scenario.dialogue.length) {
-          setSimState((prev) => ({
-            ...prev,
-            audioPlaying: false,
-            speakingSpeaker: null,
-            stage: 4,
-            locationResolvedInSim: true,
-            statusMessage: SIMULATION_STAGES[3].nextExpectedAction,
-          }));
           await syncSimIncident({
             scenarioId,
             turnCount: scenario.dialogue.length,
             includeCoords: true,
             markLocationResolved: false,
           });
+          setSection('incident-management');
+          setWorkspaceOpen(true);
+          setWorkspaceTab('location');
+          setSimState((prev) => ({
+            ...prev,
+            audioPlaying: false,
+            speakingSpeaker: null,
+            stage: 3,
+            locationResolvedInSim: true,
+            statusMessage: SIMULATION_STAGES[2].nextExpectedAction,
+          }));
           return;
         }
 
         const turn = scenario.dialogue[turnIdx];
-        const nextStage: SimulationStageNumber = turnIdx >= 2 ? 3 : 2;
+        const nextStage: SimulationStageNumber = turnIdx >= 3 ? 3 : 2;
         await syncSimIncident({
           scenarioId,
           turnCount: turnIdx + 1,
-          includeCoords: false,
+          includeCoords: nextStage === 3,
           markLocationResolved: false,
         });
 
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab(nextStage === 3 ? 'location' : 'medical-details');
         setSimState((prev) => ({
           ...prev,
           stage: nextStage,
           revealedTurnCount: turnIdx + 1,
           statusMessage:
             nextStage === 2
-              ? `AI Voice Intake turn ${turnIdx + 1}/${scenario.dialogue.length} — extracting details.`
-              : `Voice playback turn ${turnIdx + 1}/${scenario.dialogue.length} — ${turn.speaker} speaking.`,
+              ? `AI Medical Intake turn ${turnIdx + 1}/${scenario.dialogue.length}`
+              : `Location & Clinical extraction turn ${turnIdx + 1}/${scenario.dialogue.length}`,
         }));
 
         speechCancelRef.current = speakSimulationTurn({
@@ -949,13 +1067,17 @@ export default function App() {
 
   const startSimulation = useCallback(
     async (scenarioIdOverride?: SimulationScenarioId) => {
+      if (userRole !== 'Operations Staff') {
+        pushToast('Switch to an Operations Staff account to run live simulations.', 'error');
+        return;
+      }
       const targetId = scenarioIdOverride || selectedScenario;
       const scenario = SIMULATION_SCENARIOS[targetId];
       clearSimExecution();
       setSimBusy(true);
       try {
         setSelectedScenario(targetId);
-        const res = await fetch('/api/simulation/prepare', {
+        const res = await authFetch('/api/simulation/prepare', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scenarioId: targetId }),
@@ -971,11 +1093,20 @@ export default function App() {
           setNotifications(fresh.notifications);
         }
 
+        await syncSimIncident({
+          scenarioId: targetId,
+          turnCount: 1,
+          includeCoords: false,
+          markLocationResolved: false,
+        });
+
         setActiveRoute(null);
         setSelectedUnitId(null);
-        setWorkspaceIncidentId(null);
-        setSimWorkspaceOpen(true);
-        setSidebarCollapsed(true);
+        setSelectedIncidentId(scenario.incidentId);
+        setIntakeMode(false);
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('workflow');
 
         trackingRemainingMsRef.current = SIMULATION_TRACKING_DURATION_SEC * 1000;
         trackingArrivalHandledRef.current = false;
@@ -994,7 +1125,7 @@ export default function App() {
           audioPlaying: false,
           speakingSpeaker: null,
           speechSupported: isSpeechSynthesisSupported(),
-          revealedTurnCount: 0,
+          revealedTurnCount: 1,
           locationResolvedInSim: false,
           operatorTakenOver: false,
           dispatchApproved: false,
@@ -1003,10 +1134,14 @@ export default function App() {
           trackingElapsedSec: 0,
           trackingStatusText: 'Response unit awaiting dispatch.',
           simulatedArrivalAt: undefined,
-          patientPickupStatus: 'PENDING',
           arrivedOnScene: false,
+          patientPickedUp: false,
+          confirmedHospital: null,
+          transportStarted: false,
+          hospitalArrived: false,
           completed: false,
           activeRoute: null,
+          hospitalRoute: null,
           statusMessage: SIMULATION_STAGES[0].nextExpectedAction,
         });
 
@@ -1015,37 +1150,8 @@ export default function App() {
         setSimBusy(false);
       }
     },
-    [clearSimExecution, pushToast, selectedScenario]
+    [authFetch, clearSimExecution, pushToast, selectedScenario, syncSimIncident, userRole]
   );
-
-  const answerSimulationCall = useCallback(async () => {
-    const cur = simStateRef.current;
-    if (!cur.active) return;
-    clearSimExecution();
-    const scenario = SIMULATION_SCENARIOS[cur.scenarioId];
-    setWorkspaceIncidentId(null);
-    setSimState((prev) => ({
-      ...prev,
-      stage: 2,
-      callStatus: 'CONNECTED_AI',
-      revealedTurnCount: 1,
-      statusMessage: SIMULATION_STAGES[1].nextExpectedAction,
-    }));
-    await syncSimIncident({
-      scenarioId: cur.scenarioId,
-      turnCount: 1,
-      includeCoords: false,
-      markLocationResolved: false,
-    });
-    if (!simStateRef.current.paused) {
-      playDialogueSequence(cur.scenarioId, 0);
-    } else {
-      setSimState((prev) => ({
-        ...prev,
-        statusMessage: `Paused at AI Intake (${scenario.incidentId}). Click Resume or Next Step.`,
-      }));
-    }
-  }, [clearSimExecution, playDialogueSequence, syncSimIncident]);
 
   const advanceSimulationStage = useCallback(async () => {
     const cur = simStateRef.current;
@@ -1056,380 +1162,232 @@ export default function App() {
 
     try {
       if (cur.stage === 1) {
-        await answerSimulationCall();
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('medical-details');
+        setSimState((prev) => ({
+          ...prev,
+          stage: 2,
+          callStatus: 'CONNECTED_AI',
+          statusMessage: SIMULATION_STAGES[1].nextExpectedAction,
+        }));
+        if (!cur.paused) {
+          playDialogueSequence(cur.scenarioId, 0);
+        }
         return;
       }
 
-      if (cur.stage === 2 || cur.stage === 3) {
-        // Reveal full transcript and advance to Stage 4: Location Intelligence
+      if (cur.stage === 2) {
         await syncSimIncident({
           scenarioId: cur.scenarioId,
           turnCount: scenario.dialogue.length,
           includeCoords: true,
           markLocationResolved: false,
         });
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('location');
         setSimState((prev) => ({
           ...prev,
-          stage: 4,
+          stage: 3,
           audioPlaying: false,
           speakingSpeaker: null,
           revealedTurnCount: scenario.dialogue.length,
           locationResolvedInSim: true,
-          statusMessage: SIMULATION_STAGES[3].nextExpectedAction,
+          statusMessage: SIMULATION_STAGES[2].nextExpectedAction,
         }));
-        setWorkspaceInitialTab('location');
-        setWorkspaceIncidentId(scenario.incidentId);
         return;
       }
 
-      if (cur.stage === 4) {
-        // Stage 4 -> 5: Structured Incident Created -> Human Operator Takeover Screen
+      if (cur.stage === 3) {
         await syncSimIncident({
           scenarioId: cur.scenarioId,
           turnCount: scenario.dialogue.length,
           includeCoords: true,
           markLocationResolved: true,
         });
+        setSection('command-centre');
+        setWorkspaceOpen(false);
         setSelectedIncidentId(scenario.incidentId);
         setSimState((prev) => ({
           ...prev,
+          stage: 4,
+          statusMessage: SIMULATION_STAGES[3].nextExpectedAction,
+        }));
+        return;
+      }
+
+      if (cur.stage === 4) {
+        await handleTakeOver(scenario.incidentId);
+        await handleVerifyLocation(scenario.incidentId, {
+          correctedDescription: scenario.verifiedLocationDescription,
+          landmark: scenario.landmark,
+          area: scenario.area,
+          lat: scenario.resolvedCoords.lat,
+          lng: scenario.resolvedCoords.lng,
+          markVerified: true,
+        });
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('location');
+        setSimState((prev) => ({
+          ...prev,
           stage: 5,
+          operatorTakenOver: true,
+          callStatus: 'OPERATOR_CONNECTED',
           statusMessage: SIMULATION_STAGES[4].nextExpectedAction,
         }));
-        pushToast('Structured incident created — ready for human operator takeover.', 'success');
         return;
       }
 
       if (cur.stage === 5) {
-        // Stage 5 -> 6: Execute Human Operator Takeover -> Enter Incident Review
-        if (userRole === 'Responder') setUserRole('Dispatcher');
-        const takeoverHeaders = {
-          'Content-Type': 'application/json',
-          'x-responda-role': userRole === 'Responder' ? 'Dispatcher' : userRole,
-          'x-responda-operator': operator.name,
-        };
-        const tRes = await fetch(`/api/incidents/${scenario.incidentId}/takeover`, {
-          method: 'POST',
-          headers: takeoverHeaders,
-        });
-        if (tRes.ok) {
-          const td = (await tRes.json()) as { incident: IncidentRecord };
-          setIncidents((prev) =>
-            prev.map((i) => (i.id === scenario.incidentId ? td.incident : i))
-          );
-        }
-        setSimState((prev) => ({
-          ...prev,
-          stage: 6,
-          callStatus: 'OPERATOR_CONNECTED',
-          operatorTakenOver: true,
-          statusMessage: 'Human operator takeover complete. Review details & verify location.',
-        }));
-        pushToast('Operator accepted incident — Simulation.', 'success');
-        return;
-      }
-
-      if (cur.stage === 6) {
-        // Stage 6 -> 7: Ensure location verified, rank units, enter Response Unit Selection
-        const inc =
-          incidentsRef.current.find((i) => i.id === scenario.incidentId) ||
-          (await syncSimIncident({
-            scenarioId: cur.scenarioId,
-            turnCount: scenario.dialogue.length,
-            includeCoords: true,
-            markLocationResolved: true,
-          }));
-
-        if (inc && inc.location.verificationStatus !== 'VERIFIED') {
-          const verifyHeaders = {
-            'Content-Type': 'application/json',
-            'x-responda-role': userRole === 'Responder' ? 'Dispatcher' : userRole,
-            'x-responda-operator': operator.name,
-          };
-          const vRes = await fetch(
-            `/api/incidents/${scenario.incidentId}/verify-location`,
-            {
-              method: 'POST',
-              headers: verifyHeaders,
-              body: JSON.stringify({
-                correctedDescription: scenario.verifiedLocationDescription,
-                landmark: scenario.landmark,
-                area: scenario.area,
-                lat: scenario.resolvedCoords.lat,
-                lng: scenario.resolvedCoords.lng,
-                markVerified: true,
-              }),
-            }
-          );
-          if (vRes.ok) {
-            const vd = (await vRes.json()) as { incident: IncidentRecord };
-            setIncidents((prev) =>
-              prev.map((i) => (i.id === scenario.incidentId ? vd.incident : i))
-            );
-          }
-        }
-
+        const inc = incidentsRef.current.find((i) => i.id === scenario.incidentId);
         const ranked = inc
-          ? rankUnitsForIncident(
-              unitsRef.current,
-              inc,
-              scenario.recommendedUnitId
-            )
+          ? rankUnitsForIncident(unitsRef.current, inc, scenario.recommendedUnitId)
           : [];
         const bestUnit =
-          ranked.find((r) => r.unit.availability === 'AVAILABLE')?.unit ||
+          ranked.find((r) => r.unit.availability === 'Available')?.unit ||
           unitsRef.current.find((u) => u.id === scenario.recommendedUnitId) ||
-          unitsRef.current.find((u) => u.availability === 'AVAILABLE') ||
           null;
 
         setSelectedIncidentId(scenario.incidentId);
         if (bestUnit) setSelectedUnitId(bestUnit.id);
-
+        setSection('response-units');
+        setWorkspaceOpen(false);
         setSimState((prev) => ({
           ...prev,
-          stage: 7,
-          locationResolvedInSim: true,
+          stage: 6,
           selectedUnitId: bestUnit?.id || scenario.recommendedUnitId,
-          statusMessage: bestUnit
-            ? `Recommended unit ${bestUnit.callsign} highlighted for review.`
-            : SIMULATION_STAGES[6].nextExpectedAction,
+          statusMessage: SIMULATION_STAGES[5].nextExpectedAction,
         }));
+        return;
+      }
+
+      if (cur.stage === 6) {
+        const unitId = cur.selectedUnitId || scenario.recommendedUnitId;
+        const unit = unitsRef.current.find((u) => u.id === unitId);
+        if (unit) {
+          const routeRes = await authFetch('/api/routing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fromLat: unit.lat,
+              fromLng: unit.lng,
+              toLat: scenario.resolvedCoords.lat,
+              toLng: scenario.resolvedCoords.lng,
+              allowSimulatedOverlay: true,
+            }),
+          });
+          const calcRoute = routeRes.ok
+            ? await routeRes.json()
+            : buildSimulatedCorridorRoute(
+                unit.lat,
+                unit.lng,
+                scenario.resolvedCoords.lat,
+                scenario.resolvedCoords.lng
+              );
+          setActiveRoute(calcRoute);
+          setSimState((prev) => ({
+            ...prev,
+            stage: 7,
+            selectedUnitId: unit.id,
+            activeRoute: calcRoute,
+            statusMessage: SIMULATION_STAGES[6].nextExpectedAction,
+          }));
+        } else {
+          setSimState((prev) => ({
+            ...prev,
+            stage: 7,
+            statusMessage: SIMULATION_STAGES[6].nextExpectedAction,
+          }));
+        }
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('response');
         return;
       }
 
       if (cur.stage === 7) {
-        // Stage 7 -> 8: Calculate route and enter Dedicated Dispatch Approval screen (do NOT pre-dispatch)
-        const targetUnitId = cur.selectedUnitId || scenario.recommendedUnitId;
-        const targetUnit =
-          unitsRef.current.find((u) => u.id === targetUnitId) ||
-          unitsRef.current.find((u) => u.availability === 'AVAILABLE');
-        if (!targetUnit) return;
-
-        const routeRes = await fetch('/api/routing', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fromLat: targetUnit.lat,
-            fromLng: targetUnit.lng,
-            toLat: scenario.resolvedCoords.lat,
-            toLng: scenario.resolvedCoords.lng,
-            allowSimulatedOverlay: true,
-          }),
-        });
-        const calculatedRoute: RouteResult = routeRes.ok
-          ? await routeRes.json()
-          : buildSimulatedCorridorRoute(
-              targetUnit.lat,
-              targetUnit.lng,
-              scenario.resolvedCoords.lat,
-              scenario.resolvedCoords.lng
-            );
-
-        setActiveRoute(calculatedRoute);
-        setSimState((prev) => ({
-          ...prev,
-          stage: 8,
-          selectedUnitId: targetUnit.id,
-          dispatchApproved: false,
-          activeRoute: calculatedRoute,
-          statusMessage: 'Explicit human dispatch authorization required before unit mobilisation.',
-        }));
-        return;
-      }
-
-      if (cur.stage === 8) {
-        // Stage 8 -> 9: Perform human-confirmed dispatch (if not yet approved), show confirmation, then begin tracking
         const unitId = cur.selectedUnitId || scenario.recommendedUnitId;
-        const targetUnit =
-          unitsRef.current.find((u) => u.id === unitId) ||
-          unitsRef.current.find((u) => u.availability === 'AVAILABLE');
+        const unit = unitsRef.current.find((u) => u.id === unitId);
+        if (!cur.dispatchApproved && unit) {
+          await handleDispatchUnit(
+            scenario.incidentId,
+            unit.id,
+            `Simulation dispatch approved by ${operatorName}.`,
+            true
+          );
+        }
         const routeToUse =
           cur.activeRoute ||
           activeRoute ||
           buildSimulatedCorridorRoute(
-            targetUnit?.lat ?? 6.5068,
-            targetUnit?.lng ?? 3.3775,
+            unit?.lat ?? 6.5068,
+            unit?.lng ?? 3.3775,
             scenario.resolvedCoords.lat,
             scenario.resolvedCoords.lng
           );
-
-        if (!cur.dispatchApproved && targetUnit) {
-          const dispatchHeaders = {
-            'Content-Type': 'application/json',
-            'x-responda-role': userRole === 'Responder' ? 'Dispatcher' : userRole,
-            'x-responda-operator': operator.name,
-          };
-          const dRes = await fetch(
-            `/api/incidents/${scenario.incidentId}/dispatch`,
-            {
-              method: 'POST',
-              headers: dispatchHeaders,
-              body: JSON.stringify({
-                unitId: targetUnit.id,
-                humanConfirmed: true,
-                notes: `Simulation Dispatch: ${targetUnit.callsign} approved by ${operator.name}.`,
-                notifyUnitSms: true,
-              }),
-            }
-          );
-          if (dRes.ok) {
-            const dd = await dRes.json();
-            setIncidents((prev) =>
-              prev.map((i) => (i.id === scenario.incidentId ? dd.incident : i))
-            );
-            setUnits((prev) =>
-              prev.map((u) => (u.id === targetUnit.id ? dd.unit : u))
-            );
-          }
-          setSimState((prev) => ({
-            ...prev,
-            selectedUnitId: targetUnit.id,
-            dispatchApproved: true,
-            activeRoute: routeToUse,
-            statusMessage: 'Dispatch approved by human operator (Simulated). Initiating route tracking...',
-          }));
-          pushToast('Dispatch approved by operator — Simulation.', 'success');
-
-          scheduleSimTimeout(() => {
-            if (!simStateRef.current.active || simStateRef.current.paused) return;
-            setSimState((prev) => ({
-              ...prev,
-              stage: 9,
-              trackingProgressPct: 0,
-              trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
-              trackingElapsedSec: 0,
-              trackingStatusText: 'Response unit has departed.',
-              patientPickupStatus: 'PENDING',
-              arrivedOnScene: false,
-              activeRoute: routeToUse,
-              statusMessage: SIMULATION_STAGES[8].nextExpectedAction,
-            }));
-            void runSimulationTracking(cur.scenarioId, targetUnit.id, routeToUse);
-          }, 1150);
-          return;
-        }
-
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('response');
         setSimState((prev) => ({
           ...prev,
-          stage: 9,
-          trackingProgressPct: 0,
-          trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
-          trackingElapsedSec: 0,
-          trackingStatusText: 'Response unit has departed.',
-          patientPickupStatus: 'PENDING',
-          arrivedOnScene: false,
+          stage: 8,
+          dispatchApproved: true,
           activeRoute: routeToUse,
-          statusMessage: SIMULATION_STAGES[8].nextExpectedAction,
+          statusMessage: SIMULATION_STAGES[7].nextExpectedAction,
         }));
         void runSimulationTracking(cur.scenarioId, unitId, routeToUse);
         return;
       }
 
-      if (cur.stage === 9) {
-        // Fast-forward tracking directly through Arrival & Hospital Pickup to Stage 10 (Closure)
-        const unitId = cur.selectedUnitId || scenario.recommendedUnitId;
-        if (!trackingArrivalHandledRef.current) {
-          await completeTrackingArrival(cur.scenarioId, unitId, true);
-        } else {
-          setSimState((prev) => ({
-            ...prev,
-            stage: 10,
-            trackingRemainingSec: 0,
-            trackingElapsedSec: SIMULATION_TRACKING_DURATION_SEC,
-            trackingProgressPct: 100,
-            arrivedOnScene: true,
-            statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
-          }));
+      if (cur.stage === 8) {
+        // Sequentially step remaining Milestone 4 events one by one (never bundled)
+        if (!cur.arrivedOnScene) {
+          await completeTrackingArrival(cur.scenarioId);
+          return;
         }
-        return;
-      }
-
-      if (cur.stage === 10) {
-        // Close incident cleanly & complete simulation
-        const statusHeaders = {
-          'Content-Type': 'application/json',
-          'x-responda-role': userRole === 'Responder' ? 'Dispatcher' : userRole,
-          'x-responda-operator': operator.name,
-        };
-        const cRes = await fetch(`/api/incidents/${scenario.incidentId}/status`, {
-          method: 'POST',
-          headers: statusHeaders,
-          body: JSON.stringify({
-            status: 'CLOSED',
-            reason:
-              'Simulation completed successfully — unit arrived on scene and incident closed.',
-          }),
+        if (!cur.patientPickedUp) {
+          await handleTransportEvent(scenario.incidentId, { event: 'PATIENT_PICKED_UP' });
+          return;
+        }
+        if (!cur.confirmedHospital) {
+          await handleTransportEvent(scenario.incidentId, {
+            event: 'CONFIRM_HOSPITAL',
+            hospitalDestination: LAGOS_HOSPITAL_DESTINATIONS[0],
+          });
+          return;
+        }
+        if (!cur.transportStarted) {
+          await handleTransportEvent(scenario.incidentId, { event: 'TRANSPORT_STARTED' });
+          return;
+        }
+        if (!cur.hospitalArrived) {
+          await handleTransportEvent(scenario.incidentId, { event: 'HOSPITAL_ARRIVED' });
+          return;
+        }
+        // Once hospital arrived, proceed to closure
+        await handleTransportEvent(scenario.incidentId, {
+          event: 'CLOSE_INCIDENT',
+          outcomeText: `Simulation completed — patient delivered to ${cur.confirmedHospital.name} and incident archived.`,
         });
-        if (cRes.ok) {
-          const cd = await cRes.json();
-          setIncidents((prev) =>
-            prev.map((i) => (i.id === scenario.incidentId ? cd.incident : i))
-          );
-        }
-        setSimState((prev) => ({
-          ...prev,
-          stage: 10,
-          callStatus: 'ENDED',
-          arrivedOnScene: true,
-          completed: true,
-          statusMessage: 'Simulation completed successfully.',
-        }));
-        pushToast('Simulation completed successfully.', 'success');
       }
     } finally {
       setSimBusy(false);
     }
   }, [
     activeRoute,
-    answerSimulationCall,
+    authFetch,
     clearSimExecution,
     completeTrackingArrival,
-    operator.name,
-    pushToast,
+    handleDispatchUnit,
+    handleTakeOver,
+    handleTransportEvent,
+    handleVerifyLocation,
+    operatorName,
+    playDialogueSequence,
     runSimulationTracking,
     syncSimIncident,
-    userRole,
-  ]);
-
-  // Automatic progression between non-speech stages when unpaused
-  useEffect(() => {
-    if (!simState.active || simState.paused || simState.completed) return;
-    // Stages 2 & 3 are driven by playDialogueSequence; Stage 9 is driven by runSimulationTracking
-    if (simState.stage === 2 || simState.stage === 3 || simState.stage === 9) {
-      return;
-    }
-    // Stage 8 waits briefly during confirmation animation before entering Stage 9
-    if (simState.stage === 8 && simState.dispatchApproved) {
-      return;
-    }
-    // At Stage 10, pause for explicit user Close Incident click (or Next Step)
-    if (simState.stage === 10) return;
-
-    const delayMs =
-      simState.stage === 5 || simState.stage === 8 ? 3400 : 2600;
-    const id = scheduleSimTimeout(() => {
-      if (
-        simStateRef.current.active &&
-        !simStateRef.current.paused &&
-        !simStateRef.current.completed &&
-        simStateRef.current.stage === simState.stage
-      ) {
-        void advanceSimulationStage();
-      }
-    }, delayMs);
-
-    return () => {
-      window.clearTimeout(id);
-      simTimersRef.current.delete(id);
-    };
-  }, [
-    simState.active,
-    simState.paused,
-    simState.completed,
-    simState.stage,
-    simState.dispatchApproved,
-    advanceSimulationStage,
-    scheduleSimTimeout,
   ]);
 
   const handleToggleSimPause = useCallback(() => {
@@ -1442,38 +1400,22 @@ export default function App() {
         resumeSpeech();
         if ((prev.stage === 2 || prev.stage === 3) && prev.active) {
           scheduleSimTimeout(() => {
-            playDialogueSequence(
-              prev.scenarioId,
-              Math.max(0, prev.revealedTurnCount)
-            );
+            playDialogueSequence(prev.scenarioId, Math.max(0, prev.revealedTurnCount));
           }, 150);
-        } else if (prev.stage === 9 && prev.active && prev.selectedUnitId) {
-          if (prev.arrivedOnScene) {
-            scheduleSimTimeout(() => {
-              setSimState((s) => ({
-                ...s,
-                stage: 10,
-                statusMessage: SIMULATION_STAGES[9].nextExpectedAction,
-              }));
-            }, 600);
-          } else {
-            const routeToUse =
-              prev.activeRoute ||
-              buildSimulatedCorridorRoute(
-                6.5068,
-                3.3775,
-                SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lat,
-                SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lng
-              );
-            scheduleSimTimeout(() => {
-              void runSimulationTracking(
-                prev.scenarioId,
-                prev.selectedUnitId!,
-                routeToUse,
-                { resumeExisting: true }
-              );
-            }, 100);
-          }
+        } else if (prev.stage === 8 && prev.active && prev.selectedUnitId && !prev.arrivedOnScene) {
+          const routeToUse =
+            prev.activeRoute ||
+            buildSimulatedCorridorRoute(
+              6.5068,
+              3.3775,
+              SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lat,
+              SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lng
+            );
+          scheduleSimTimeout(() => {
+            void runSimulationTracking(prev.scenarioId, prev.selectedUnitId!, routeToUse, {
+              resumeExisting: true,
+            });
+          }, 100);
         }
       }
       return {
@@ -1487,9 +1429,7 @@ export default function App() {
   const handleToggleSimAudio = useCallback(() => {
     setSimState((prev) => {
       const nextAudio = !prev.audioEnabled;
-      if (!nextAudio) {
-        stopAllSpeech();
-      }
+      if (!nextAudio) stopAllSpeech();
       return {
         ...prev,
         audioEnabled: nextAudio,
@@ -1498,18 +1438,8 @@ export default function App() {
     });
   }, []);
 
-  const handleExitSimulationWorkspace = useCallback(() => {
-    setSimWorkspaceOpen(false);
-    setSidebarCollapsed(false);
-    setWorkspaceIncidentId(null);
-    setSection('command-centre');
-    pushToast('Returned to Command Centre. Active simulation preserved.', 'info');
-  }, [pushToast]);
-
   const handleEndSimulation = useCallback(() => {
     clearSimExecution();
-    setSimWorkspaceOpen(false);
-    setSidebarCollapsed(false);
     setSimState((prev) => ({
       ...prev,
       active: false,
@@ -1521,97 +1451,117 @@ export default function App() {
     pushToast('Live simulation ended cleanly.', 'info');
   }, [clearSimExecution, pushToast]);
 
-  const workspaceIncident = workspaceIncidentId
-    ? incidents.find((i) => i.id === workspaceIncidentId) || null
-    : null;
-
-  const geminiConfigured =
-    integrations.find((i) => i.id === 'gemini')?.configured ?? false;
+  const geminiConfigured = integrations.find((i) => i.id === 'gemini')?.configured ?? false;
   const carrierConfigured =
     integrations.find((i) => i.id === 'carrier_location')?.configured ?? false;
+
+  const openIncidentsCount = incidents.filter(
+    (i) => !i.legacyOutOfScope && isActiveIncidentStatus(i.status)
+  ).length;
 
   const navItems: Array<{
     id: AppSection;
     label: string;
     icon: React.ReactNode;
     badge?: number;
-  }> = [
-    {
-      id: 'command-centre',
-      label: 'Command Centre',
-      icon: <LayoutDashboard className="w-4 h-4" />,
-    },
-    {
-      id: 'live-incidents',
-      label: 'Live Incidents',
-      icon: <AlertTriangle className="w-4 h-4" />,
-      badge: incidents.filter(
-        (i) => i.status !== 'RESOLVED' && i.status !== 'CLOSED'
-      ).length,
-    },
-    {
-      id: 'conversation-centre',
-      label: 'Conversation Centre',
-      icon: <Headphones className="w-4 h-4" />,
-      badge: incidents.filter(
-        (i) =>
-          i.aiIntakeActive && i.status !== 'RESOLVED' && i.status !== 'CLOSED'
-      ).length,
-    },
-    {
-      id: 'ai-intake',
-      label: 'AI Intake',
-      icon: <Bot className="w-4 h-4" />,
-    },
-    {
-      id: 'response-units',
-      label: 'Response Units',
-      icon: <Truck className="w-4 h-4" />,
-    },
-    {
-      id: 'analytics',
-      label: 'Analytics',
-      icon: <BarChart3 className="w-4 h-4" />,
-    },
-    {
-      id: 'incident-history',
-      label: 'Incident History',
-      icon: <Archive className="w-4 h-4" />,
-    },
-    {
-      id: 'responsive-showcase',
-      label: 'Responsive Showcase',
-      icon: <Monitor className="w-4 h-4" />,
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: <Settings className="w-4 h-4" />,
-    },
-  ];
+  }> =
+    userRole === 'Organisation Administrator'
+      ? [
+          {
+            id: 'admin-overview' as AdminSection,
+            label: 'Overview',
+            icon: <LayoutDashboard className="w-4 h-4" />,
+          },
+          {
+            id: 'staff-management' as AdminSection,
+            label: 'Staff Management',
+            icon: <Users className="w-4 h-4" />,
+          },
+          {
+            id: 'unit-management' as AdminSection,
+            label: 'Unit Management',
+            icon: <Truck className="w-4 h-4" />,
+          },
+          {
+            id: 'organisation-settings' as AdminSection,
+            label: 'Organisation Settings',
+            icon: <Building2 className="w-4 h-4" />,
+          },
+          {
+            id: 'integrations' as AdminSection,
+            label: 'Integrations',
+            icon: <PlugZap className="w-4 h-4" />,
+          },
+        ]
+      : [
+          {
+            id: 'command-centre' as OperationsSection,
+            label: 'Command Centre',
+            icon: <LayoutDashboard className="w-4 h-4" />,
+          },
+          {
+            id: 'incident-management' as OperationsSection,
+            label: 'Incident Management',
+            icon: <AlertTriangle className="w-4 h-4" />,
+            badge: openIncidentsCount,
+          },
+          {
+            id: 'response-units' as OperationsSection,
+            label: 'Response Units',
+            icon: <Truck className="w-4 h-4" />,
+          },
+          {
+            id: 'incident-history' as OperationsSection,
+            label: 'Incident History',
+            icon: <Archive className="w-4 h-4" />,
+          },
+        ];
 
   const navigateTo = (target: AppSection) => {
-    setSimWorkspaceOpen(false);
-    setWorkspaceIncidentId(null);
     setSection(target);
+    if (target !== 'incident-management') {
+      setWorkspaceOpen(false);
+      setIntakeMode(false);
+    }
     setMobileMenuOpen(false);
-    setMoreMenuOpen(false);
   };
 
-  const isImmersiveSimActive = simState.active && simWorkspaceOpen;
+  const handleSwitchDemoAccount = async (accountId: string) => {
+    setSwitchingAccount(true);
+    try {
+      const nextAcc = await issueAndActivateDemoSession(accountId);
+      if (nextAcc.role === 'Organisation Administrator') {
+        clearSimExecution();
+        setSimState((prev) => ({ ...prev, active: false, callStatus: 'IDLE' }));
+        setSection('admin-overview');
+      } else {
+        setSection('command-centre');
+      }
+      setWorkspaceOpen(false);
+      setIntakeMode(false);
+      pushToast(`Signed in (Demo Session) as ${nextAcc.name} — ${nextAcc.role}.`, 'info');
+    } catch (err) {
+      pushToast(
+        err instanceof Error ? err.message : 'Could not switch demo account.',
+        'error'
+      );
+    } finally {
+      setSwitchingAccount(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-[#0B1220] dark:text-[#F8FAFC]">
-      {/* Competition Disclaimer Strip */}
+      {/* Medical Prototype Disclaimer Strip */}
       <div className="bg-amber-50 border-b border-amber-200 text-amber-900 dark:bg-[#111C2E] dark:border-[#26364B] dark:text-amber-200/90 px-4 py-1.5 text-[11px] flex items-center justify-center gap-2 text-center">
         <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
         <span>
-          Responda competition prototype. Not connected to a public emergency number or live emergency-response network. Do not use for real emergencies.
+          Responda medical coordination prototype. Not connected to public emergency services. Do not use for real emergencies.
         </span>
       </div>
 
       <div className="flex-1 flex min-h-0">
-        {/* Desktop Collapsible Left Sidebar */}
+        {/* Desktop Collapsible Sidebar (Strict 4 Ops Items or 5 Admin Items) */}
         <aside
           className={`hidden lg:flex lg:flex-col bg-white border-r border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] shrink-0 transition-all duration-200 ${
             sidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-64'
@@ -1627,8 +1577,7 @@ export default function App() {
               type="button"
               onClick={() => setSidebarCollapsed((c) => !c)}
               aria-label={sidebarCollapsed ? 'Expand navigation sidebar' : 'Collapse navigation sidebar'}
-              title={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
-              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] text-slate-700 dark:text-slate-200 transition-colors"
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] text-slate-700 dark:text-slate-200"
             >
               {sidebarCollapsed ? (
                 <PanelLeftOpen className="w-4 h-4" />
@@ -1638,10 +1587,17 @@ export default function App() {
             </button>
           </div>
 
+          {!sidebarCollapsed && (
+            <div className="px-3.5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {userRole === 'Organisation Administrator'
+                ? 'Organisation Admin'
+                : 'Operations Staff'}
+            </div>
+          )}
+
           <nav aria-label="Primary navigation" className="flex-1 p-2.5 space-y-1">
             {navItems.map((item) => {
-              const active =
-                !isImmersiveSimActive && !workspaceIncident && section === item.id;
+              const active = section === item.id;
               return (
                 <button
                   key={item.id}
@@ -1676,16 +1632,15 @@ export default function App() {
             })}
           </nav>
 
-          {/* Sidebar Footer: Hotline Notice & Real Connection Status */}
           {!sidebarCollapsed && (
             <div className="p-3 space-y-2.5 border-t border-slate-200 dark:border-[#26364B]">
               <div className="rounded-xl bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/30 p-3 text-xs space-y-1">
                 <div className="flex items-center gap-1.5 font-semibold text-red-700 dark:text-red-300">
                   <PhoneCall className="w-3.5 h-3.5" />
-                  <span>Simulated Demo Ops</span>
+                  <span>Medical Command Prototype</span>
                 </div>
                 <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-                  Lagos Private Command Prototype. Human approval required for all dispatches.
+                  Human verification and approval required for every dispatch decision.
                 </p>
               </div>
 
@@ -1718,7 +1673,7 @@ export default function App() {
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
                   aria-label="Close navigation menu"
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1730,7 +1685,7 @@ export default function App() {
                     type="button"
                     onClick={() => navigateTo(item.id)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold ${
-                      !workspaceIncident && section === item.id
+                      section === item.id
                         ? 'bg-blue-600 text-white'
                         : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#172438]'
                     }`}
@@ -1764,7 +1719,7 @@ export default function App() {
               </div>
               <div className="hidden sm:block truncate">
                 <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
-                  {operator.organisation}
+                  {organisationSettings.name}
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                   {clock.toLocaleDateString('en-NG', {
@@ -1783,8 +1738,7 @@ export default function App() {
                 type="button"
                 onClick={toggleTheme}
                 aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                title={theme === 'dark' ? 'Switch to White Light Mode' : 'Switch to Midnight Dark Mode'}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-slate-200 transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-slate-200"
               >
                 {theme === 'dark' ? (
                   <Sun className="w-3.5 h-3.5 text-amber-400" />
@@ -1792,53 +1746,47 @@ export default function App() {
                   <Moon className="w-3.5 h-3.5 text-slate-700" />
                 )}
                 <span className="hidden sm:inline">
-                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                  {theme === 'dark' ? 'Light' : 'Dark'}
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setGuideOpen(true)}
-                title="First-time operator walkthrough and 8-step workflow guide"
-                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-blue-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-blue-300 transition-colors"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>Operator Guide</span>
-              </button>
+              {userRole === 'Operations Staff' && (
+                <button
+                  type="button"
+                  onClick={() => setGuideOpen(true)}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-blue-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-blue-300"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>Guide</span>
+                </button>
+              )}
 
-              {/* Demo Role Selector */}
-              <div className="flex items-center gap-1.5 sm:gap-2 rounded-lg bg-slate-50 border border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] px-2 sm:px-2.5 py-1">
+              {/* Server-Issued Demo Profile Switcher */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] px-2.5 py-1">
                 <span className="hidden md:inline text-[11px] text-slate-500 dark:text-slate-400">
-                  Demo Role:
+                  Demo Profile (Prototype Auth):
                 </span>
-                <label htmlFor="role-selector" className="sr-only">
-                  Select demonstration operator role
+                <label htmlFor="demo-account-selector" className="sr-only">
+                  Switch active demo staff profile
                 </label>
                 <select
-                  id="role-selector"
-                  value={userRole}
-                  onChange={(e) => {
-                    const nextRole = e.target.value as UserRole;
-                    setUserRole(nextRole);
-                    pushToast(
-                      `Switched demo account to ${DEMO_PROFILES[nextRole].name} (${nextRole}).`,
-                      'info'
-                    );
-                  }}
-                  className="bg-transparent text-xs font-semibold text-blue-700 dark:text-blue-300 focus:outline-none max-w-[135px] sm:max-w-none truncate"
+                  id="demo-account-selector"
+                  disabled={switchingAccount || staffAccounts.length === 0}
+                  value={currentAccount?.id || ''}
+                  onChange={(e) => void handleSwitchDemoAccount(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-blue-700 dark:text-blue-300 focus:outline-none max-w-[165px] sm:max-w-none truncate"
                 >
-                  <option value="Dispatcher" className="bg-white text-slate-900 dark:bg-[#111C2E] dark:text-slate-100">
-                    Dispatcher · Seyi O.
-                  </option>
-                  <option value="Call Operator" className="bg-white text-slate-900 dark:bg-[#111C2E] dark:text-slate-100">
-                    Call Operator · Amina B.
-                  </option>
-                  <option value="Administrator" className="bg-white text-slate-900 dark:bg-[#111C2E] dark:text-slate-100">
-                    Administrator · Dr. Bakare
-                  </option>
-                  <option value="Responder" className="bg-white text-slate-900 dark:bg-[#111C2E] dark:text-slate-100">
-                    Responder · Unit Lead
-                  </option>
+                  {staffAccounts.map((acc) => (
+                    <option
+                      key={acc.id}
+                      value={acc.id}
+                      disabled={acc.accountStatus !== 'ACTIVE'}
+                      className="bg-white text-slate-900 dark:bg-[#111C2E] dark:text-slate-100"
+                    >
+                      {acc.name} · {acc.role}
+                      {acc.accountStatus !== 'ACTIVE' ? ` (${acc.accountStatus})` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1848,7 +1796,7 @@ export default function App() {
                   type="button"
                   onClick={() => setNotifOpen((o) => !o)}
                   aria-label="Toggle notification centre"
-                  className="relative p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-slate-200 transition-colors"
+                  className="relative p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-slate-200"
                 >
                   <Bell className="w-4 h-4" />
                   {notifications.length > 0 && (
@@ -1867,14 +1815,14 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setNotifOpen(false)}
-                        className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                        className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400"
                       >
                         Close
                       </button>
                     </div>
                     <div className="max-h-64 overflow-y-auto space-y-2">
                       {notifications.length === 0 ? (
-                        <div className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">
+                        <div className="text-xs text-slate-500 py-4 text-center">
                           No notifications recorded.
                         </div>
                       ) : (
@@ -1883,8 +1831,10 @@ export default function App() {
                             key={n.id}
                             className="rounded-lg bg-slate-50 border border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] p-2.5 text-[11px] space-y-1"
                           >
-                            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                              <span className="font-mono text-blue-700 dark:text-blue-400">{n.channel}</span>
+                            <div className="flex items-center justify-between text-slate-500">
+                              <span className="font-mono text-blue-700 dark:text-blue-400">
+                                {n.channel}
+                              </span>
                               <span className="font-mono">
                                 {new Date(n.timestamp).toLocaleTimeString()}
                               </span>
@@ -1900,41 +1850,31 @@ export default function App() {
             </div>
           </header>
 
-          {/* Main Operational Viewport */}
-          <main
-            className={`flex-1 flex flex-col min-h-0 max-w-[1640px] w-full mx-auto ${
-              isImmersiveSimActive
-                ? 'p-3 lg:p-4 pb-20 lg:pb-4 space-y-3 lg:h-[calc(100vh-84px)] lg:overflow-hidden'
-                : 'p-4 lg:p-6 pb-20 lg:pb-8 space-y-5'
-            }`}
-          >
-            <SimulationControlPanel
-              simState={simState}
-              immersiveOpen={simWorkspaceOpen}
-              busy={simBusy}
-              onPauseResume={handleToggleSimPause}
-              onNextStep={() => void advanceSimulationStage()}
-              onRestart={() => void startSimulation(simState.scenarioId)}
-              onExitWorkspace={handleExitSimulationWorkspace}
-              onReturnToWorkspace={() => {
-                setSidebarCollapsed(true);
-                setSimWorkspaceOpen(true);
-              }}
-              onEnd={handleEndSimulation}
-              onToggleAudio={handleToggleSimAudio}
-            />
+          {/* Main Operational / Administrative Viewport */}
+          <main className="flex-1 flex flex-col min-h-0 max-w-[1640px] w-full mx-auto p-4 lg:p-6 pb-20 lg:pb-8 space-y-4">
+            {userRole === 'Operations Staff' && (
+              <SimulationControlPanel
+                simState={simState}
+                busy={simBusy}
+                onPauseResume={handleToggleSimPause}
+                onNextStep={() => void advanceSimulationStage()}
+                onRestart={() => void startSimulation(simState.scenarioId)}
+                onEnd={handleEndSimulation}
+                onToggleAudio={handleToggleSimAudio}
+              />
+            )}
 
             {loading ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+                  {Array.from({ length: 4 }).map((_, i) => (
                     <div
                       key={i}
                       className="h-24 rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] animate-pulse"
                     />
                   ))}
                 </div>
-                <div className="h-[460px] rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] animate-pulse" />
+                <div className="h-[440px] rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] animate-pulse" />
               </div>
             ) : loadError ? (
               <div className="rounded-xl bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/35 p-6 text-center space-y-3">
@@ -1942,111 +1882,166 @@ export default function App() {
                 <div className="text-sm font-bold text-red-800 dark:text-red-200">{loadError}</div>
                 <button
                   type="button"
-                  onClick={fetchBootstrap}
+                  onClick={() => void fetchBootstrap()}
                   className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-semibold text-white"
                 >
                   Retry Connection
                 </button>
               </div>
-            ) : isImmersiveSimActive ? (
-              <SimulationWorkspace
-                simState={simState}
+            ) : userRole === 'Organisation Administrator' ? (
+              section === 'staff-management' ? (
+                <StaffManagementView
+                  staffAccounts={staffAccounts}
+                  currentAccountId={currentAccount?.id || ''}
+                  authFetch={authFetch}
+                  onStaffUpdated={(acc) => {
+                    setStaffAccounts((prev) => {
+                      const exists = prev.some((s) => s.id === acc.id);
+                      return exists
+                        ? prev.map((s) => (s.id === acc.id ? acc : s))
+                        : [...prev, acc];
+                    });
+                  }}
+                  onToast={pushToast}
+                />
+              ) : section === 'unit-management' ? (
+                <UnitManagementView
+                  units={units}
+                  organisationName={organisationSettings.name}
+                  authFetch={authFetch}
+                  onUnitUpdated={(unit) => {
+                    setUnits((prev) => {
+                      const exists = prev.some((u) => u.id === unit.id);
+                      return exists
+                        ? prev.map((u) => (u.id === unit.id ? unit : u))
+                        : [...prev, unit];
+                    });
+                  }}
+                  onToast={pushToast}
+                />
+              ) : section === 'organisation-settings' ? (
+                <OrganisationSettingsView
+                  settings={organisationSettings}
+                  authFetch={authFetch}
+                  onUpdated={setOrganisationSettings}
+                  onToast={pushToast}
+                />
+              ) : section === 'integrations' ? (
+                <SettingsIntegrationsView
+                  integrations={integrations}
+                  notifications={notifications}
+                  authFetch={authFetch}
+                  onRefreshBootstrap={() => fetchBootstrap()}
+                  onToast={pushToast}
+                />
+              ) : (
+                <AdminOverviewView
+                  organisationSettings={organisationSettings}
+                  staffAccounts={staffAccounts}
+                  units={units}
+                  integrations={integrations}
+                  onNavigateAdmin={(s) => navigateTo(s)}
+                />
+              )
+            ) : section === 'incident-management' ? (
+              <IncidentManagementView
                 incidents={incidents}
                 units={units}
-                operator={operator}
                 userRole={userRole}
+                operatorName={operatorName}
+                authFetch={authFetch}
+                geminiConfigured={geminiConfigured}
                 carrierConfigured={carrierConfigured}
-                busy={simBusy}
-                onAnswerCall={() => void answerSimulationCall()}
-                onTogglePause={handleToggleSimPause}
-                onToggleAudio={handleToggleSimAudio}
-                onNextStep={() => void advanceSimulationStage()}
-                onRestart={() => void startSimulation(simState.scenarioId)}
-                onExitSimulation={handleExitSimulationWorkspace}
-                onVerifyLocation={handleVerifyLocation}
-                onTakeOverIncident={handleTakeOver}
-                onAddNote={handleAddNote}
-                onSelectUnit={(unitId) => {
-                  setSelectedUnitId(unitId);
-                  setSimState((prev) => ({
-                    ...prev,
-                    selectedUnitId: unitId,
-                  }));
-                }}
-                onApproveDispatch={async (incidentId, unitId, notes) => {
-                  clearSimExecution();
-                  setSimBusy(true);
-                  try {
-                    await handleDispatchUnit(incidentId, unitId, notes, true);
-                    const scenario = SIMULATION_SCENARIOS[simStateRef.current.scenarioId];
-                    const unitObj = unitsRef.current.find((u) => u.id === unitId);
-                    const routeToUse =
-                      simStateRef.current.activeRoute ||
-                      activeRoute ||
-                      buildSimulatedCorridorRoute(
-                        unitObj?.lat ?? 6.5068,
-                        unitObj?.lng ?? 3.3775,
-                        scenario.resolvedCoords.lat,
-                        scenario.resolvedCoords.lng
-                      );
-                    scheduleSimTimeout(() => {
-                      if (!simStateRef.current.active) return;
-                      setSimState((prev) => ({
-                        ...prev,
-                        paused: false,
-                        stage: 9,
-                        trackingProgressPct: 0,
-                        trackingRemainingSec: SIMULATION_TRACKING_DURATION_SEC,
-                        trackingElapsedSec: 0,
-                        trackingStatusText: 'Response unit has departed.',
-                        patientPickupStatus: 'PENDING',
-                        arrivedOnScene: false,
-                        activeRoute: routeToUse,
-                        statusMessage: SIMULATION_STAGES[8].nextExpectedAction,
-                      }));
-                      void runSimulationTracking(
-                        simStateRef.current.scenarioId,
-                        unitId,
-                        routeToUse
-                      );
-                    }, 1150);
-                  } finally {
-                    setSimBusy(false);
-                  }
-                }}
-                onCloseIncident={(incidentId, reason) =>
-                  handleUpdateStatus(incidentId, 'CLOSED', reason)
+                requireLocationVerificationBeforeDispatch={
+                  organisationSettings.requireLocationVerificationBeforeDispatch
                 }
-              />
-            ) : workspaceIncident ? (
-              <IncidentWorkspace
-                incident={workspaceIncident}
-                units={units}
-                userRole={userRole}
-                operatorName={operator.name}
-                initialTab={workspaceInitialTab}
+                selectedIncidentId={selectedIncidentId}
+                workspaceOpen={workspaceOpen}
+                initialTab={workspaceTab}
+                intakeMode={intakeMode}
                 simState={simState}
-                carrierConfigured={carrierConfigured}
                 preselectedUnitId={
-                  simState.active && simState.incidentId === workspaceIncident.id
+                  simState.active && simState.incidentId === selectedIncidentId
                     ? simState.selectedUnitId
                     : selectedUnitId
                 }
-                onBack={() => setWorkspaceIncidentId(null)}
-                onOpenConversation={(id) => {
+                draftsByIncidentId={draftsByIncidentId}
+                onUpdateDraft={handleUpdateDraft}
+                onSetIntakeMode={setIntakeMode}
+                onSelectIncident={(id) => setSelectedIncidentId(id)}
+                onOpenWorkspace={(id, tab = 'workflow') => {
                   setSelectedIncidentId(id);
-                  setWorkspaceIncidentId(null);
-                  setSection('conversation-centre');
+                  setWorkspaceTab(tab);
+                  setIntakeMode(false);
+                  setWorkspaceOpen(true);
+                }}
+                onCloseWorkspace={() => setWorkspaceOpen(false)}
+                onIncidentCreated={(inc) => {
+                  setIncidents((prev) =>
+                    prev.some((i) => i.id === inc.id) ? prev : [inc, ...prev]
+                  );
+                  setSelectedIncidentId(inc.id);
+                  pushToast(`${inc.id} created and queued.`, 'success');
                 }}
                 onTakeOver={handleTakeOver}
+                onUpdateMedicalDetails={handleUpdateMedicalDetails}
                 onVerifyLocation={handleVerifyLocation}
                 onUpdateStatus={handleUpdateStatus}
                 onDispatchUnit={handleDispatchUnit}
-                onUpdateUnitStatus={handleUpdateUnitStatus}
+                onTransportEvent={handleTransportEvent}
                 onAddNote={handleAddNote}
+                onSendOperatorMessage={handleSendOperatorMessage}
                 onRouteCalculated={setActiveRoute}
               />
-            ) : section === 'command-centre' ? (
+            ) : section === 'response-units' ? (
+              <ResponseUnitsView
+                units={units}
+                incidents={incidents}
+                userRole={userRole}
+                focusedIncident={
+                  selectedIncidentId
+                    ? incidents.find((i) => i.id === selectedIncidentId) || null
+                    : null
+                }
+                recommendedUnitId={
+                  simState.active
+                    ? simState.selectedUnitId ||
+                      SIMULATION_SCENARIOS[simState.scenarioId].recommendedUnitId
+                    : null
+                }
+                onUpdateUnitStatus={handleUpdateUnitStatus}
+                onOpenIncident={(id) => {
+                  setSelectedIncidentId(id);
+                  setWorkspaceTab('workflow');
+                  setWorkspaceOpen(true);
+                  setSection('incident-management');
+                }}
+                onSelectUnitForIncident={(unitId, incidentId) => {
+                  setSelectedUnitId(unitId);
+                  setSelectedIncidentId(incidentId);
+                  setWorkspaceTab('response');
+                  setWorkspaceOpen(true);
+                  setSection('incident-management');
+                  if (simState.active && simState.incidentId === incidentId) {
+                    setSimState((prev) => ({
+                      ...prev,
+                      selectedUnitId: unitId,
+                      stage: 7,
+                      statusMessage: SIMULATION_STAGES[6].nextExpectedAction,
+                    }));
+                  }
+                }}
+              />
+            ) : section === 'incident-history' ? (
+              <LiveIncidentsView
+                incidents={incidents}
+                units={units}
+                userRole={userRole}
+                operatorName={operatorName}
+                authFetch={authFetch}
+                carrierConfigured={carrierConfigured}
+              />
+            ) : (
               <CommandCentre
                 incidents={incidents}
                 units={units}
@@ -2070,279 +2065,38 @@ export default function App() {
                 }}
                 onOpenWorkspace={(id) => {
                   setSelectedIncidentId(id);
-                  setWorkspaceInitialTab('overview');
-                  setWorkspaceIncidentId(id);
+                  setWorkspaceTab('workflow');
+                  setIntakeMode(false);
+                  setWorkspaceOpen(true);
+                  setSection('incident-management');
                 }}
                 onTakeOver={handleTakeOver}
-                onGoToIntake={() => navigateTo('ai-intake')}
+                onGoToIntake={() => {
+                  setIntakeMode(true);
+                  setWorkspaceOpen(false);
+                  setSection('incident-management');
+                }}
                 onOpenHistory={() => navigateTo('incident-history')}
                 onOpenGuide={() => setGuideOpen(true)}
-              />
-            ) : section === 'live-incidents' ? (
-              <LiveIncidentsView
-                mode="live"
-                incidents={incidents}
-                units={units}
-                userRole={userRole}
-                onOpenWorkspace={(id) => {
-                  setWorkspaceInitialTab('overview');
-                  setWorkspaceIncidentId(id);
-                }}
-                onTakeOver={handleTakeOver}
-              />
-            ) : section === 'incident-history' ? (
-              <LiveIncidentsView
-                mode="history"
-                incidents={incidents}
-                units={units}
-                userRole={userRole}
-                onOpenWorkspace={(id) => {
-                  setWorkspaceInitialTab('overview');
-                  setWorkspaceIncidentId(id);
-                }}
-                onTakeOver={handleTakeOver}
-              />
-            ) : section === 'ai-intake' ? (
-              <AiIntakeWorkspace
-                geminiConfigured={geminiConfigured}
-                activeIncident={
-                  selectedIncidentId
-                    ? incidents.find((i) => i.id === selectedIncidentId) || null
-                    : null
-                }
-                onIncidentCreated={(inc) => {
-                  setIncidents((prev) =>
-                    prev.some((i) => i.id === inc.id) ? prev : [inc, ...prev]
-                  );
-                  setSelectedIncidentId(inc.id);
-                  pushToast(
-                    `${inc.id} created and queued on Command Centre.`,
-                    'success'
-                  );
-                }}
-                onOpenIncident={(id) => {
-                  setWorkspaceInitialTab('overview');
-                  setWorkspaceIncidentId(id);
-                }}
-              />
-            ) : section === 'conversation-centre' ? (
-              <ConversationCentreView
-                incidents={incidents}
-                units={units}
-                integrations={integrations}
-                selectedIncidentId={selectedIncidentId}
-                userRole={userRole}
-                operatorName={operator.name}
-                simState={simState}
-                onAnswerSimCall={() => void answerSimulationCall()}
-                onToggleSimAudio={handleToggleSimAudio}
-                onToggleSimPause={handleToggleSimPause}
-                onSelectIncident={(id) => setSelectedIncidentId(id)}
-                onTakeOver={handleTakeOver}
-                onSendOperatorMessage={handleSendOperatorMessage}
-                onAddNote={handleAddNote}
-                onOpenIncidentTab={(id, tab) => {
-                  setSelectedIncidentId(id);
-                  setWorkspaceInitialTab(tab);
-                  setWorkspaceIncidentId(id);
-                }}
-              />
-            ) : section === 'response-units' ? (
-              <ResponseUnitsView
-                units={units}
-                incidents={incidents}
-                userRole={userRole}
-                focusedIncident={
-                  selectedIncidentId
-                    ? incidents.find((i) => i.id === selectedIncidentId) || null
-                    : null
-                }
-                recommendedUnitId={
-                  simState.active
-                    ? simState.selectedUnitId ||
-                      SIMULATION_SCENARIOS[simState.scenarioId].recommendedUnitId
-                    : null
-                }
-                onUpdateUnitStatus={handleUpdateUnitStatus}
-                onOpenIncident={(id) => {
-                  setWorkspaceInitialTab('overview');
-                  setWorkspaceIncidentId(id);
-                }}
-                onSelectUnitForIncident={(unitId, incidentId) => {
-                  setSelectedUnitId(unitId);
-                  setSelectedIncidentId(incidentId);
-                  setWorkspaceInitialTab('units');
-                  setWorkspaceIncidentId(incidentId);
-                  if (simState.active && simState.incidentId === incidentId) {
-                    setSimState((prev) => ({
-                      ...prev,
-                      selectedUnitId: unitId,
-                      stage: 8,
-                      statusMessage: SIMULATION_STAGES[7].nextExpectedAction,
-                    }));
-                  }
-                }}
-              />
-            ) : section === 'analytics' ? (
-              <AnalyticsView
-                incidents={incidents}
-                units={units}
-                onOpenIncident={(id) => {
-                  setSelectedIncidentId(id);
-                  setWorkspaceInitialTab('overview');
-                  setWorkspaceIncidentId(id);
-                }}
-              />
-            ) : section === 'responsive-showcase' ? (
-              <ResponsiveShowcaseView
-                incidents={incidents}
-                units={units}
-                userRole={userRole}
-                operatorName={operator.name}
-                selectedIncidentId={selectedIncidentId}
-                onSelectIncident={(id) => setSelectedIncidentId(id)}
-                onOpenWorkspace={(id) => {
-                  setSelectedIncidentId(id);
-                  setWorkspaceIncidentId(id);
-                }}
-                onTakeOver={handleTakeOver}
-                onNavigateSection={navigateTo}
-              />
-            ) : (
-              <SettingsIntegrationsView
-                integrations={integrations}
-                notifications={notifications}
-                onRefreshBootstrap={fetchBootstrap}
-                onToast={pushToast}
               />
             )}
           </main>
         </div>
       </div>
 
-      {/* Mobile "More" Bottom Sheet */}
-      {moreMenuOpen && (
-        <div className="fixed inset-0 z-[850] lg:hidden flex items-end">
-          <div
-            className="fixed inset-0 bg-slate-900/50 dark:bg-black/60"
-            onClick={() => setMoreMenuOpen(false)}
-          />
-          <div className="relative z-10 w-full rounded-t-2xl bg-white border-t border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] p-4 pb-20 space-y-2">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
-              <span className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                More Operations &amp; Tools
-              </span>
-              <button
-                type="button"
-                onClick={() => setMoreMenuOpen(false)}
-                aria-label="Close more menu"
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => navigateTo('ai-intake')}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-100"
-              >
-                <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>AI Intake</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateTo('conversation-centre')}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-100"
-              >
-                <Headphones className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Conversation Centre</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateTo('incident-history')}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-100"
-              >
-                <Archive className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-                <span>Incident History</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateTo('responsive-showcase')}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-100"
-              >
-                <Monitor className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>Responsive Showcase (Desktop · Tablet · Mobile)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateTo('settings')}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-100"
-              >
-                <Settings className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-                <span>Settings &amp; Integrations</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  toggleTheme();
-                  setMoreMenuOpen(false);
-                }}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-100"
-              >
-                {theme === 'dark' ? (
-                  <Sun className="w-4 h-4 text-amber-500" />
-                ) : (
-                  <Moon className="w-4 h-4 text-slate-700" />
-                )}
-                <span>{theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMoreMenuOpen(false);
-                  setGuideOpen(true);
-                }}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50 border border-slate-200 text-blue-700 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-blue-300"
-              >
-                <HelpCircle className="w-4 h-4" />
-                <span>First-Time Operator Guide</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMoreMenuOpen(false);
-                  void startSimulation(selectedScenario);
-                }}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-blue-600 text-white"
-              >
-                <Play className="w-4 h-4" />
-                <span>RUN SIMULATION</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Mobile Bottom Navigation Bar */}
       <nav
-        aria-label="Mobile quick navigation"
-        className="lg:hidden fixed bottom-0 inset-x-0 z-[900] bg-white border-t border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] grid grid-cols-5"
+        aria-label="Mobile navigation"
+        className={`lg:hidden fixed bottom-0 inset-x-0 z-[900] bg-white border-t border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] grid ${
+          navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'
+        }`}
       >
-        {(
-          [
-            { id: 'command-centre', label: 'Home', icon: <LayoutDashboard className="w-4 h-4" /> },
-            { id: 'live-incidents', label: 'Incidents', icon: <AlertTriangle className="w-4 h-4" /> },
-            { id: 'response-units', label: 'Units', icon: <Truck className="w-4 h-4" /> },
-            { id: 'analytics', label: 'Analytics', icon: <Activity className="w-4 h-4" /> },
-          ] as const
-        ).map((item) => {
-          const active = !workspaceIncident && section === item.id;
+        {navItems.map((item) => {
+          const active = section === item.id;
           return (
             <button
               key={item.id}
               type="button"
-              aria-label={`Mobile ${item.label}`}
               onClick={() => navigateTo(item.id)}
               className={`flex flex-col items-center justify-center py-2.5 text-[10px] font-medium ${
                 active
@@ -2351,24 +2105,10 @@ export default function App() {
               }`}
             >
               {item.icon}
-              <span className="mt-0.5">{item.label}</span>
+              <span className="mt-0.5 truncate max-w-[72px]">{item.label}</span>
             </button>
           );
         })}
-        <button
-          type="button"
-          aria-label="Mobile More"
-          aria-expanded={moreMenuOpen}
-          onClick={() => setMoreMenuOpen((o) => !o)}
-          className={`flex flex-col items-center justify-center py-2.5 text-[10px] font-medium ${
-            moreMenuOpen
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          <Menu className="w-4 h-4" />
-          <span className="mt-0.5">More</span>
-        </button>
       </nav>
 
       {/* First-Use Operator Guide Modal */}

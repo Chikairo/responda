@@ -1,9 +1,9 @@
 import type {
-  EmergencyCategory,
   IncidentLocation,
   IncidentPriority,
   IntakeExtraction,
   LocationSource,
+  MedicalEmergencyCategory,
 } from '../types/responda.ts';
 
 export interface LagosLandmarkRef {
@@ -60,13 +60,14 @@ export function buildLocationFromIntake(params: {
   landmark?: string;
   area?: string;
   gps?: { lat: number; lng: number; accuracyMeters?: number; timestamp?: string } | null;
+  isSimulated?: boolean;
 }): IncidentLocation {
   const now = new Date().toISOString();
 
   // Coordinates alone NEVER auto-verify a location. Verification requires human operator confirmation.
   if (params.gps && isValidLagosCoords(params.gps.lat, params.gps.lng)) {
     return {
-      source: 'GPS',
+      source: params.isSimulated ? 'SIMULATED' : 'GPS',
       verificationStatus: 'UNVERIFIED',
       description:
         params.callerDescription?.trim() ||
@@ -92,7 +93,7 @@ export function buildLocationFromIntake(params: {
       description: params.callerDescription?.trim() || combinedText.trim(),
       landmark: params.landmark,
       area: params.area || approx?.area,
-      // Note: approximate landmark coordinates are NOT GPS and remain strictly UNVERIFIED
+      // Note: approximate landmark coordinates are NOT device GPS and remain strictly UNVERIFIED
       lat: approx?.lat,
       lng: approx?.lng,
       capturedAt: now,
@@ -141,6 +142,20 @@ export function getLocationSourceBadgeMeta(source: LocationSource): {
         toneClass:
           'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-500/10 dark:border-cyan-500/30',
       };
+    case 'MANUAL':
+      return {
+        label: 'MANUAL ENTRY',
+        shortLabel: 'Manual Entry',
+        toneClass:
+          'text-indigo-700 bg-indigo-50 border-indigo-200 dark:text-indigo-400 dark:bg-indigo-500/10 dark:border-indigo-500/30',
+      };
+    case 'SIMULATED':
+      return {
+        label: 'SIMULATED LOCATION',
+        shortLabel: 'Simulated',
+        toneClass:
+          'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-500/10 dark:border-purple-500/30',
+      };
     case 'UNKNOWN':
     default:
       return {
@@ -152,41 +167,60 @@ export function getLocationSourceBadgeMeta(source: LocationSource): {
   }
 }
 
-export function sanitizeCategory(input?: string): EmergencyCategory {
-  const valid: EmergencyCategory[] = [
-    'Medical',
-    'Road accident',
-    'Fire',
-    'Security',
-    'Rescue',
-    'Disaster',
-    'Environmental hazard',
-    'Other urgent incident',
-  ];
-  const match = valid.find((c) => c.toLowerCase() === (input || '').toLowerCase());
-  return match || 'Other urgent incident';
+export function sanitizeCategory(input?: string): MedicalEmergencyCategory {
+  const lower = (input || '').trim().toLowerCase();
+  if (lower === 'medical' || lower.includes('cardiac') || lower.includes('breath') || lower.includes('collapse') || lower.includes('seizure')) {
+    return 'Medical';
+  }
+  if (
+    lower === 'road accident' ||
+    lower.includes('accident') ||
+    lower.includes('collision') ||
+    lower.includes('crash') ||
+    lower.includes('rtc')
+  ) {
+    return 'Road accident';
+  }
+  if (lower === 'other medical emergency') {
+    return 'Other medical emergency';
+  }
+  return 'Other medical emergency';
 }
 
+/**
+ * Normalizes priority values strictly:
+ * - Critical / CRITICAL -> Critical
+ * - Urgent / HIGH -> Urgent
+ * - Standard / MEDIUM / LOW -> Standard (LOW was low priority, NEVER Unassessed)
+ * - Unassessed / empty / unknown -> Unassessed (signals insufficient assessment information)
+ */
 export function sanitizePriority(input?: string): IncidentPriority {
-  const upper = (input || '').toUpperCase();
-  if (upper === 'CRITICAL' || upper === 'HIGH' || upper === 'MEDIUM' || upper === 'LOW') {
-    return upper;
+  const normalized = (input || '').trim().toUpperCase();
+  if (normalized === 'CRITICAL') return 'Critical';
+  if (normalized === 'URGENT' || normalized === 'HIGH') return 'Urgent';
+  if (normalized === 'STANDARD' || normalized === 'MEDIUM' || normalized === 'LOW') {
+    return 'Standard';
   }
-  return 'HIGH';
+  if (normalized === 'UNASSESSED' || normalized === '') return 'Unassessed';
+  return 'Unassessed';
 }
 
 export function normalizeIntakeExtraction(
   raw: Partial<IntakeExtraction>
 ): IntakeExtraction {
+  const priority = sanitizePriority(raw.suggestedPriority);
   return {
     reply:
       raw.reply?.trim() ||
-      'This is Responda automated intake. Please tell me what happened and your nearest landmark in Lagos so an operator can review this immediately.',
+      'This is Responda medical emergency intake. Please tell me what happened and your nearest landmark in Lagos so an operator can review this immediately.',
     category: sanitizeCategory(raw.category),
-    suggestedPriority: sanitizePriority(raw.suggestedPriority),
+    suggestedPriority: priority,
     priorityReason:
-      raw.priorityReason?.trim() || 'Priority suggested from caller description; pending human operator review.',
-    summary: raw.summary?.trim() || 'Emergency report under automated intake.',
+      raw.priorityReason?.trim() ||
+      (priority === 'Unassessed'
+        ? 'Insufficient clinical details captured so far; flagged for immediate human operator assessment.'
+        : 'Priority suggested from caller description; pending human operator review.'),
+    summary: raw.summary?.trim() || 'Medical emergency report under automated intake.',
     description: raw.description?.trim() || 'Caller report captured during intake.',
     peopleAffected:
       typeof raw.peopleAffected === 'number' && Number.isFinite(raw.peopleAffected)
@@ -203,7 +237,7 @@ export function normalizeIntakeExtraction(
       ? raw.missingInfoFlags.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
       : [],
     readyForIncidentCreation: Boolean(raw.readyForIncidentCreation),
-    needsImmediateHumanAttention: Boolean(raw.needsImmediateHumanAttention),
+    needsImmediateHumanAttention: Boolean(raw.needsImmediateHumanAttention) || priority === 'Unassessed',
     uncertainties: Array.isArray(raw.uncertainties)
       ? raw.uncertainties.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
       : [],

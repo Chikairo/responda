@@ -1,905 +1,754 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  AlertOctagon,
   AlertTriangle,
+  ArrowLeft,
+  Bot,
   CheckCircle2,
   LocateFixed,
   Mic,
   MicOff,
-  PhoneOff,
+  PhoneCall,
   Send,
   ShieldAlert,
-  UserCheck,
-  Volume2,
+  Sparkles,
+  User,
 } from 'lucide-react';
-import {
+import type {
+  ClinicalDetails,
+  IncidentPriority,
   IncidentRecord,
   IntakeExtraction,
+  MedicalEmergencyCategory,
   TranscriptMessage,
 } from '../types/responda';
-import { buildLocationFromIntake } from '../utils/intakeParser';
-import { LocationSourceBadge, PriorityBadge, VerificationBadge } from './StatusBadges';
-
-type IntakeCallState =
-  | 'WAITING_FOR_CALLER'
-  | 'LISTENING'
-  | 'PROCESSING'
-  | 'AI_RESPONDING'
-  | 'WAITING_FOR_OPERATOR'
-  | 'HUMAN_OPERATOR_CONNECTED'
-  | 'CALL_ENDED';
+import { MEDICAL_CATEGORIES } from '../utils/incidentLogic';
 
 interface AiIntakeWorkspaceProps {
   geminiConfigured: boolean;
-  activeIncident: IncidentRecord | null;
+  authFetch: typeof fetch;
+  activeIncident?: IncidentRecord | null;
+  embedded?: boolean;
+  onCloseEmbedded?: () => void;
   onIncidentCreated: (incident: IncidentRecord) => void;
   onOpenIncident: (id: string) => void;
 }
 
-function pcmFloatToBase64(float32: Float32Array): string {
-  const int16 = new Int16Array(float32.length);
-  for (let i = 0; i < float32.length; i++) {
-    const s = Math.max(-1, Math.min(1, float32[i]));
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-  }
-  const bytes = new Uint8Array(int16.buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function base64ToFloat32Pcm(b64: string): Float32Array<ArrayBuffer> {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(new ArrayBuffer(bin.length));
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const int16 = new Int16Array(bytes.buffer);
-  const float32 = new Float32Array(new ArrayBuffer(int16.length * 4));
-  for (let i = 0; i < int16.length; i++) {
-    float32[i] = int16[i] / 0x8000;
-  }
-  return float32;
-}
+const DEMO_SCRIPTED_PROMPTS = [
+  {
+    label: 'Yaba Road Accident',
+    text: 'Hello! There is a bad bus and car accident near UNILAG main gate in Yaba. Two people are injured and bleeding, and one car door is jammed.',
+  },
+  {
+    label: 'Ikeja Medical Collapse',
+    text: 'Please help, my colleague just collapsed outside our office near Allen Avenue Roundabout in Ikeja and is struggling to breathe. His name is Emeka.',
+  },
+  {
+    label: 'Incomplete / Unclear Call',
+    text: 'Someone fell sick near Surulere stadium, please send help quickly.',
+  },
+];
 
 export function AiIntakeWorkspace({
   geminiConfigured,
+  authFetch,
   activeIncident,
+  embedded = false,
+  onCloseEmbedded,
   onIncidentCreated,
   onOpenIncident,
 }: AiIntakeWorkspaceProps) {
-  const [mode, setMode] = useState<'text' | 'voice'>('text');
-  const [intakeEngine, setIntakeEngine] = useState<'gemini' | 'simulated'>(
-    geminiConfigured ? 'gemini' : 'simulated'
-  );
-  const [callState, setCallState] = useState<IntakeCallState>('WAITING_FOR_CALLER');
   const [messages, setMessages] = useState<TranscriptMessage[]>([
     {
       id: 'init-ai-1',
       speaker: 'AI',
-      text: "Hello, this is Responda's automated emergency intake assistant. Please tell me calmly what happened and where in Lagos you are located.",
+      text: 'Responda Medical Intake active. Describe the medical emergency, patient condition, and nearest Lagos landmark. Note: this is a demonstration prototype — call 112/767 for real emergencies.',
       timestamp: new Date().toISOString(),
     },
   ]);
+
   const [inputText, setInputText] = useState('');
   const [callerName, setCallerName] = useState('');
   const [callerPhone, setCallerPhone] = useState('');
-  const [extraction, setExtraction] = useState<IntakeExtraction | null>(null);
+  const [mode, setMode] = useState<'auto' | 'simulated' | 'gemini'>(
+    geminiConfigured ? 'auto' : 'simulated'
+  );
+  const [sending, setSending] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [telephonyTesting, setTelephonyTesting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Structured extraction + manual clinical override
+  const [category, setCategory] = useState<MedicalEmergencyCategory>('Medical');
+  const [priority, setPriority] = useState<IncidentPriority>('Unassessed');
+  const [priorityReason, setPriorityReason] = useState(
+    'Awaiting sufficient clinical information for operator triage.'
+  );
+  const [summary, setSummary] = useState('');
+  const [peopleAffected, setPeopleAffected] = useState<string>('');
+  const [immediateDanger, setImmediateDanger] = useState(false);
+  const [dangerDetails, setDangerDetails] = useState('');
+  const [locationDescription, setLocationDescription] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [area, setArea] = useState('');
+  const [missingInfoFlags, setMissingInfoFlags] = useState<string[]>([
+    'Exact street or landmark',
+    'Clinical severity & consciousness check',
+  ]);
+  const [clinicalDetails, setClinicalDetails] = useState<ClinicalDetails>({
+    chiefComplaint: '',
+    consciousness: '',
+    breathing: '',
+    bleedingOrInjury: '',
+  });
+
+  // Device GPS state (opt-in browser Geolocation only — never auto-verifies)
   const [gps, setGps] = useState<{
     lat: number;
     lng: number;
     accuracyMeters?: number;
-    timestamp: string;
   } | null>(null);
-  const [gpsNotice, setGpsNotice] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const [durationSec, setDurationSec] = useState(0);
+  const [gpsStatus, setGpsStatus] = useState<string>('Not captured');
 
-  // Voice & waveform refs
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const inputCtxRef = useRef<AudioContext | null>(null);
-  const outputCtxRef = useRef<AudioContext | null>(null);
-  const nextPlayTimeRef = useRef<number>(0);
-  const animFrameRef = useRef<number | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const voiceActiveRef = useRef<boolean>(false);
+  // Browser Web Speech API dictation
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<unknown>(null);
 
-  const linkedIncident =
-    activeIncident && createdId && activeIncident.id === createdId
-      ? activeIncident
-      : null;
-  const operatorTookOver = Boolean(
-    linkedIncident && (!linkedIncident.aiIntakeActive || linkedIncident.assignedOperator)
-  );
-
-  useEffect(() => {
-    if (operatorTookOver) {
-      setCallState('HUMAN_OPERATOR_CONNECTED');
-      stopVoiceSession();
-    }
-  }, [operatorTookOver]);
-
-  // Call duration timer only while active
-  useEffect(() => {
-    if (
-      callState === 'WAITING_FOR_CALLER' ||
-      callState === 'CALL_ENDED'
-    ) {
-      return;
-    }
-    const timer = setInterval(() => {
-      setDurationSec((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [callState]);
-
-  // Waveform canvas drawing (flat baseline when inactive; real amplitude only when mic is active)
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const draw = () => {
-      const isDark = document.documentElement.classList.contains('dark');
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = isDark ? '#0B1220' : '#F1F5F9';
-      ctx.fillRect(0, 0, w, h);
-
-      const bars = 40;
-      const barW = Math.max(3, Math.floor((w - bars * 3) / bars));
-      let freqData: Uint8Array<ArrayBuffer> | null = null;
-      if (voiceActiveRef.current && analyserRef.current) {
-        freqData = new Uint8Array(
-          new ArrayBuffer(analyserRef.current.frequencyBinCount)
-        );
-        analyserRef.current.getByteFrequencyData(freqData);
-      }
-
-      for (let i = 0; i < bars; i++) {
-        const amp = freqData ? freqData[i % freqData.length] / 255 : 0.04;
-        const barH = Math.max(4, Math.round(amp * (h - 14)));
-        const x = 6 + i * (barW + 3);
-        const y = Math.round((h - barH) / 2);
-        ctx.fillStyle = voiceActiveRef.current
-          ? '#3B82F6'
-          : isDark
-          ? '#26364B'
-          : '#CBD5E1';
-        ctx.fillRect(x, y, barW, barH);
-      }
-
-      if (voiceActiveRef.current) {
-        animFrameRef.current = requestAnimationFrame(draw);
-      }
+  const speechAvailable = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const w = window as unknown as {
+      SpeechRecognition?: unknown;
+      webkitSpeechRecognition?: unknown;
     };
-
-    draw();
-
-    const observer = new MutationObserver(() => {
-      if (!voiceActiveRef.current) draw();
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => {
-      observer.disconnect();
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [callState, mode]);
-
-  const stopVoiceSession = () => {
-    voiceActiveRef.current = false;
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    try {
-      wsRef.current?.send(JSON.stringify({ type: 'stop' }));
-      wsRef.current?.close();
-    } catch {
-      // ignore
-    }
-    wsRef.current = null;
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    micStreamRef.current = null;
-    inputCtxRef.current?.close().catch(() => undefined);
-    inputCtxRef.current = null;
-    outputCtxRef.current?.close().catch(() => undefined);
-    outputCtxRef.current = null;
-    analyserRef.current = null;
-  };
-
-  useEffect(() => {
-    return () => stopVoiceSession();
+    return Boolean(w.SpeechRecognition || w.webkitSpeechRecognition);
   }, []);
 
-  const requestBrowserGps = () => {
-    setGpsNotice(null);
+  const handleRequestGps = () => {
     if (!navigator.geolocation) {
-      setGpsNotice(
-        'Geolocation is not supported in this browser. Please describe the Lagos location manually.'
-      );
+      setGpsStatus('Browser geolocation unavailable on this device.');
       return;
     }
+    setGpsStatus('Requesting device GPS...');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGps({
           lat: Number(pos.coords.latitude.toFixed(5)),
           lng: Number(pos.coords.longitude.toFixed(5)),
           accuracyMeters: Math.round(pos.coords.accuracy),
-          timestamp: new Date().toISOString(),
         });
-        setGpsNotice(
-          `GPS coordinates captured (±${Math.round(pos.coords.accuracy)}m). Location remains unverified until an operator confirms.`
+        setGpsStatus(
+          `Captured (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(
+            4
+          )}, ±${Math.round(pos.coords.accuracy)}m) — stays UNVERIFIED until operator confirms`
         );
       },
       () => {
-        setGpsNotice(
-          'Location permission denied or unavailable. You can describe the street, estate, or landmark manually.'
-        );
+        setGpsStatus('Permission denied or unavailable — using caller location text.');
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 7000 }
     );
   };
 
-  const startVoiceSession = async () => {
-    setErrorMsg(null);
-    if (operatorTookOver) return;
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-      const inputCtx = new AudioContext({ sampleRate: 16000 });
-      const outputCtx = new AudioContext({ sampleRate: 24000 });
-      inputCtxRef.current = inputCtx;
-      outputCtxRef.current = outputCtx;
-      nextPlayTimeRef.current = outputCtx.currentTime;
-
-      const analyser = inputCtx.createAnalyser();
-      analyser.fftSize = 128;
-      analyserRef.current = analyser;
-
-      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${location.host}/ws/live-intake`);
-      wsRef.current = ws;
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data) as {
-          type: string;
-          text?: string;
-          data?: string;
-          message?: string;
-        };
-
-        if (msg.type === 'error') {
-          setErrorMsg(msg.message || 'Voice intake error.');
-          stopVoiceSession();
-          setCallState('CALL_ENDED');
-          return;
-        }
-
-        if (msg.type === 'ready') {
-          voiceActiveRef.current = true;
-          setCallState('LISTENING');
-          const source = inputCtx.createMediaStreamSource(stream);
-          source.connect(analyser);
-          const processor = inputCtx.createScriptProcessor(4096, 1, 1);
-          source.connect(processor);
-          processor.connect(inputCtx.destination);
-          processor.onaudioprocess = (e) => {
-            if (!voiceActiveRef.current || ws.readyState !== WebSocket.OPEN) return;
-            const b64 = pcmFloatToBase64(e.inputBuffer.getChannelData(0));
-            ws.send(JSON.stringify({ audio: b64 }));
-          };
-        }
-
-        if (msg.type === 'input_transcript' && msg.text) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `v-in-${Date.now()}`,
-              speaker: 'CALLER',
-              text: msg.text!,
-              timestamp: new Date().toISOString(),
-            },
-          ]);
-        }
-
-        if (msg.type === 'output_transcript' && msg.text) {
-          setCallState('AI_RESPONDING');
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `v-out-${Date.now()}`,
-              speaker: 'AI',
-              text: msg.text!,
-              timestamp: new Date().toISOString(),
-            },
-          ]);
-        }
-
-        if (msg.type === 'turn_complete') {
-          if (voiceActiveRef.current) setCallState('LISTENING');
-        }
-
-        if (msg.type === 'audio' && msg.data && outputCtxRef.current) {
-          const ctx = outputCtxRef.current;
-          const samples = base64ToFloat32Pcm(msg.data);
-          const buf = ctx.createBuffer(1, samples.length, 24000);
-          buf.copyToChannel(samples, 0);
-          const src = ctx.createBufferSource();
-          src.buffer = buf;
-          src.connect(ctx.destination);
-          const startAt = Math.max(ctx.currentTime, nextPlayTimeRef.current);
-          src.start(startAt);
-          nextPlayTimeRef.current = startAt + buf.duration;
-        }
-      };
-
-      ws.onerror = () => {
-        setErrorMsg('WebSocket voice connection failed.');
-        stopVoiceSession();
-        setCallState('CALL_ENDED');
-      };
-    } catch {
-      setErrorMsg(
-        'Microphone permission denied or unavailable. Use Text Simulation Mode to continue intake.'
-      );
-      setCallState('WAITING_FOR_CALLER');
+  const toggleVoiceDictation = () => {
+    if (listening) {
+      try {
+        (recognitionRef.current as { stop?: () => void })?.stop?.();
+      } catch {
+        // ignore
+      }
+      setListening(false);
+      return;
     }
+
+    const w = window as unknown as {
+      SpeechRecognition?: new () => {
+        lang: string;
+        interimResults: boolean;
+        onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+      };
+      webkitSpeechRecognition?: new () => {
+        lang: string;
+        interimResults: boolean;
+        onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+      };
+    };
+    const Rec = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Rec) return;
+
+    const rec = new Rec();
+    rec.lang = 'en-NG';
+    rec.interimResults = false;
+    rec.onresult = (event) => {
+      const text = event.results?.[0]?.[0]?.transcript;
+      if (text) {
+        setInputText((prev) => (prev ? `${prev} ${text}` : text));
+      }
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    rec.start();
   };
 
-  const sendTextMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const text = inputText.trim();
-    if (!text || submitting || operatorTookOver) return;
+  const applyExtraction = (ex: IntakeExtraction) => {
+    setCategory(ex.category);
+    setPriority(ex.suggestedPriority);
+    if (ex.priorityReason) setPriorityReason(ex.priorityReason);
+    if (ex.summary) setSummary(ex.summary);
+    if (ex.peopleAffected !== null && ex.peopleAffected !== undefined) {
+      setPeopleAffected(String(ex.peopleAffected));
+    }
+    setImmediateDanger(Boolean(ex.immediateDanger));
+    if (ex.dangerDetails) setDangerDetails(ex.dangerDetails);
+    if (ex.locationDescription) setLocationDescription(ex.locationDescription);
+    if (ex.landmark) setLandmark(ex.landmark);
+    if (ex.area) setArea(ex.area);
+    if (ex.callerName && !callerName) setCallerName(ex.callerName);
+    if (ex.callerPhone && !callerPhone) setCallerPhone(ex.callerPhone);
+    setMissingInfoFlags(ex.missingInfoFlags || []);
+  };
+
+  const sendMessage = async (textOverride?: string) => {
+    const text = (textOverride ?? inputText).trim();
+    if (!text || sending) return;
 
     setErrorMsg(null);
     const callerMsg: TranscriptMessage = {
-      id: `c-${Date.now()}`,
+      id: `m-${Date.now()}`,
       speaker: 'CALLER',
       text,
       timestamp: new Date().toISOString(),
     };
     const nextHistory = [...messages, callerMsg];
     setMessages(nextHistory);
-    setInputText('');
-    setCallState('PROCESSING');
-    setSubmitting(true);
+    if (!textOverride) setInputText('');
+    setSending(true);
 
     try {
-      const res = await fetch('/api/intake/message', {
+      const res = await authFetch('/api/intake/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          history: messages,
-          mode: intakeEngine,
+          history: nextHistory,
+          mode,
           hasGps: Boolean(gps),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setErrorMsg(data.error || 'Intake request failed.');
-        setCallState('WAITING_FOR_CALLER');
-        setSubmitting(false);
+        setErrorMsg(data.error || 'Intake assistant returned an error.');
         return;
       }
 
-      const ext = data.extraction as IntakeExtraction;
-      setExtraction(ext);
-      setCallState(ext.readyForIncidentCreation ? 'WAITING_FOR_OPERATOR' : 'AI_RESPONDING');
+      const extraction = data.extraction as IntakeExtraction;
+      applyExtraction(extraction);
       setMessages((prev) => [
         ...prev,
         {
           id: `ai-${Date.now()}`,
           speaker: 'AI',
-          text: ext.reply,
+          text: extraction.reply,
           timestamp: new Date().toISOString(),
+          extractedTags: [
+            extraction.category,
+            extraction.suggestedPriority,
+            ...(extraction.area ? [extraction.area] : []),
+          ],
         },
       ]);
     } catch {
-      setErrorMsg('Network error reaching intake server.');
-      setCallState('WAITING_FOR_CALLER');
+      setErrorMsg('Network error communicating with RESPONDA intake service.');
     } finally {
-      setSubmitting(false);
+      setSending(false);
     }
   };
 
-  const createStructuredIncident = async () => {
-    setSubmitting(true);
+  const handleCreateIncident = async () => {
+    const desc =
+      messages
+        .filter((m) => m.speaker === 'CALLER')
+        .map((m) => m.text)
+        .join(' ') || summary;
+
+    if (!desc.trim() && !summary.trim()) {
+      setErrorMsg('Please enter caller details or a summary before creating the incident.');
+      return;
+    }
+
+    setCreating(true);
     setErrorMsg(null);
     try {
-      const res = await fetch('/api/incidents', {
+      const parsedCount =
+        peopleAffected.trim() !== '' && Number.isFinite(Number(peopleAffected))
+          ? Math.max(0, Math.round(Number(peopleAffected)))
+          : null;
+
+      const res = await authFetch('/api/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category: extraction?.category || 'Other urgent incident',
-          priority: extraction?.suggestedPriority || 'HIGH',
-          priorityReason:
-            extraction?.priorityReason || 'Submitted from Responda intake workspace.',
-          summary:
-            extraction?.summary ||
-            messages.filter((m) => m.speaker === 'CALLER').map((m) => m.text).join(' '),
-          description:
-            extraction?.description ||
-            messages.filter((m) => m.speaker === 'CALLER').map((m) => m.text).join(' '),
-          callerName: callerName || extraction?.callerName,
-          callerPhone: callerPhone || extraction?.callerPhone,
-          peopleAffected: extraction?.peopleAffected ?? null,
-          immediateDanger: extraction?.immediateDanger ?? false,
-          dangerDetails: extraction?.dangerDetails,
-          missingInfoFlags: extraction?.missingInfoFlags || [],
+          category,
+          priority,
+          priorityReason,
+          summary: summary.trim() || desc.slice(0, 140),
+          description: desc.trim() || summary.trim(),
+          callerName: callerName.trim() || undefined,
+          callerPhone: callerPhone.trim() || undefined,
+          peopleAffected: parsedCount,
+          immediateDanger,
+          dangerDetails: dangerDetails.trim() || undefined,
+          clinicalDetails,
+          missingInfoFlags,
           transcript: messages,
-          locationDescription: extraction?.locationDescription,
-          landmark: extraction?.landmark,
-          area: extraction?.area,
+          locationDescription: locationDescription.trim() || undefined,
+          landmark: landmark.trim() || undefined,
+          area: area.trim() || undefined,
           gps,
-          callChannel: mode === 'voice' ? 'WEB_VOICE' : 'WEB_TEXT',
-          isSimulated: intakeEngine === 'simulated',
+          callChannel: 'WEB_TEXT',
+          isSimulated: true,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setErrorMsg(data.error || 'Failed to create incident.');
+        setErrorMsg(data.error || 'Could not create medical incident.');
         return;
       }
-      setCreatedId(data.incident.id);
-      setCallState('WAITING_FOR_OPERATOR');
       onIncidentCreated(data.incident);
+      onOpenIncident(data.incident.id);
     } catch {
-      setErrorMsg('Network error creating incident.');
+      setErrorMsg('Failed to submit emergency intake to server.');
     } finally {
-      setSubmitting(false);
+      setCreating(false);
     }
   };
 
-  const previewLocation = buildLocationFromIntake({
-    callerDescription: extraction?.locationDescription,
-    landmark: extraction?.landmark,
-    area: extraction?.area,
-    gps,
-  });
-
-  const callStateLabels: Record<IntakeCallState, { text: string; cls: string }> = {
-    WAITING_FOR_CALLER: {
-      text: 'Ready — Waiting for caller',
-      cls: 'text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-slate-500/15',
-    },
-    LISTENING: {
-      text: 'Listening — Microphone active',
-      cls: 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/15',
-    },
-    PROCESSING: {
-      text: 'Processing caller details...',
-      cls: 'text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-500/15',
-    },
-    AI_RESPONDING: {
-      text: 'Intake updated — AI responding',
-      cls: 'text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-500/15',
-    },
-    WAITING_FOR_OPERATOR: {
-      text: 'Completed — Ready for operator takeover',
-      cls: 'text-amber-800 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15',
-    },
-    HUMAN_OPERATOR_CONNECTED: {
-      text: 'Completed — Human operator connected',
-      cls: 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/20',
-    },
-    CALL_ENDED: {
-      text: 'Completed — Call ended',
-      cls: 'text-slate-700 bg-slate-200 dark:text-slate-300 dark:bg-slate-600/25',
-    },
+  const handleSimulateVoiceCall = async () => {
+    setTelephonyTesting(true);
+    setErrorMsg(null);
+    try {
+      const res = await authFetch('/api/telephony/simulate-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callerName: callerName.trim() || 'Demo Voice Caller',
+          callerNumber: callerPhone.trim() || '+234-800-010-9999',
+          areaHint: area.trim() || 'Lagos',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Simulated voice call failed.');
+        return;
+      }
+      onIncidentCreated(data.incident);
+      onOpenIncident(data.incident.id);
+    } catch {
+      setErrorMsg('Failed to trigger simulated voice call.');
+    } finally {
+      setTelephonyTesting(false);
+    }
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-50">
-            AI Emergency Intake
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Calm, progressive intake extraction. AI never dispatches units or promises arrival times.
-          </p>
+      {/* Header */}
+      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          {embedded && onCloseEmbedded && (
+            <button
+              type="button"
+              onClick={onCloseEmbedded}
+              className="mt-0.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-200"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Incidents</span>
+            </button>
+          )}
+          <div>
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+              <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Medical Emergency Intake &amp; AI Triage</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Captures structured clinical symptoms, Lagos location clues, and transcripts without fabricating GPS or autonomous dispatch.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Engine Mode Selector */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] shadow-2xs dark:shadow-none">
-            <button
-              type="button"
-              onClick={() => setIntakeEngine('gemini')}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-                intakeEngine === 'gemini'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              Gemini AI {geminiConfigured ? '(Ready)' : '(Key Required)'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIntakeEngine('simulated')}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-                intakeEngine === 'simulated'
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              Simulated Demo Intake
-            </button>
-          </div>
+          <select
+            aria-label="Intake assistant mode"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as 'auto' | 'simulated' | 'gemini')}
+            className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200"
+          >
+            <option value="simulated">Simulated Demo Intake</option>
+            <option value="auto" disabled={!geminiConfigured}>
+              Gemini Live Intake {geminiConfigured ? '(Ready)' : '(Key Missing)'}
+            </option>
+          </select>
 
-          {/* Text vs Voice Mode */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] shadow-2xs dark:shadow-none">
-            <button
-              type="button"
-              onClick={() => {
-                stopVoiceSession();
-                setMode('text');
-              }}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                mode === 'text'
-                  ? 'bg-slate-900 text-white dark:bg-[#172438] dark:text-white'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              Text Simulation
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('voice')}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                mode === 'voice'
-                  ? 'bg-slate-900 text-white dark:bg-[#172438] dark:text-white'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              Voice (Gemini Live)
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Plain-English 3-Step Intake Guide */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 shadow-2xs dark:shadow-none">
-          <div className="font-semibold text-blue-700 dark:text-blue-300">Step 1 · Gather Report</div>
-          <p className="text-slate-600 dark:text-slate-300 mt-0.5">
-            Type or speak the emergency report below, including area or landmark.
-          </p>
-        </div>
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 shadow-2xs dark:shadow-none">
-          <div className="font-semibold text-amber-800 dark:text-amber-300">Step 2 · Review Extracted Facts</div>
-          <p className="text-slate-600 dark:text-slate-300 mt-0.5">
-            Check the detected category, priority, and any missing details on the right.
-          </p>
-        </div>
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 shadow-2xs dark:shadow-none">
-          <div className="font-semibold text-emerald-700 dark:text-emerald-300">Step 3 · Send to Command Centre</div>
-          <p className="text-slate-600 dark:text-slate-300 mt-0.5">
-            Click &ldquo;Create Incident&rdquo; so a human operator can verify and dispatch a unit.
-          </p>
-        </div>
-      </div>
-
-      {/* Human Takeover Banner */}
-      {operatorTookOver && linkedIncident && (
-        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-sm text-emerald-900 dark:text-emerald-200">
-            <UserCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <div>
-              <div className="font-bold">
-                Human Operator Connected ({linkedIncident.assignedOperator})
-              </div>
-              <div className="text-xs text-emerald-800 dark:text-emerald-200/80">
-                Automated AI intake has been stopped for {linkedIncident.id}. Operator now controls the case.
-              </div>
-            </div>
-          </div>
           <button
             type="button"
-            onClick={() => onOpenIncident(linkedIncident.id)}
-            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold whitespace-nowrap"
+            disabled={telephonyTesting}
+            onClick={handleSimulateVoiceCall}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200"
           >
-            Open Incident Workspace
+            <PhoneCall className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>{telephonyTesting ? 'Creating Call...' : 'Simulate Voice Call'}</span>
           </button>
         </div>
-      )}
+      </div>
 
       {errorMsg && (
-        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 p-3.5 text-xs text-red-800 dark:text-red-200 flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
-          </div>
-          {intakeEngine === 'gemini' && (
-            <button
-              type="button"
-              onClick={() => {
-                setIntakeEngine('simulated');
-                setErrorMsg(null);
-              }}
-              className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-semibold whitespace-nowrap"
-            >
-              Use Simulated Mode
-            </button>
-          )}
+        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 px-4 py-3 text-xs text-red-800 dark:text-red-200 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* LEFT: CONVERSATION / VOICE CONSOLE */}
-        <div className="lg:col-span-7 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 flex flex-col gap-4 shadow-2xs dark:shadow-none">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#26364B]">
-            <div className="flex items-center gap-2">
-              <span
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold ${callStateLabels[callState].cls}`}
-              >
-                {callStateLabels[callState].text}
-              </span>
-              <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                {String(Math.floor(durationSec / 60)).padStart(2, '0')}:
-                {String(durationSec % 60).padStart(2, '0')}
-              </span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Left: AI Conversation & Voice Dictation */}
+        <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#26364B]">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+              <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Intake Conversation</span>
             </div>
-
-            <button
-              type="button"
-              onClick={requestBrowserGps}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-700 dark:text-slate-200 transition-colors"
-            >
-              <LocateFixed className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Share Browser GPS (Optional)</span>
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              {DEMO_SCRIPTED_PROMPTS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => void sendMessage(p.text)}
+                  disabled={sending}
+                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1220] dark:hover:bg-[#172438] border border-slate-200 dark:border-[#26364B] text-[11px] font-medium text-slate-700 dark:text-slate-300"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {gpsNotice && (
-            <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-700 dark:text-slate-300">
-              {gpsNotice}
-            </div>
-          )}
-
-          {/* Voice Mode Controls */}
-          {mode === 'voice' && (
-            <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  {callState === 'LISTENING' || callState === 'AI_RESPONDING' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        stopVoiceSession();
-                        setCallState('CALL_ENDED');
-                      }}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold"
-                    >
-                      <PhoneOff className="w-4 h-4" />
-                      <span>End Voice Intake</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={operatorTookOver}
-                      onClick={startVoiceSession}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold"
-                    >
-                      <Mic className="w-4 h-4" />
-                      <span>Start Microphone Intake</span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                  {callState === 'LISTENING' ? (
-                    <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <MicOff className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                  )}
-                  <span>16kHz PCM → Gemini Live</span>
-                </div>
-              </div>
-
-              <canvas
-                ref={canvasRef}
-                width={520}
-                height={56}
-                className="w-full h-14 rounded-lg border border-slate-200 dark:border-[#26364B]"
-              />
-
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Privacy notice: Microphone audio is streamed only while active to assist intake transcription. For telephone calls, seamless cellular transfer requires Africa&apos;s Talking SIP configuration.
-              </p>
-            </div>
-          )}
-
-          {/* Transcript Feed */}
-          <div className="flex-1 space-y-3 min-h-[280px] max-h-[380px] overflow-y-auto pr-1">
+          <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`rounded-xl p-3 text-xs border ${
+                className={`rounded-xl p-3 text-xs space-y-1 border ${
                   m.speaker === 'CALLER'
-                    ? 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] ml-10'
-                    : 'bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30 mr-10'
+                    ? 'bg-blue-50/70 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30 ml-6'
+                    : 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] mr-6'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1">
+                    {m.speaker === 'CALLER' ? (
+                      <User className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                    ) : (
+                      <Bot className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    )}
                     {m.speaker === 'CALLER' ? 'Caller' : 'Responda AI Intake'}
                   </span>
                   <span className="font-mono">
-                    {new Date(m.timestamp).toLocaleTimeString()}
+                    {new Date(m.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </span>
                 </div>
                 <p className="text-slate-800 dark:text-slate-100 leading-relaxed">{m.text}</p>
+                {m.extractedTags && m.extractedTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {m.extractedTags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="px-1.5 py-0.5 rounded bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] font-mono text-[10px] text-slate-600 dark:text-slate-300"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
 
-          {/* Text Simulation Input */}
-          <form onSubmit={sendTextMessage} className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-[#26364B]">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
+            {speechAvailable && (
+              <button
+                type="button"
+                onClick={toggleVoiceDictation}
+                title="Dictate caller message using browser microphone"
+                aria-label={listening ? 'Stop voice dictation' : 'Start voice dictation'}
+                className={`p-2 rounded-lg border transition-colors ${
+                  listening
+                    ? 'bg-red-600 border-red-600 text-white'
+                    : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-300'
+                }`}
+              >
+                {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void sendMessage();
+                }
+              }}
+              placeholder="Enter caller statement (symptoms, injuries, Lagos landmark)..."
+              aria-label="Caller statement input"
+              className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+            />
+            <button
+              type="button"
+              disabled={sending || !inputText.trim()}
+              onClick={() => void sendMessage()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{sending ? 'Processing...' : 'Send'}</span>
+            </button>
+          </div>
+
+          <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Telephony &amp; Location Honesty</span>
+            </div>
+            <p>
+              Local Simulation Voice Adapter active (real telephone integration not configured). Carrier network location is unconfigured; device GPS is captured only via explicit browser permission and stays UNVERIFIED until confirmed by an operator.
+            </p>
+          </div>
+        </div>
+
+        {/* Right: Structured Medical Extraction & Create Form */}
+        <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3.5 shadow-2xs dark:shadow-none">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
+            <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+              Structured Medical Incident Fields
+            </h3>
+            {activeIncident && (
+              <button
+                type="button"
+                onClick={() => onOpenIncident(activeIncident.id)}
+                className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+              >
+                Open {activeIncident.id} →
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Medical Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as MedicalEmergencyCategory)}
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-2 text-slate-900 dark:text-slate-100"
+              >
+                {MEDICAL_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Suggested Priority
+              </label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as IncidentPriority)}
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-2 text-slate-900 dark:text-slate-100"
+              >
+                <option value="Unassessed">Unassessed (Insufficient assessment)</option>
+                <option value="Critical">Critical</option>
+                <option value="Urgent">Urgent</option>
+                <option value="Standard">Standard</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Incident Summary
+              </label>
+              <input
+                type="text"
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="Concise medical summary..."
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Caller Name
+              </label>
               <input
                 type="text"
                 value={callerName}
                 onChange={(e) => setCallerName(e.target.value)}
-                placeholder="Caller name (optional)"
-                aria-label="Caller name"
-                className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                placeholder="Optional"
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
               />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Caller Phone
+              </label>
               <input
                 type="text"
                 value={callerPhone}
                 onChange={(e) => setCallerPhone(e.target.value)}
-                placeholder="Callback phone (optional)"
-                aria-label="Callback phone"
-                className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                placeholder="+234..."
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
               />
             </div>
 
-            <div className="flex gap-2">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Lagos Area / District
+              </label>
               <input
                 type="text"
-                value={inputText}
-                disabled={submitting || operatorTookOver}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="Describe what happened, Lagos location/landmark, injuries, people affected..."
-                aria-label="Emergency report message"
-                className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+                placeholder="e.g., Yaba, Ikeja, Surulere"
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
               />
-              <button
-                type="submit"
-                disabled={submitting || operatorTookOver || !inputText.trim()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white whitespace-nowrap"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{submitting ? 'Analysing...' : 'Send'}</span>
-              </button>
             </div>
-          </form>
-        </div>
 
-        {/* RIGHT: LIVE STRUCTURED EXTRACTION & INCIDENT CREATION */}
-        <div className="lg:col-span-5 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-4 shadow-2xs dark:shadow-none">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#26364B] pb-3">
-            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-              Structured Incident Extraction
-            </h2>
-            {extraction && <PriorityBadge priority={extraction.suggestedPriority} />}
-          </div>
-
-          {!extraction ? (
-            <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-5 text-xs text-slate-500 dark:text-slate-400 space-y-2">
-              <div className="font-semibold text-slate-800 dark:text-slate-200">
-                Awaiting caller report details
-              </div>
-              <p>
-                As the caller responds, Responda extracts category, priority suggestion, people affected, danger indicators, missing fields, and location source without inventing unconfirmed facts.
-              </p>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Nearest Landmark
+              </label>
+              <input
+                type="text"
+                value={landmark}
+                onChange={(e) => setLandmark(e.target.value)}
+                placeholder="e.g., UNILAG Main Gate"
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+              />
             </div>
-          ) : (
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5">
-                  <div className="text-slate-500 dark:text-slate-400 text-[11px]">Detected Category</div>
-                  <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
-                    {extraction.category}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5">
-                  <div className="text-slate-500 dark:text-slate-400 text-[11px]">People Affected</div>
-                  <div className="font-mono font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-                    {extraction.peopleAffected !== null
-                      ? extraction.peopleAffected
-                      : 'Unknown'}
-                  </div>
-                </div>
-              </div>
 
-              <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-1">
-                <div className="text-slate-500 dark:text-slate-400 text-[11px]">Structured Summary</div>
-                <div className="text-slate-900 dark:text-slate-100">{extraction.summary}</div>
-                <div className="text-slate-500 dark:text-slate-400 pt-1">
-                  Priority Rationale: {extraction.priorityReason}
-                </div>
-              </div>
-
-              {extraction.immediateDanger && (
-                <div className="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 p-2.5 text-red-800 dark:text-red-200 flex items-center gap-2">
-                  <AlertOctagon className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
-                  <span>Immediate danger flagged — prompt human review requested.</span>
-                </div>
-              )}
-
-              <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
-                <div className="text-slate-500 dark:text-slate-400 text-[11px]">Location Assessment</div>
-                <div className="flex flex-wrap gap-1.5">
-                  <LocationSourceBadge source={previewLocation.source} />
-                  <VerificationBadge status={previewLocation.verificationStatus} />
-                </div>
-                <div className="text-slate-800 dark:text-slate-200">{previewLocation.description}</div>
-              </div>
-
-              {extraction.missingInfoFlags.length > 0 && (
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 p-3 space-y-1 text-amber-900 dark:text-amber-200">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5 text-amber-700 dark:text-amber-300" />
-                    <span>Missing Information</span>
-                  </div>
-                  <ul className="list-disc list-inside space-y-0.5">
-                    {extraction.missingInfoFlags.map((f, i) => (
-                      <li key={i}>{f}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Caller-Described Location
+              </label>
+              <input
+                type="text"
+                value={locationDescription}
+                onChange={(e) => setLocationDescription(e.target.value)}
+                placeholder="Street name, junction, or caller description..."
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+              />
             </div>
-          )}
 
-          <div className="pt-2 border-t border-slate-200 dark:border-[#26364B] space-y-2">
-            {createdId ? (
-              <div className="space-y-2">
-                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/35 p-3 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>
-                    Incident <strong className="font-mono">{createdId}</strong> created and queued on Command Centre.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenIncident(createdId)}
-                  className="w-full px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white"
-                >
-                  Open {createdId} in Operator Workspace
-                </button>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Chief Complaint
+              </label>
+              <input
+                type="text"
+                value={clinicalDetails.chiefComplaint || ''}
+                onChange={(e) =>
+                  setClinicalDetails((c) => ({ ...c, chiefComplaint: e.target.value }))
+                }
+                placeholder="e.g., Chest pain, trauma"
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Patients Affected
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={peopleAffected}
+                onChange={(e) => setPeopleAffected(e.target.value)}
+                placeholder="Unknown"
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Consciousness
+              </label>
+              <input
+                type="text"
+                value={clinicalDetails.consciousness || ''}
+                onChange={(e) =>
+                  setClinicalDetails((c) => ({ ...c, consciousness: e.target.value }))
+                }
+                placeholder="Alert, drowsy, unresponsive..."
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                Breathing Status
+              </label>
+              <input
+                type="text"
+                value={clinicalDetails.breathing || ''}
+                onChange={(e) =>
+                  setClinicalDetails((c) => ({ ...c, breathing: e.target.value }))
+                }
+                placeholder="Normal, laboured, absent..."
+                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+              />
+            </div>
+
+            <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5">
+              <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                <strong className="text-slate-800 dark:text-slate-100">Device GPS:</strong>{' '}
+                {gpsStatus}
               </div>
-            ) : (
               <button
                 type="button"
-                disabled={
-                  submitting ||
-                  messages.filter((m) => m.speaker === 'CALLER').length === 0
-                }
-                onClick={createStructuredIncident}
-                className="w-full px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+                onClick={handleRequestGps}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white dark:bg-[#172438] border border-slate-200 dark:border-[#26364B] text-[11px] font-semibold text-blue-700 dark:text-blue-300"
               >
-                Create Incident &amp; Alert Command Centre
+                <LocateFixed className="w-3.5 h-3.5" />
+                <span>Capture Browser GPS</span>
               </button>
-            )}
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center">
-              Creates an AWAITING_OPERATOR record. Human approval is required before dispatching any unit.
-            </p>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-200 dark:border-[#26364B] flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Creates a <strong>New</strong> incident (unverified) for Operations Staff review.
+            </span>
+            <button
+              type="button"
+              disabled={creating}
+              onClick={handleCreateIncident}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{creating ? 'Creating Incident...' : 'Create Medical Incident'}</span>
+            </button>
           </div>
         </div>
       </div>

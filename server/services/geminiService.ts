@@ -28,22 +28,27 @@ export function isGeminiConfigured(): boolean {
   return getGeminiClient() !== null;
 }
 
-const INTAKE_SYSTEM_INSTRUCTION = `You are Responda's automated emergency intake assistant for private emergency-response coordination in Lagos, Nigeria.
+const INTAKE_SYSTEM_INSTRUCTION = `You are Responda's automated medical emergency intake assistant for private emergency-medical coordination in Lagos, Nigeria.
 
 CRITICAL SAFETY & OPERATIONAL RULES:
-1. Introduce yourself calmly, briefly, and clearly as Responda's automated intake assistant on the first turn.
+1. Introduce yourself calmly, briefly, and clearly as Responda's automated medical intake assistant on the first turn.
 2. Ask ONLY 1 concise, relevant next follow-up question based on what is still missing. Never overwhelm a distressed caller with a multi-question list.
 3. Progressively collect:
    - What happened?
    - Where is the incident (street, estate, building, landmark, Lagos area)?
-   - Emergency category (Medical, Road accident, Fire, Security, Rescue, Disaster, Environmental hazard, Other urgent incident)
-   - Is anyone injured, trapped, or in immediate danger?
+   - Medical emergency category (strictly one of: Medical, Road accident, Other medical emergency)
+   - Is anyone injured, unconscious, having trouble breathing, bleeding, or in immediate danger?
    - How many people are affected?
    - Caller's name and callback number (optional, if willing/able)
-4. NEVER diagnose medical conditions or give medical prescriptions.
-5. NEVER promise an ambulance, guarantee a response time, or claim emergency units have been dispatched. Say that a human operator will review the report immediately.
-6. Flag uncertainty explicitly in uncertainties/missingInfoFlags instead of inventing facts or coordinates.
-7. If immediate danger or injuries are indicated, prioritise essential location/danger details and set needsImmediateHumanAttention=true.`;
+4. Priority assessment rules:
+   - Use 'Critical' for life-threatening collapse, severe bleeding, unconsciousness, respiratory arrest, or major road trauma.
+   - Use 'Urgent' for serious acute symptoms or painful injuries without immediate life threat.
+   - Use 'Standard' only when clinical facts confirm low-acuity stable condition.
+   - Use 'Unassessed' whenever caller details are too incomplete or unclear to judge clinical severity. NEVER guess Standard when assessment facts are missing.
+5. NEVER diagnose medical conditions or give medical prescriptions.
+6. NEVER promise an ambulance, guarantee a response time, or claim emergency units have been dispatched. Say that human Operations Staff will review the report immediately.
+7. Flag uncertainty explicitly in uncertainties/missingInfoFlags instead of inventing facts or coordinates.
+8. If immediate danger, severe symptoms, or insufficient info ('Unassessed') is detected, set needsImmediateHumanAttention=true.`;
 
 export async function runGeminiIntakeTurn(params: {
   history: TranscriptMessage[];
@@ -75,7 +80,7 @@ ${conversationText}
 
 Caller GPS attached: ${params.hasGps ? 'Yes (unverified browser GPS coordinates attached)' : 'No'}
 
-Analyse the caller's latest report, extract structured incident fields, identify missing critical info, and write a calm, brief response asking the single most useful next question (or confirming the report is queued for human operator takeover if essential details are present).`;
+Analyse the caller's latest report, extract structured medical incident fields, identify missing critical info, and write a calm, brief response asking the single most useful next question (or confirming the report is queued for Operations Staff review).`;
 
   try {
     const response = await ai.models.generateContent({
@@ -91,12 +96,11 @@ Analyse the caller's latest report, extract structured incident fields, identify
             reply: { type: Type.STRING },
             category: {
               type: Type.STRING,
-              description:
-                'One of: Medical, Road accident, Fire, Security, Rescue, Disaster, Environmental hazard, Other urgent incident',
+              description: 'One of: Medical, Road accident, Other medical emergency',
             },
             suggestedPriority: {
               type: Type.STRING,
-              description: 'One of: CRITICAL, HIGH, MEDIUM, LOW',
+              description: 'One of: Critical, Urgent, Standard, Unassessed',
             },
             priorityReason: { type: Type.STRING },
             summary: { type: Type.STRING },
@@ -165,33 +169,63 @@ export function runSimulatedDemoIntakeTurn(params: {
   const fullText = [...params.history.map((h) => h.text), params.latestMessage].join(' ');
   const lower = fullText.toLowerCase();
 
-  let category: IntakeExtraction['category'] = 'Other urgent incident';
-  if (lower.includes('accident') || lower.includes('crash') || lower.includes('collision') || lower.includes('car') || lower.includes('bus')) {
+  let category: IntakeExtraction['category'] = 'Other medical emergency';
+  if (
+    lower.includes('accident') ||
+    lower.includes('crash') ||
+    lower.includes('collision') ||
+    lower.includes('car') ||
+    lower.includes('bus')
+  ) {
     category = 'Road accident';
-  } else if (lower.includes('fire') || lower.includes('smoke') || lower.includes('burn')) {
-    category = 'Fire';
-  } else if (lower.includes('bleed') || lower.includes('breath') || lower.includes('pain') || lower.includes('unconscious') || lower.includes('medical') || lower.includes('injur')) {
+  } else if (
+    lower.includes('bleed') ||
+    lower.includes('breath') ||
+    lower.includes('pain') ||
+    lower.includes('unconscious') ||
+    lower.includes('medical') ||
+    lower.includes('collapse') ||
+    lower.includes('chest') ||
+    lower.includes('injur') ||
+    lower.includes('seizure')
+  ) {
     category = 'Medical';
-  } else if (lower.includes('robbery') || lower.includes('intrusion') || lower.includes('break') || lower.includes('security') || lower.includes('attack')) {
-    category = 'Security';
-  } else if (lower.includes('trap') || lower.includes('lift') || lower.includes('collapse') || lower.includes('flood')) {
-    category = 'Rescue';
   }
 
-  const immediateDanger =
-    lower.includes('injur') ||
+  const criticalSignals =
+    lower.includes('unconscious') ||
+    lower.includes('not breathing') ||
     lower.includes('bleed') ||
-    lower.includes('trap') ||
-    lower.includes('fire') ||
-    lower.includes('danger') ||
-    lower.includes('crash');
+    lower.includes('chest') ||
+    lower.includes('collapse') ||
+    lower.includes('crash') ||
+    lower.includes('trapped');
+
+  const urgentSignals =
+    lower.includes('injur') ||
+    lower.includes('pain') ||
+    lower.includes('breath') ||
+    lower.includes('fracture') ||
+    lower.includes('fell');
+
+  const immediateDanger = criticalSignals || lower.includes('fuel') || lower.includes('danger');
 
   let peopleAffected: number | null = null;
   if (lower.includes('two') || /\b2\b/.test(lower)) peopleAffected = 2;
   else if (lower.includes('three') || /\b3\b/.test(lower)) peopleAffected = 3;
   else if (lower.includes('one') || /\b1\b/.test(lower)) peopleAffected = 1;
 
-  const areas = ['Yaba', 'Ikeja', 'Surulere', 'Lekki', 'Victoria Island', 'Ikoyi', 'Ajah', 'Maryland', 'Apapa'];
+  const areas = [
+    'Yaba',
+    'Ikeja',
+    'Surulere',
+    'Lekki',
+    'Victoria Island',
+    'Ikoyi',
+    'Ajah',
+    'Maryland',
+    'Apapa',
+  ];
   const detectedArea = areas.find((a) => lower.includes(a.toLowerCase()));
   const hasLandmark =
     lower.includes('unilag') ||
@@ -211,41 +245,58 @@ export function runSimulatedDemoIntakeTurn(params: {
   } else if (!hasLandmark) {
     missingInfoFlags.push('Exact street or nearest landmark');
   }
-  if (!immediateDanger && !lower.includes('no one hurt') && !lower.includes('safe')) {
-    missingInfoFlags.push('Injury or immediate danger confirmation');
+  if (!criticalSignals && !urgentSignals && !lower.includes('stable') && !lower.includes('minor')) {
+    missingInfoFlags.push('Clinical symptoms & consciousness check');
   }
   if (peopleAffected === null) {
     missingInfoFlags.push('Number of people affected');
+  }
+
+  let suggestedPriority: IntakeExtraction['suggestedPriority'] = 'Unassessed';
+  let priorityReason =
+    'Insufficient clinical information captured so far; flagged Unassessed for operator triage.';
+
+  if (criticalSignals) {
+    suggestedPriority = 'Critical';
+    priorityReason =
+      'Critical clinical indicators (unconsciousness, bleeding, chest distress, or major collision) detected.';
+  } else if (urgentSignals) {
+    suggestedPriority = 'Urgent';
+    priorityReason =
+      'Acute pain or injury reported; pending human operator verification.';
+  } else if (lower.includes('minor') || lower.includes('stable')) {
+    suggestedPriority = 'Standard';
+    priorityReason = 'Stable or minor non-critical complaint reported by caller.';
   }
 
   const callerTurns = params.history.filter((m) => m.speaker === 'CALLER').length + 1;
   let reply = '';
   if (!detectedArea && !hasLandmark) {
     reply =
-      'This is Responda automated intake (Simulated Mode). Please share your location or the nearest landmark in Lagos, and let me know if anyone is injured or in immediate danger.';
+      'This is Responda automated medical intake (Simulated Mode). Please share your location or the nearest landmark in Lagos, and tell me if the patient is conscious and breathing.';
+  } else if (!criticalSignals && !urgentSignals && !lower.includes('minor')) {
+    reply =
+      'Thank you. Is the patient conscious and breathing normally, and how many people need medical help?';
   } else if (peopleAffected === null) {
     reply =
-      'Thank you. How many people are affected or injured, and is anyone trapped or in immediate danger? A human operator is being alerted to review this report.';
-  } else if (callerTurns < 2 || (!hasLandmark && missingInfoFlags.length > 0)) {
-    reply =
-      'I have noted the area. Can you describe the closest landmark, junction, or street name, and share your name or callback number if safe to do so?';
+      'Understood. How many people are affected or injured so Operations Staff can assess this immediately?';
   } else {
     reply =
-      'Thank you. I have recorded these details and flagged the report for immediate human operator review. Please stay on the line while an operator takes over—no unit is dispatched until an operator confirms.';
+      'Thank you. I have recorded these medical details and queued the report for immediate human operator review—no unit is dispatched until an operator confirms.';
   }
 
   return normalizeIntakeExtraction({
     reply,
     category,
-    suggestedPriority: immediateDanger ? 'CRITICAL' : 'HIGH',
-    priorityReason: immediateDanger
-      ? 'Immediate danger or injuries indicated in caller report; flagged for urgent operator review.'
-      : 'Urgent incident details reported; awaiting human verification.',
-    summary: `${category} reported${detectedArea ? ` in ${detectedArea}` : ''}${peopleAffected !== null ? ` (${peopleAffected} affected)` : ''}. [Simulated Demo Intake]`,
+    suggestedPriority,
+    priorityReason,
+    summary: `${category} reported${detectedArea ? ` in ${detectedArea}` : ''}${
+      peopleAffected !== null ? ` (${peopleAffected} affected)` : ''
+    }. [Simulated Demo Intake]`,
     description: fullText.trim(),
     peopleAffected,
     immediateDanger,
-    dangerDetails: immediateDanger ? 'Injuries or active hazard reported by caller.' : undefined,
+    dangerDetails: immediateDanger ? 'Active clinical danger or hazard reported by caller.' : undefined,
     locationDescription: hasLandmark || detectedArea ? params.latestMessage : undefined,
     landmark: lower.includes('unilag')
       ? 'UNILAG Gate'
@@ -255,7 +306,7 @@ export function runSimulatedDemoIntakeTurn(params: {
     area: detectedArea,
     missingInfoFlags,
     readyForIncidentCreation: Boolean(detectedArea || hasLandmark || callerTurns >= 2),
-    needsImmediateHumanAttention: immediateDanger,
+    needsImmediateHumanAttention: immediateDanger || suggestedPriority === 'Unassessed',
     uncertainties: !hasLandmark ? ['Exact street address not yet confirmed by caller'] : [],
   });
 }

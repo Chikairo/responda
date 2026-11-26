@@ -2,21 +2,23 @@ import React from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
+  Archive,
   CheckCircle2,
   Clock,
+  HelpCircle,
   Info,
   MapPin,
   Navigation,
-  Radio,
   ShieldAlert,
   Truck,
-  UserCheck,
 } from 'lucide-react';
-import {
+import type {
   IncidentPriority,
   IncidentStatus,
   LocationSource,
   UnitAvailability,
+  UnitLocationFreshness,
+  UnitRegistrationStatus,
   VerificationStatus,
 } from '../types/responda';
 import { getLocationSourceBadgeMeta } from '../utils/intakeParser';
@@ -65,28 +67,28 @@ export function RespondaLogo({ compact = false }: { compact?: boolean }) {
 
 export function PriorityBadge({ priority }: { priority: IncidentPriority }) {
   const styles: Record<IncidentPriority, { cls: string; icon: React.ReactNode; label: string }> = {
-    CRITICAL: {
+    Critical: {
       cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/35',
       icon: <AlertOctagon className="w-3.5 h-3.5 shrink-0" />,
       label: 'Critical',
     },
-    HIGH: {
+    Urgent: {
       cls: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/35',
       icon: <AlertTriangle className="w-3.5 h-3.5 shrink-0" />,
-      label: 'High',
+      label: 'Urgent',
     },
-    MEDIUM: {
-      cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35',
-      icon: <Info className="w-3.5 h-3.5 shrink-0" />,
-      label: 'Medium',
-    },
-    LOW: {
+    Standard: {
       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/35',
-      icon: <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />,
-      label: 'Low',
+      icon: <Info className="w-3.5 h-3.5 shrink-0" />,
+      label: 'Standard',
+    },
+    Unassessed: {
+      cls: 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/40',
+      icon: <HelpCircle className="w-3.5 h-3.5 shrink-0" />,
+      label: 'Unassessed',
     },
   };
-  const cfg = styles[priority];
+  const cfg = styles[priority] || styles.Unassessed;
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold border whitespace-nowrap shrink-0 ${cfg.cls}`}
@@ -99,48 +101,28 @@ export function PriorityBadge({ priority }: { priority: IncidentPriority }) {
 
 export function IncidentStatusBadge({ status }: { status: IncidentStatus }) {
   const map: Record<IncidentStatus, { cls: string; label: string }> = {
-    NEW: {
-      cls: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-500/15 dark:text-slate-300 dark:border-slate-500/30',
+    New: {
+      cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35',
       label: 'New',
     },
-    AI_INTAKE: {
-      cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/35',
-      label: 'AI Intake',
-    },
-    AWAITING_OPERATOR: {
-      cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35',
-      label: 'Awaiting Review',
-    },
-    UNDER_REVIEW: {
+    'Under Review': {
       cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/35',
       label: 'Under Review',
     },
-    VERIFIED: {
-      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/35',
-      label: 'Verified',
-    },
-    UNIT_ASSIGNED: {
-      cls: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/35',
-      label: 'Unit Assigned',
-    },
-    RESPONDING: {
+    Dispatched: {
       cls: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/35',
-      label: 'Responding',
+      label: 'Dispatched',
     },
-    ON_SCENE: {
-      cls: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/35',
-      label: 'On Scene',
+    'Patient Transport': {
+      cls: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/35',
+      label: 'Patient Transport',
     },
-    RESOLVED: {
-      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/35',
-      label: 'Resolved',
-    },
-    CLOSED: {
+    Closed: {
       cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-600/20 dark:text-slate-400 dark:border-slate-600/35',
       label: 'Closed',
     },
   };
-  const cfg = map[status];
+  const cfg = map[status] || map.New;
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border whitespace-nowrap shrink-0 ${cfg.cls}`}
@@ -157,44 +139,92 @@ export function UnitAvailabilityBadge({
   availability: UnitAvailability;
 }) {
   const map: Record<UnitAvailability, { cls: string; label: string; icon: React.ReactNode }> = {
-    AVAILABLE: {
+    Available: {
       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/35',
       label: 'Available',
       icon: <CheckCircle2 className="w-3 h-3 shrink-0" />,
     },
-    ASSIGNED: {
-      cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/35',
-      label: 'Assigned',
-      icon: <UserCheck className="w-3 h-3 shrink-0" />,
-    },
-    ACKNOWLEDGED: {
-      cls: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/35',
-      label: 'Acknowledged',
-      icon: <Radio className="w-3 h-3 shrink-0" />,
-    },
-    EN_ROUTE: {
+    Responding: {
       cls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35',
-      label: 'En route',
+      label: 'Responding',
       icon: <Navigation className="w-3 h-3 shrink-0" />,
     },
-    ON_SCENE: {
+    'At Scene': {
       cls: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/35',
-      label: 'On scene',
+      label: 'At Scene',
       icon: <Truck className="w-3 h-3 shrink-0" />,
     },
-    UNAVAILABLE: {
+    Transporting: {
+      cls: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/35',
+      label: 'Transporting',
+      icon: <Navigation className="w-3 h-3 shrink-0" />,
+    },
+    Unavailable: {
       cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-600/20 dark:text-slate-400 dark:border-slate-600/35',
       label: 'Unavailable',
       icon: <ShieldAlert className="w-3 h-3 shrink-0" />,
     },
   };
-  const cfg = map[availability];
+  const cfg = map[availability] || map.Unavailable;
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border whitespace-nowrap shrink-0 ${cfg.cls}`}
     >
       {cfg.icon}
       <span>{cfg.label}</span>
+    </span>
+  );
+}
+
+export function UnitRegistrationBadge({ status }: { status: UnitRegistrationStatus }) {
+  if (status === 'Active') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/35 whitespace-nowrap shrink-0">
+        Active
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-600/20 dark:text-slate-400 dark:border-slate-600/35 whitespace-nowrap shrink-0">
+      Inactive
+    </span>
+  );
+}
+
+export function LocationFreshnessBadge({ freshness }: { freshness: UnitLocationFreshness }) {
+  const map: Record<UnitLocationFreshness, { cls: string; label: string }> = {
+    LIVE: {
+      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30',
+      label: 'LIVE GPS',
+    },
+    LAST_KNOWN: {
+      cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30',
+      label: 'LAST KNOWN',
+    },
+    MANUAL: {
+      cls: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-500/15 dark:text-slate-300 dark:border-slate-500/30',
+      label: 'MANUAL PIN',
+    },
+    UNAVAILABLE: {
+      cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-600/20 dark:text-slate-400 dark:border-slate-600/35',
+      label: 'UNAVAILABLE',
+    },
+  };
+  const cfg = map[freshness] || map.MANUAL;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap shrink-0 ${cfg.cls}`}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
+export function LegacyBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-600/20 dark:text-slate-300 dark:border-slate-500/35 whitespace-nowrap shrink-0">
+      <Archive className="w-3 h-3 shrink-0" />
+      <span>Legacy / Out-of-Scope</span>
     </span>
   );
 }

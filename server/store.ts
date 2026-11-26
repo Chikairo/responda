@@ -1,15 +1,24 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type {
+  IncidentPriority,
   IncidentRecord,
+  IncidentStatus,
+  MedicalEmergencyCategory,
   NotificationLog,
+  OrganisationSettings,
   ResponseUnit,
+  StaffAccount,
+  UnitAvailability,
 } from '../src/types/responda.ts';
 
 export interface RespondaDatabase {
+  schemaVersion: 2;
   incidents: IncidentRecord[];
   units: ResponseUnit[];
   notifications: NotificationLog[];
+  staffAccounts: StaffAccount[];
+  organisationSettings: OrganisationSettings;
   sequenceCounter: number;
 }
 
@@ -20,120 +29,266 @@ function minutesAgo(mins: number): string {
   return new Date(Date.now() - mins * 60_000).toISOString();
 }
 
+export function createDefaultStaffAccounts(nowIso: string = new Date().toISOString()): StaffAccount[] {
+  return [
+    {
+      id: 'staff-ops-1',
+      name: 'Seyi Ogunleye',
+      email: 'seyi.ogunleye@responda.ng',
+      role: 'Operations Staff',
+      accountStatus: 'ACTIVE',
+      badgeCode: 'OPS-101',
+      dateAdded: nowIso,
+      lastActive: nowIso,
+    },
+    {
+      id: 'staff-ops-2',
+      name: 'Amina Bello',
+      email: 'amina.bello@responda.ng',
+      role: 'Operations Staff',
+      accountStatus: 'ACTIVE',
+      badgeCode: 'OPS-102',
+      dateAdded: nowIso,
+      lastActive: nowIso,
+    },
+    {
+      id: 'staff-ops-3',
+      name: 'Chinedu Okafor',
+      email: 'chinedu.okafor@responda.ng',
+      role: 'Operations Staff',
+      accountStatus: 'ACTIVE',
+      badgeCode: 'OPS-103',
+      dateAdded: nowIso,
+    },
+    {
+      id: 'staff-admin-1',
+      name: 'Dr. Folashade Adeyemi',
+      email: 'folashade.adeyemi@responda.ng',
+      role: 'Organisation Administrator',
+      accountStatus: 'ACTIVE',
+      badgeCode: 'ADM-001',
+      dateAdded: nowIso,
+      lastActive: nowIso,
+    },
+    {
+      id: 'staff-ops-4',
+      name: 'Kemi Lawal',
+      email: 'kemi.lawal@responda.ng',
+      role: 'Operations Staff',
+      accountStatus: 'INVITED',
+      badgeCode: 'OPS-104',
+      dateAdded: nowIso,
+    },
+  ];
+}
+
+export function createDefaultOrganisationSettings(): OrganisationSettings {
+  return {
+    name: 'Responda Medical Emergency Coordination (Lagos)',
+    city: 'Lagos, Nigeria',
+    contactEmail: 'dispatch@responda.ng',
+    contactPhone: '+234-800-RESPONDA',
+    defaultOperationalArea: 'Lagos Mainland & Island Medical Corridor',
+    requireLocationVerificationBeforeDispatch: true,
+    clinicalTriageNotice:
+      'Automated intake assists caller triage only. Human Operations Staff verify clinical priority, confirm Lagos location, and approve every ambulance dispatch.',
+  };
+}
+
 export function createSeedData(): RespondaDatabase {
+  const nowIso = new Date().toISOString();
   const units: ResponseUnit[] = [
     {
       id: 'UNIT-AMB-01',
       callsign: 'Ikeja Alpha-1',
-      organisation: 'Lagos Metro EMS (Demo)',
+      organisation: 'Lagos Metro EMS',
       unitType: 'Ambulance',
+      registrationStatus: 'Active',
+      vehicleRegistration: 'LAS-401-EM',
+      operationalBase: 'Allen Avenue Medical Station, Ikeja',
       crewDescription: '2 Trauma Paramedics, 1 EVOC Driver',
+      crewMembers: [
+        { id: 'c-101', name: 'Dr. Tunde Bakare', medicalRole: 'Trauma Lead', qualification: 'ALS Paramedic' },
+        { id: 'c-102', name: 'Ngozi Eze', medicalRole: 'Flight/Ground EMT', qualification: 'BLS / Defibrillation' },
+      ],
+      medicalCapabilities: [
+        'Advanced Life Support (ALS)',
+        'Basic Life Support (BLS)',
+        'Patient transport',
+        'Oxygen support',
+        'Defibrillation',
+      ],
       locationName: 'Allen Avenue Roundabout',
       area: 'Ikeja',
       lat: 6.6018,
       lng: 3.3515,
-      availability: 'AVAILABLE',
+      locationFreshness: 'LIVE',
+      locationSourceLabel: 'Simulated GPS Telemetry',
+      availability: 'Available',
       lastLocationUpdate: minutesAgo(2),
+      activityLog: [
+        {
+          id: 'uact-1',
+          timestamp: minutesAgo(30),
+          actor: 'Dr. Folashade Adeyemi',
+          actorRole: 'Organisation Administrator',
+          action: 'Unit Shift Active',
+          details: 'Ikeja Alpha-1 checked in with full ALS trauma kit.',
+        },
+      ],
       isSimulated: true,
     },
     {
       id: 'UNIT-AMB-02',
       callsign: 'Yaba Trauma-2',
-      organisation: 'Lagos Metro EMS (Demo)',
+      organisation: 'Lagos Metro EMS',
       unitType: 'Ambulance',
+      registrationStatus: 'Active',
+      vehicleRegistration: 'LAS-402-EM',
+      operationalBase: 'Sabo Medical Post, Yaba',
       crewDescription: '1 Emergency Physician, 1 Paramedic, 1 Driver',
+      crewMembers: [
+        { id: 'c-201', name: 'Dr. Ibrahim Musa', medicalRole: 'Emergency Physician', qualification: 'ALS / Cardiac' },
+        { id: 'c-202', name: 'Funke Adewale', medicalRole: 'Paramedic', qualification: 'BLS / Oxygen' },
+      ],
+      medicalCapabilities: [
+        'Advanced Life Support (ALS)',
+        'Basic Life Support (BLS)',
+        'Patient transport',
+        'Oxygen support',
+        'Defibrillation',
+      ],
       locationName: 'Sabo / Commercial Avenue',
       area: 'Yaba',
       lat: 6.5068,
       lng: 3.3775,
-      availability: 'AVAILABLE',
+      locationFreshness: 'LIVE',
+      locationSourceLabel: 'Simulated GPS Telemetry',
+      availability: 'Available',
       lastLocationUpdate: minutesAgo(1),
+      activityLog: [],
       isSimulated: true,
     },
     {
       id: 'UNIT-RRV-03',
       callsign: 'Surulere Rapid-3',
-      organisation: 'SwiftCare Response (Demo)',
+      organisation: 'SwiftCare Medical Response',
       unitType: 'Rapid response vehicle',
+      registrationStatus: 'Active',
+      vehicleRegistration: 'LAS-209-RR',
+      operationalBase: 'Bode Thomas Medical Post, Surulere',
       crewDescription: '2 Advanced EMTs',
+      crewMembers: [
+        { id: 'c-301', name: 'Yusuf Balogun', medicalRole: 'Senior EMT', qualification: 'BLS / Oxygen' },
+        { id: 'c-302', name: 'Grace Ojo', medicalRole: 'EMT Responder', qualification: 'Defibrillation' },
+      ],
+      medicalCapabilities: [
+        'Basic Life Support (BLS)',
+        'Oxygen support',
+        'Defibrillation',
+      ],
       locationName: 'Bode Thomas / Adeniran Ogunsanya',
       area: 'Surulere',
       lat: 6.4972,
       lng: 3.3568,
-      availability: 'EN_ROUTE',
+      locationFreshness: 'LIVE',
+      locationSourceLabel: 'Simulated GPS Telemetry',
+      availability: 'Responding',
       currentAssignmentId: 'INC-2026-1047',
       lastLocationUpdate: minutesAgo(1),
+      activityLog: [
+        {
+          id: 'uact-3',
+          timestamp: minutesAgo(9),
+          actor: 'Seyi Ogunleye',
+          actorRole: 'Operations Staff',
+          action: 'Dispatched to INC-2026-1047',
+          details: 'Assigned to Adeniran Ogunsanya respiratory emergency.',
+        },
+      ],
       isSimulated: true,
     },
     {
-      id: 'UNIT-SEC-04',
-      callsign: 'VI Sentinel-4',
-      organisation: 'Eko Shield Security (Demo)',
-      unitType: 'Security patrol',
-      crewDescription: '3 Armed Response Officers',
+      id: 'UNIT-AMB-04',
+      callsign: 'VI Care-4',
+      organisation: 'Eko Clinical EMS',
+      unitType: 'Ambulance',
+      registrationStatus: 'Active',
+      vehicleRegistration: 'LAS-404-EM',
+      operationalBase: 'Adeola Odeku Ambulance Bay, VI',
+      crewDescription: '2 Paramedics, 1 Driver',
+      crewMembers: [
+        { id: 'c-401', name: 'Bolanle Peters', medicalRole: 'Lead Paramedic', qualification: 'ALS Paramedic' },
+      ],
+      medicalCapabilities: [
+        'Advanced Life Support (ALS)',
+        'Basic Life Support (BLS)',
+        'Patient transport',
+        'Oxygen support',
+        'Defibrillation',
+      ],
       locationName: 'Adeola Odeku / Akin Adesola',
       area: 'Victoria Island',
       lat: 6.4281,
       lng: 3.4219,
-      availability: 'AVAILABLE',
-      lastLocationUpdate: minutesAgo(3),
-      isSimulated: true,
-    },
-    {
-      id: 'UNIT-RES-05',
-      callsign: 'Lekki Rescue-5',
-      organisation: 'Atlantic Rescue Partners (Demo)',
-      unitType: 'Rescue team',
-      crewDescription: '4 Extrication & Hazmat Specialists',
-      locationName: 'Admiralty Way Toll Corridor',
-      area: 'Lekki',
-      lat: 6.4474,
-      lng: 3.4723,
-      availability: 'AVAILABLE',
-      lastLocationUpdate: minutesAgo(4),
-      isSimulated: true,
-    },
-    {
-      id: 'UNIT-FIR-06',
-      callsign: 'Eko Fire Partner-6',
-      organisation: 'Industrial Fire & Safety (Demo)',
-      unitType: 'Fire-response partner',
-      crewDescription: '4 Fire Suppression Crew',
-      locationName: 'Iganmu / Costain Axis',
-      area: 'Surulere',
-      lat: 6.4795,
-      lng: 3.3665,
-      availability: 'ON_SCENE',
-      currentAssignmentId: 'INC-2026-1045',
-      lastLocationUpdate: minutesAgo(2),
+      locationFreshness: 'LAST_KNOWN',
+      locationSourceLabel: 'Last Reported Bay Telemetry',
+      availability: 'Available',
+      lastLocationUpdate: minutesAgo(6),
+      activityLog: [],
       isSimulated: true,
     },
     {
       id: 'UNIT-AMB-07',
       callsign: 'Ikoyi Bravo-7',
-      organisation: 'Lagos Metro EMS (Demo)',
+      organisation: 'Lagos Metro EMS',
       unitType: 'Ambulance',
+      registrationStatus: 'Active',
+      vehicleRegistration: 'LAS-407-EM',
+      operationalBase: 'Bourdillon EMS Point, Ikoyi',
       crewDescription: '2 Paramedics, 1 Driver',
+      crewMembers: [
+        { id: 'c-701', name: 'Damilola Sanni', medicalRole: 'Paramedic', qualification: 'BLS / Transport' },
+      ],
+      medicalCapabilities: [
+        'Basic Life Support (BLS)',
+        'Patient transport',
+        'Oxygen support',
+      ],
       locationName: 'Bourdillon Road Junction',
       area: 'Ikoyi',
       lat: 6.4549,
       lng: 3.4346,
-      availability: 'AVAILABLE',
+      locationFreshness: 'LIVE',
+      locationSourceLabel: 'Simulated GPS Telemetry',
+      availability: 'Available',
       lastLocationUpdate: minutesAgo(5),
+      activityLog: [],
       isSimulated: true,
     },
     {
-      id: 'UNIT-SEC-08',
-      callsign: 'Ikeja Patrol-8',
-      organisation: 'Eko Shield Security (Demo)',
-      unitType: 'Security patrol',
-      crewDescription: '2 Patrol Officers',
-      locationName: 'Alausa Secretariat Way',
-      area: 'Ikeja',
-      lat: 6.6152,
-      lng: 3.3589,
-      availability: 'UNAVAILABLE',
+      id: 'UNIT-RRV-08',
+      callsign: 'Lekki Med-8',
+      organisation: 'SwiftCare Medical Response',
+      unitType: 'Rapid response vehicle',
+      registrationStatus: 'Active',
+      vehicleRegistration: 'LAS-218-RR',
+      operationalBase: 'Admiralty Way Medical Post, Lekki',
+      crewDescription: '2 EMTs (Stand-down maintenance)',
+      crewMembers: [
+        { id: 'c-801', name: 'Kolawole Ade', medicalRole: 'EMT', qualification: 'BLS' },
+      ],
+      medicalCapabilities: ['Basic Life Support (BLS)', 'Oxygen support'],
+      locationName: 'Admiralty Way Medical Post',
+      area: 'Lekki',
+      lat: 6.4474,
+      lng: 3.4723,
+      locationFreshness: 'MANUAL',
+      locationSourceLabel: 'Base Check-in',
+      availability: 'Unavailable',
       lastLocationUpdate: minutesAgo(18),
+      adminNotes: 'Restocking oxygen cylinders.',
+      activityLog: [],
       isSimulated: true,
     },
   ];
@@ -144,22 +299,29 @@ export function createSeedData(): RespondaDatabase {
       createdAt: minutesAgo(3),
       updatedAt: minutesAgo(2),
       category: 'Road accident',
-      priority: 'CRITICAL',
-      priorityReason: 'Multi-vehicle collision on Herbert Macaulay Way with 2 reported injuries and fuel leak risk.',
-      status: 'AWAITING_OPERATOR',
+      priority: 'Critical',
+      priorityReason: 'Multi-vehicle collision on Herbert Macaulay Way with 2 reported injuries and jammed door.',
+      status: 'New',
       callerName: 'Tunde A. (Demo)',
       callerPhone: '+234-800-010-1048',
       summary: 'Two-vehicle collision near Sabo Yaba junction; 2 occupants injured and unable to exit vehicle safely.',
-      description: 'Caller reports a saloon car and minibus collided at the Sabo junction traffic light. Two passengers injured; traffic backing up.',
+      description: 'Caller reports a saloon car and minibus collided at the Sabo junction traffic light. Two passengers injured; fuel odour noted.',
       peopleAffected: 2,
       immediateDanger: true,
       dangerDetails: 'Oncoming traffic hazard and minor fuel odour near vehicle.',
+      clinicalDetails: {
+        chiefComplaint: 'Suspected blunt trauma and lacerations from collision',
+        consciousness: 'Conscious but distressed',
+        breathing: 'Rapid breathing',
+        bleedingOrInjury: 'Active bleeding from facial/arm lacerations',
+        clinicalNotes: 'Needs ALS trauma & extrication assessment on arrival.',
+      },
       missingInfoFlags: ['Operator verification of exact junction lane'],
       transcript: [
         {
           id: 't-1048-1',
           speaker: 'AI',
-          text: 'This is Responda automated intake. Please tell me what happened and where you are located.',
+          text: 'This is Responda automated medical intake. Please tell me what happened and where you are located.',
           timestamp: minutesAgo(3),
         },
         {
@@ -172,7 +334,7 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 't-1048-3',
           speaker: 'AI',
-          text: 'Understood. Is anyone injured, trapped, or in immediate danger?',
+          text: 'Understood. Is anyone injured, unconscious, or in immediate danger?',
           timestamp: minutesAgo(2.5),
         },
         {
@@ -180,7 +342,7 @@ export function createSeedData(): RespondaDatabase {
           speaker: 'CALLER',
           text: 'Yes, two people in the car are injured and bleeding, one door is jammed. I smell fuel.',
           timestamp: minutesAgo(2.1),
-          extractedTags: ['2 injured', 'Door jammed', 'Fuel odour'],
+          extractedTags: ['2 injured', 'Bleeding', 'Fuel odour'],
         },
       ],
       location: {
@@ -193,6 +355,7 @@ export function createSeedData(): RespondaDatabase {
         lng: 3.3711,
         accuracyMeters: 22,
         capturedAt: minutesAgo(2.9),
+        carrierNote: 'Carrier location integration not configured',
       },
       timeline: [
         {
@@ -208,8 +371,8 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 'ev-1048-2',
           type: 'AI_INTAKE_STARTED',
-          title: 'AI intake structured report',
-          description: 'Extracted Road accident · CRITICAL priority suggestion · Flagged for human takeover.',
+          title: 'AI intake structured medical report',
+          description: 'Extracted Road accident · Critical suggested · Flagged for human takeover.',
           actor: 'Responda AI Intake',
           actorRole: 'AI Assistant',
           timestamp: minutesAgo(2.2),
@@ -239,15 +402,22 @@ export function createSeedData(): RespondaDatabase {
       dispatchedAt: minutesAgo(9),
       acknowledgedAt: minutesAgo(8),
       category: 'Medical',
-      priority: 'HIGH',
+      priority: 'Urgent',
       priorityReason: 'Acute respiratory distress reported for elderly resident.',
-      status: 'RESPONDING',
+      status: 'Dispatched',
       callerName: 'Chidinma K. (Demo)',
       callerPhone: '+234-800-010-1047',
       summary: 'Adult experiencing severe shortness of breath inside residential estate off Bode Thomas, Surulere.',
       description: 'Caller reports 68-year-old family member struggling to breathe. Conscious and seated indoors.',
       peopleAffected: 1,
       immediateDanger: false,
+      clinicalDetails: {
+        chiefComplaint: 'Shortness of breath / respiratory distress',
+        consciousness: 'Conscious and alert',
+        breathing: 'Laboured breathing',
+        bleedingOrInjury: 'None',
+        clinicalNotes: 'Oxygen support requested on arrival.',
+      },
       missingInfoFlags: [],
       assignedOperator: 'Amina Bello',
       assignedUnitId: 'UNIT-RRV-03',
@@ -261,7 +431,7 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 't-1047-2',
           speaker: 'OPERATOR',
-          text: 'Operator Amina speaking. I have taken over your call and verified your gate code with our Surulere Rapid unit.',
+          text: 'Operations Staff Amina speaking. I have taken over your call and dispatched Surulere Rapid-3.',
           timestamp: minutesAgo(12),
         },
       ],
@@ -284,7 +454,7 @@ export function createSeedData(): RespondaDatabase {
           id: 'ev-1047-1',
           type: 'INCIDENT_RECEIVED',
           title: 'Emergency report received',
-          description: 'Inbound report logged via simulated call.',
+          description: 'Inbound medical report logged via simulated call.',
           actor: 'Responda Intake',
           actorRole: 'System',
           timestamp: minutesAgo(14),
@@ -293,10 +463,10 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 'ev-1047-2',
           type: 'OPERATOR_TAKEOVER',
-          title: 'Operator took over incident',
+          title: 'Operations Staff took over incident',
           description: 'Amina Bello assumed human control.',
           actor: 'Amina Bello',
-          actorRole: 'Call Operator',
+          actorRole: 'Operations Staff',
           timestamp: minutesAgo(12),
           isSimulated: true,
         },
@@ -306,27 +476,27 @@ export function createSeedData(): RespondaDatabase {
           title: 'Location verified by operator',
           description: 'Confirmed Gate B entry on Adeniran Ogunsanya Close.',
           actor: 'Amina Bello',
-          actorRole: 'Call Operator',
+          actorRole: 'Operations Staff',
           timestamp: minutesAgo(11),
           isSimulated: true,
         },
         {
           id: 'ev-1047-4',
           type: 'UNIT_ASSIGNED',
-          title: 'Dispatcher assigned UNIT-RRV-03',
-          description: 'Surulere Rapid-3 approved for dispatch by human dispatcher.',
+          title: 'Approved dispatch: Surulere Rapid-3 (UNIT-RRV-03)',
+          description: 'Human operator approved dispatch to 14 Adeniran Ogunsanya Close.',
           actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
+          actorRole: 'Operations Staff',
           timestamp: minutesAgo(9),
           isSimulated: true,
         },
         {
           id: 'ev-1047-5',
           type: 'UNIT_EN_ROUTE',
-          title: 'Unit en route (Simulated)',
+          title: 'Unit responding (Simulated)',
           description: 'Surulere Rapid-3 acknowledged and departed station.',
           actor: 'UNIT-RRV-03',
-          actorRole: 'Responder',
+          actorRole: 'Medical Unit',
           timestamp: minutesAgo(4),
           isSimulated: true,
         },
@@ -335,7 +505,7 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 'n-1047-1',
           author: 'Amina Bello',
-          role: 'Call Operator',
+          role: 'Operations Staff',
           text: 'Estate security alerted at Gate B to keep barrier clear.',
           timestamp: minutesAgo(10),
         },
@@ -345,187 +515,30 @@ export function createSeedData(): RespondaDatabase {
       callChannel: 'WEB_TEXT',
     },
     {
-      id: 'INC-2026-1046',
-      createdAt: minutesAgo(22),
-      updatedAt: minutesAgo(18),
-      acceptedAt: minutesAgo(19),
-      category: 'Security',
-      priority: 'MEDIUM',
-      priorityReason: 'Perimeter intrusion alarm at commercial warehouse with no confirmed weapon sighting.',
-      status: 'VERIFIED',
-      callerName: 'Facility Guard Desk (Demo)',
-      callerPhone: '+234-800-010-1046',
-      summary: 'Unauthorised perimeter breach alarm at commercial facility off Admiralty Way, Lekki Phase 1.',
-      description: 'Motion sensors triggered at rear loading bay. Night guard requested patrol inspection.',
-      peopleAffected: 1,
-      immediateDanger: false,
-      missingInfoFlags: [],
-      assignedOperator: 'Seyi Ogunleye',
-      transcript: [
-        {
-          id: 't-1046-1',
-          speaker: 'CALLER',
-          text: 'Rear gate motion alarm triggered at our Admiralty Way depot in Lekki Phase 1.',
-          timestamp: minutesAgo(22),
-        },
-      ],
-      location: {
-        source: 'OPERATOR_VERIFIED',
-        verificationStatus: 'VERIFIED',
-        description: 'Plot 24 Admiralty Way, Lekki Phase 1, Lagos',
-        landmark: 'Admiralty Circle',
-        area: 'Lekki',
-        lat: 6.4479,
-        lng: 3.4678,
-        capturedAt: minutesAgo(22),
-        verifiedBy: 'Seyi Ogunleye',
-        verifiedAt: minutesAgo(18),
-      },
-      timeline: [
-        {
-          id: 'ev-1046-1',
-          type: 'INCIDENT_RECEIVED',
-          title: 'Security alert received',
-          description: 'Commercial client security desk initiated report.',
-          actor: 'Responda Intake',
-          actorRole: 'System',
-          timestamp: minutesAgo(22),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1046-2',
-          type: 'OPERATOR_TAKEOVER',
-          title: 'Operator took over incident',
-          description: 'Seyi Ogunleye verified client callback credentials.',
-          actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
-          timestamp: minutesAgo(19),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1046-3',
-          type: 'INCIDENT_VERIFIED',
-          title: 'Incident & location verified',
-          description: 'Ready for patrol unit assignment decision.',
-          actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
-          timestamp: minutesAgo(18),
-          isSimulated: true,
-        },
-      ],
-      notes: [],
-      aiIntakeActive: false,
-      isSimulated: true,
-      callChannel: 'WEB_TEXT',
-    },
-    {
-      id: 'INC-2026-1045',
-      createdAt: minutesAgo(36),
-      updatedAt: minutesAgo(8),
-      acceptedAt: minutesAgo(34),
-      dispatchedAt: minutesAgo(30),
-      acknowledgedAt: minutesAgo(28),
-      category: 'Fire',
-      priority: 'CRITICAL',
-      priorityReason: 'Electrical transformer fire adjacent to commercial building in Iganmu.',
-      status: 'ON_SCENE',
-      callerName: 'Ibrahim M. (Demo)',
-      callerPhone: '+234-800-010-1045',
-      summary: 'Transformer sparks and smoke near warehouse perimeter on Eric Moore / Iganmu axis.',
-      description: 'Visible smoke from step-down transformer outside commercial yard; staff evacuated to muster point.',
-      peopleAffected: 4,
-      immediateDanger: true,
-      dangerDetails: 'Live electrical hazard; perimeter cordoned.',
-      missingInfoFlags: [],
-      assignedOperator: 'Seyi Ogunleye',
-      assignedUnitId: 'UNIT-FIR-06',
-      transcript: [
-        {
-          id: 't-1045-1',
-          speaker: 'CALLER',
-          text: 'Our transformer by Eric Moore / Iganmu road just caught fire with thick black smoke.',
-          timestamp: minutesAgo(36),
-        },
-      ],
-      location: {
-        source: 'OPERATOR_VERIFIED',
-        verificationStatus: 'VERIFIED',
-        description: 'Eric Moore Road industrial corridor, Iganmu, Lagos',
-        landmark: 'National Theatre / Iganmu Bridge',
-        area: 'Surulere',
-        lat: 6.4795,
-        lng: 3.3665,
-        capturedAt: minutesAgo(36),
-        verifiedBy: 'Seyi Ogunleye',
-        verifiedAt: minutesAgo(33),
-      },
-      timeline: [
-        {
-          id: 'ev-1045-1',
-          type: 'INCIDENT_RECEIVED',
-          title: 'Fire incident received',
-          description: 'Report captured via AI intake.',
-          actor: 'Responda Intake',
-          actorRole: 'System',
-          timestamp: minutesAgo(36),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1045-2',
-          type: 'OPERATOR_TAKEOVER',
-          title: 'Operator takeover',
-          description: 'Seyi Ogunleye verified evacuation status.',
-          actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
-          timestamp: minutesAgo(34),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1045-3',
-          type: 'UNIT_ASSIGNED',
-          title: 'Fire partner unit assigned',
-          description: 'Eko Fire Partner-6 dispatched.',
-          actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
-          timestamp: minutesAgo(30),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1045-4',
-          type: 'UNIT_ON_SCENE',
-          title: 'Unit on scene (Simulated)',
-          description: 'Fire crew isolating perimeter and suppressing blaze.',
-          actor: 'UNIT-FIR-06',
-          actorRole: 'Responder',
-          timestamp: minutesAgo(8),
-          isSimulated: true,
-        },
-      ],
-      notes: [],
-      aiIntakeActive: false,
-      isSimulated: true,
-      callChannel: 'WEB_TEXT',
-    },
-    {
       id: 'INC-2026-1044',
       createdAt: minutesAgo(6),
       updatedAt: minutesAgo(5),
-      category: 'Medical',
-      priority: 'HIGH',
-      priorityReason: 'Workplace fall injury reported near Allen Avenue; exact building floor missing.',
-      status: 'AWAITING_OPERATOR',
+      category: 'Other medical emergency',
+      priority: 'Unassessed',
+      priorityReason: 'Caller dropped before confirming consciousness or breathing status; flagged for urgent operator assessment.',
+      status: 'New',
       callerName: 'Kemi O. (Demo)',
       callerPhone: '+234-800-010-1044',
-      summary: 'Colleague fell down stairwell at office block on Allen Avenue, Ikeja; suspected leg fracture.',
-      description: 'Caller states injured person is conscious and in pain; exact suite number not yet confirmed.',
+      summary: 'Workplace injury reported near Allen Avenue, Ikeja — insufficient clinical details yet.',
+      description: 'Caller states someone fell on office stairs near Allen Avenue; consciousness, bleeding, and exact floor remain unconfirmed.',
       peopleAffected: 1,
       immediateDanger: false,
-      missingInfoFlags: ['Exact building number / floor', 'Callback confirmation'],
+      clinicalDetails: {
+        chiefComplaint: 'Fall injury (details incomplete)',
+        consciousness: 'Unknown — needs callback',
+        breathing: 'Unknown',
+      },
+      missingInfoFlags: ['Clinical severity assessment', 'Exact building number / floor', 'Callback confirmation'],
       transcript: [
         {
           id: 't-1044-1',
           speaker: 'CALLER',
-          text: 'Someone fell on the stairs at our office near Allen Avenue Ikeja. His ankle looks broken.',
+          text: 'Someone fell on the stairs at our office near Allen Avenue Ikeja, please help.',
           timestamp: minutesAgo(6),
         },
       ],
@@ -538,13 +551,14 @@ export function createSeedData(): RespondaDatabase {
         lat: 6.6018,
         lng: 3.3515,
         capturedAt: minutesAgo(6),
+        carrierNote: 'Carrier location integration not configured',
       },
       timeline: [
         {
           id: 'ev-1044-1',
           type: 'INCIDENT_RECEIVED',
-          title: 'Emergency report received',
-          description: 'Submitted via text intake.',
+          title: 'Medical emergency report received',
+          description: 'Submitted via intake with incomplete clinical details.',
           actor: 'Responda Intake',
           actorRole: 'System',
           timestamp: minutesAgo(6),
@@ -553,8 +567,8 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 'ev-1044-2',
           type: 'OPERATOR_NOTIFIED',
-          title: 'Awaiting operator review',
-          description: 'Missing exact suite number flagged for human follow-up.',
+          title: 'Flagged Unassessed — awaiting operator review',
+          description: 'Insufficient clinical information; human callback and priority assessment required.',
           actor: 'Responda AI Intake',
           actorRole: 'AI Assistant',
           timestamp: minutesAgo(5),
@@ -567,119 +581,54 @@ export function createSeedData(): RespondaDatabase {
       callChannel: 'WEB_TEXT',
     },
     {
-      id: 'INC-2026-1043',
-      createdAt: minutesAgo(140),
-      updatedAt: minutesAgo(85),
-      acceptedAt: minutesAgo(137),
-      dispatchedAt: minutesAgo(134),
-      acknowledgedAt: minutesAgo(132),
-      resolvedAt: minutesAgo(85),
-      category: 'Environmental hazard',
-      priority: 'MEDIUM',
-      priorityReason: 'Fallen tree obstructing residential access road in Ikoyi.',
-      status: 'RESOLVED',
-      callerName: 'Femi D. (Demo)',
-      callerPhone: '+234-800-010-1043',
-      summary: 'Storm-felled tree cleared from Bourdillon Road lane by rescue crew.',
-      description: 'Roadway obstruction cleared and hazard cones removed.',
-      peopleAffected: 0,
-      immediateDanger: false,
-      missingInfoFlags: [],
-      assignedOperator: 'Amina Bello',
-      assignedUnitId: 'UNIT-RES-05',
-      transcript: [
-        {
-          id: 't-1043-1',
-          speaker: 'CALLER',
-          text: 'A large branch fell across one lane on Bourdillon Road Ikoyi.',
-          timestamp: minutesAgo(140),
-        },
-      ],
-      location: {
-        source: 'OPERATOR_VERIFIED',
-        verificationStatus: 'VERIFIED',
-        description: 'Bourdillon Road near Alexander Junction, Ikoyi',
-        landmark: 'Bourdillon Road',
-        area: 'Ikoyi',
-        lat: 6.4549,
-        lng: 3.4346,
-        capturedAt: minutesAgo(140),
-        verifiedBy: 'Amina Bello',
-        verifiedAt: minutesAgo(136),
-      },
-      timeline: [
-        {
-          id: 'ev-1043-1',
-          type: 'INCIDENT_RECEIVED',
-          title: 'Hazard report received',
-          description: 'Logged via intake.',
-          actor: 'Responda Intake',
-          actorRole: 'System',
-          timestamp: minutesAgo(140),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1043-2',
-          type: 'OPERATOR_TAKEOVER',
-          title: 'Operator takeover',
-          description: 'Amina Bello verified location.',
-          actor: 'Amina Bello',
-          actorRole: 'Call Operator',
-          timestamp: minutesAgo(137),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1043-3',
-          type: 'UNIT_ASSIGNED',
-          title: 'Rescue team assigned',
-          description: 'Lekki Rescue-5 dispatched.',
-          actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
-          timestamp: minutesAgo(134),
-          isSimulated: true,
-        },
-        {
-          id: 'ev-1043-4',
-          type: 'UNIT_COMPLETED',
-          title: 'Incident resolved',
-          description: 'Roadway cleared and reopened.',
-          actor: 'UNIT-RES-05',
-          actorRole: 'Responder',
-          timestamp: minutesAgo(85),
-          isSimulated: true,
-        },
-      ],
-      notes: [],
-      aiIntakeActive: false,
-      isSimulated: true,
-      callChannel: 'WEB_TEXT',
-    },
-    {
       id: 'INC-2026-1042',
       createdAt: minutesAgo(210),
-      updatedAt: minutesAgo(165),
+      updatedAt: minutesAgo(160),
       acceptedAt: minutesAgo(208),
       dispatchedAt: minutesAgo(205),
       acknowledgedAt: minutesAgo(204),
-      resolvedAt: minutesAgo(165),
-      category: 'Rescue',
-      priority: 'HIGH',
-      priorityReason: 'Stalled elevator with two occupants inside Victoria Island office building.',
-      status: 'CLOSED',
+      arrivedAtSceneAt: minutesAgo(195),
+      patientPickedUpAt: minutesAgo(188),
+      transportStartedAt: minutesAgo(185),
+      hospitalArrivedAt: minutesAgo(170),
+      resolvedAt: minutesAgo(160),
+      closedAt: minutesAgo(160),
+      outcome: 'Patient stabilised and handed over to emergency reception at LUTH.',
+      hospitalDestination: {
+        id: 'hosp-luth',
+        name: 'Lagos University Teaching Hospital (LUTH)',
+        area: 'Idi-Araba, Surulere / Yaba Axis',
+        lat: 6.5177,
+        lng: 3.3547,
+        isSimulatedDemo: true,
+        selectedBy: 'Amina Bello',
+        selectedAt: minutesAgo(186),
+      },
+      category: 'Medical',
+      priority: 'Critical',
+      priorityReason: 'Acute chest pain with diaphoresis at Victoria Island office complex.',
+      status: 'Closed',
       callerName: 'Building Concierge (Demo)',
       callerPhone: '+234-800-010-1042',
-      summary: 'Two occupants safely extracted from stalled passenger lift on Adeola Odeku, Victoria Island.',
-      description: 'Facility technicians and rescue crew completed manual release.',
-      peopleAffected: 2,
+      summary: 'Executive experiencing acute chest pain on Adeola Odeku safely transported to LUTH.',
+      description: 'Ambulance crew administered oxygen and ECG monitoring on scene prior to hospital transfer.',
+      peopleAffected: 1,
       immediateDanger: false,
+      clinicalDetails: {
+        chiefComplaint: 'Acute chest pain',
+        consciousness: 'Conscious',
+        breathing: 'Assisted with oxygen',
+        bleedingOrInjury: 'None',
+        clinicalNotes: 'Handed over stable at LUTH emergency bay.',
+      },
       missingInfoFlags: [],
       assignedOperator: 'Amina Bello',
-      assignedUnitId: 'UNIT-RES-05',
+      assignedUnitId: 'UNIT-AMB-04',
       transcript: [
         {
           id: 't-1042-1',
           speaker: 'CALLER',
-          text: 'Two visitors are stuck in lift 2 at our Adeola Odeku tower.',
+          text: 'Our director is having severe chest pain at 42 Adeola Odeku Street, Victoria Island.',
           timestamp: minutesAgo(210),
         },
       ],
@@ -699,7 +648,7 @@ export function createSeedData(): RespondaDatabase {
         {
           id: 'ev-1042-1',
           type: 'INCIDENT_RECEIVED',
-          title: 'Rescue request received',
+          title: 'Medical emergency received',
           description: 'Logged via intake.',
           actor: 'Responda Intake',
           actorRole: 'System',
@@ -708,12 +657,32 @@ export function createSeedData(): RespondaDatabase {
         },
         {
           id: 'ev-1042-2',
+          type: 'UNIT_ASSIGNED',
+          title: 'Ambulance dispatched',
+          description: 'VI Care-4 dispatched to 42 Adeola Odeku.',
+          actor: 'Amina Bello',
+          actorRole: 'Operations Staff',
+          timestamp: minutesAgo(205),
+          isSimulated: true,
+        },
+        {
+          id: 'ev-1042-3',
+          type: 'HOSPITAL_ARRIVED',
+          title: 'Arrived at LUTH Emergency Reception',
+          description: 'Patient handed over safely.',
+          actor: 'VI Care-4',
+          actorRole: 'Medical Unit',
+          timestamp: minutesAgo(170),
+          isSimulated: true,
+        },
+        {
+          id: 'ev-1042-4',
           type: 'UNIT_COMPLETED',
           title: 'Incident closed',
-          description: 'Occupants safely assisted; no injuries reported.',
+          description: 'Patient stabilised and handed over to emergency reception at LUTH.',
           actor: 'Seyi Ogunleye',
-          actorRole: 'Dispatcher',
-          timestamp: minutesAgo(165),
+          actorRole: 'Operations Staff',
+          timestamp: minutesAgo(160),
           isSimulated: true,
         },
       ],
@@ -729,7 +698,7 @@ export function createSeedData(): RespondaDatabase {
       id: 'notif-1',
       channel: 'SYSTEM_ALERT',
       recipient: 'Command Centre Queue',
-      message: 'INC-2026-1048 (Road accident · Yaba) flagged CRITICAL — awaiting human operator takeover.',
+      message: 'INC-2026-1048 (Road accident · Yaba) flagged Critical — awaiting operator takeover.',
       incidentId: 'INC-2026-1048',
       status: 'DELIVERED_DEMO',
       providerResponse: 'WebSocket broadcast queued (Demo)',
@@ -744,17 +713,229 @@ export function createSeedData(): RespondaDatabase {
       incidentId: 'INC-2026-1047',
       unitId: 'UNIT-RRV-03',
       status: 'DELIVERED_DEMO',
-      providerResponse: 'Simulated dispatch alert log (no live external SMS sent)',
+      providerResponse: 'Simulated dispatch alert log (no external carrier message sent)',
       timestamp: minutesAgo(9),
       isSimulated: true,
     },
   ];
 
   return {
+    schemaVersion: 2,
     incidents,
     units,
     notifications,
+    staffAccounts: createDefaultStaffAccounts(nowIso),
+    organisationSettings: createDefaultOrganisationSettings(),
     sequenceCounter: 1049,
+  };
+}
+
+const MEDICAL_CATEGORY_SET = new Set<string>([
+  'Medical',
+  'Road accident',
+  'Other medical emergency',
+]);
+
+export function mapLegacyPriority(rawPriority?: string): {
+  priority: IncidentPriority;
+  changed: boolean;
+} {
+  const upper = String(rawPriority || '').trim().toUpperCase();
+  if (upper === 'CRITICAL') return { priority: 'Critical', changed: rawPriority !== 'Critical' };
+  if (upper === 'URGENT' || upper === 'HIGH') return { priority: 'Urgent', changed: rawPriority !== 'Urgent' };
+  // LOW must preserve its original low-severity meaning -> Standard (NEVER Unassessed!)
+  if (upper === 'STANDARD' || upper === 'MEDIUM' || upper === 'LOW') {
+    return { priority: 'Standard', changed: rawPriority !== 'Standard' };
+  }
+  return { priority: 'Unassessed', changed: rawPriority !== 'Unassessed' };
+}
+
+export function mapLegacyStatus(rawStatus?: string): {
+  status: IncidentStatus;
+  changed: boolean;
+} {
+  const upper = String(rawStatus || '').trim().toUpperCase();
+  switch (upper) {
+    case 'NEW':
+    case 'AI_INTAKE':
+    case 'AWAITING_OPERATOR':
+      return { status: 'New', changed: rawStatus !== 'New' };
+    case 'UNDER_REVIEW':
+    case 'VERIFIED':
+      return { status: 'Under Review', changed: rawStatus !== 'Under Review' };
+    case 'UNIT_ASSIGNED':
+    case 'RESPONDING':
+    case 'ON_SCENE':
+    case 'DISPATCHED':
+      return { status: 'Dispatched', changed: rawStatus !== 'Dispatched' };
+    case 'PATIENT_TRANSPORT':
+    case 'PATIENT TRANSPORT':
+      return { status: 'Patient Transport', changed: rawStatus !== 'Patient Transport' };
+    case 'RESOLVED':
+    case 'CLOSED':
+      return { status: 'Closed', changed: rawStatus !== 'Closed' };
+    default:
+      return { status: 'New', changed: rawStatus !== 'New' };
+  }
+}
+
+export function mapLegacyUnitAvailability(rawAvail?: string): UnitAvailability {
+  const upper = String(rawAvail || '').trim().toUpperCase();
+  switch (upper) {
+    case 'AVAILABLE':
+      return 'Available';
+    case 'ASSIGNED':
+    case 'ACKNOWLEDGED':
+    case 'EN_ROUTE':
+    case 'RESPONDING':
+      return 'Responding';
+    case 'ON_SCENE':
+    case 'AT SCENE':
+      return 'At Scene';
+    case 'TRANSPORTING':
+      return 'Transporting';
+    default:
+      return 'Unavailable';
+  }
+}
+
+export interface MigrationResult {
+  db: RespondaDatabase;
+  migrated: boolean;
+  backupPath?: string;
+}
+
+export async function migrateDatabaseIfNeeded(
+  rawDb: Record<string, unknown>,
+  options: { backupDir?: string; writeBackup?: boolean } = {}
+): Promise<MigrationResult> {
+  const nowIso = new Date().toISOString();
+  const allowedChannels = ['DISPATCH_ALERT', 'DEMO_SMS', 'SYSTEM_ALERT'];
+  const allowedCallChannels = ['WEB_TEXT', 'WEB_VOICE', 'TELEPHONY_ADAPTER', 'DEMO_SCENARIO'];
+
+  const rawSchemaVersion = Number(rawDb.schemaVersion || 1);
+  const needsMigration = rawSchemaVersion < 2;
+
+  let backupPath: string | undefined;
+  if (needsMigration && options.writeBackup !== false) {
+    const dir = options.backupDir || DATA_DIR;
+    await fs.mkdir(dir, { recursive: true });
+    const stamp = nowIso.replace(/[:.]/g, '-');
+    backupPath = path.join(dir, `responda-db.backup-v1-${stamp}.json`);
+    await fs.writeFile(backupPath, JSON.stringify(rawDb, null, 2), 'utf-8');
+  }
+
+  const rawIncidents = Array.isArray(rawDb.incidents)
+    ? (rawDb.incidents as Array<Record<string, unknown>>)
+    : [];
+  const rawUnits = Array.isArray(rawDb.units)
+    ? (rawDb.units as Array<Record<string, unknown>>)
+    : [];
+  const rawNotifications = Array.isArray(rawDb.notifications)
+    ? (rawDb.notifications as Array<Record<string, unknown>>)
+    : [];
+
+  const incidents: IncidentRecord[] = rawIncidents.map((raw) => {
+    const inc = raw as unknown as IncidentRecord;
+    const isMedicalCategory = MEDICAL_CATEGORY_SET.has(inc.category);
+    const { priority, changed: priChanged } = mapLegacyPriority(String(inc.priority || ''));
+    const { status: mappedStatus, changed: statusChanged } = mapLegacyStatus(String(inc.status || ''));
+
+    // Non-medical legacy records are archived read-only without erasing or rewriting original timeline events
+    const legacyOutOfScope = Boolean(inc.legacyOutOfScope) || !isMedicalCategory;
+    const finalStatus: IncidentStatus = legacyOutOfScope ? 'Closed' : mappedStatus;
+
+    return {
+      ...inc,
+      priority,
+      status: finalStatus,
+      legacyOutOfScope: legacyOutOfScope || undefined,
+      legacyPriorityOriginal:
+        inc.legacyPriorityOriginal || (priChanged ? String(inc.priority) : undefined),
+      legacyStatusOriginal:
+        inc.legacyStatusOriginal || (statusChanged ? String(inc.status) : undefined),
+      closedAt:
+        finalStatus === 'Closed'
+          ? inc.closedAt || inc.resolvedAt || inc.updatedAt || nowIso
+          : inc.closedAt,
+      callChannel: allowedCallChannels.includes(inc.callChannel)
+        ? inc.callChannel
+        : 'TELEPHONY_ADAPTER',
+      // Preserve historical timeline verbatim without rewriting past audit entries
+      timeline: Array.isArray(inc.timeline) ? inc.timeline : [],
+    };
+  });
+
+  const units: ResponseUnit[] = rawUnits.map((raw) => {
+    const u = raw as unknown as ResponseUnit & { unitType?: string };
+    const isMedicalType =
+      u.unitType === 'Ambulance' || u.unitType === 'Rapid response vehicle';
+    const legacyOutOfScope = Boolean(u.legacyOutOfScope) || !isMedicalType;
+
+    return {
+      ...u,
+      unitType: isMedicalType ? u.unitType : 'Rapid response vehicle',
+      legacyUnitType: u.legacyUnitType || (!isMedicalType ? String(u.unitType) : undefined),
+      legacyOutOfScope: legacyOutOfScope || undefined,
+      registrationStatus: legacyOutOfScope
+        ? 'Inactive'
+        : u.registrationStatus === 'Inactive'
+        ? 'Inactive'
+        : 'Active',
+      availability: legacyOutOfScope
+        ? 'Unavailable'
+        : mapLegacyUnitAvailability(String(u.availability || 'Available')),
+      currentAssignmentId: legacyOutOfScope ? undefined : u.currentAssignmentId,
+      vehicleRegistration: u.vehicleRegistration || `LAS-${u.id.slice(-3)}`,
+      operationalBase: u.operationalBase || `${u.area || 'Lagos'} Medical Station`,
+      crewMembers: Array.isArray(u.crewMembers) ? u.crewMembers : [],
+      medicalCapabilities: Array.isArray(u.medicalCapabilities)
+        ? u.medicalCapabilities
+        : u.unitType === 'Ambulance'
+        ? ['Basic Life Support (BLS)', 'Patient transport', 'Oxygen support']
+        : ['Basic Life Support (BLS)', 'Oxygen support'],
+      locationFreshness: u.locationFreshness || 'LAST_KNOWN',
+      activityLog: Array.isArray(u.activityLog) ? u.activityLog : [],
+    };
+  });
+
+  const notifications: NotificationLog[] = rawNotifications.map((raw) => {
+    const n = raw as unknown as NotificationLog;
+    return {
+      ...n,
+      channel: allowedChannels.includes(n.channel) ? n.channel : 'DISPATCH_ALERT',
+    };
+  });
+
+  const staffAccounts = Array.isArray(rawDb.staffAccounts) && rawDb.staffAccounts.length > 0
+    ? (rawDb.staffAccounts as StaffAccount[])
+    : createDefaultStaffAccounts(nowIso);
+
+  const organisationSettings =
+    rawDb.organisationSettings && typeof rawDb.organisationSettings === 'object'
+      ? {
+          ...createDefaultOrganisationSettings(),
+          ...(rawDb.organisationSettings as Partial<OrganisationSettings>),
+        }
+      : createDefaultOrganisationSettings();
+
+  const sequenceCounter =
+    typeof rawDb.sequenceCounter === 'number' && Number.isFinite(rawDb.sequenceCounter)
+      ? rawDb.sequenceCounter
+      : 1049;
+
+  return {
+    db: {
+      schemaVersion: 2,
+      incidents,
+      units,
+      notifications,
+      staffAccounts,
+      organisationSettings,
+      sequenceCounter,
+    },
+    migrated: needsMigration,
+    backupPath,
   };
 }
 
@@ -767,23 +948,13 @@ class StoreManager {
     await fs.mkdir(DATA_DIR, { recursive: true });
     try {
       const raw = await fs.readFile(DB_PATH, 'utf-8');
-      const parsed = JSON.parse(raw) as RespondaDatabase;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (Array.isArray(parsed.incidents) && Array.isArray(parsed.units)) {
-        // Normalize any legacy channel identifiers from older persisted demo databases
-        const allowedChannels = ['DISPATCH_ALERT', 'DEMO_SMS', 'SYSTEM_ALERT'];
-        const allowedCallChannels = ['WEB_TEXT', 'WEB_VOICE', 'TELEPHONY_ADAPTER', 'DEMO_SCENARIO'];
-        parsed.notifications = (parsed.notifications || []).map((n) => ({
-          ...n,
-          channel: allowedChannels.includes(n.channel) ? n.channel : 'DISPATCH_ALERT',
-        }));
-        parsed.incidents = parsed.incidents.map((inc) => ({
-          ...inc,
-          callChannel: allowedCallChannels.includes(inc.callChannel)
-            ? inc.callChannel
-            : 'TELEPHONY_ADAPTER',
-        }));
-        this.db = parsed;
-        await this.persist();
+        const result = await migrateDatabaseIfNeeded(parsed, { backupDir: DATA_DIR });
+        this.db = result.db;
+        if (result.migrated) {
+          await this.persist();
+        }
         return this.db;
       }
     } catch {

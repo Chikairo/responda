@@ -14,15 +14,27 @@ interface OperatorGuideModalProps {
   onStartDemoScenario: () => void;
 }
 
-const WORKFLOW_OVERVIEW = [
-  { step: '1. New Incident', detail: 'An emergency report arrives from AI Intake or a human operator.' },
-  { step: '2. Gather Information', detail: 'AI captures category, people affected, and danger clues calmly.' },
-  { step: '3. Verify Location', detail: 'Operator confirms the exact Lagos street, landmark, and map pin.' },
-  { step: '4. Review Incident', detail: 'Operator takes over control to check priority and missing details.' },
-  { step: '5. Select Unit', detail: 'Compare available Lagos ambulances, patrol, or rescue units.' },
-  { step: '6. Approve Dispatch', detail: 'A human dispatcher confirms the unit assignment—AI never dispatches alone.' },
-  { step: '7. Track Response', detail: 'Follow unit acknowledgement, en-route status, and arrival on scene.' },
-  { step: '8. Close Incident', detail: 'Confirm outcome with a short reason and archive the full audit log.' },
+const WORKFLOW_MILESTONES = [
+  {
+    step: '1. Report and Intake',
+    detail: 'Medical report arrives via AI intake or operator entry; review caller transcript and symptoms.',
+  },
+  {
+    step: '2. Assessment and Verification',
+    detail: 'Human Operations Staff take over, assess clinical priority (flagging Unassessed cases), and verify the Lagos location.',
+  },
+  {
+    step: '3. Unit Dispatch',
+    detail: 'Compare active ambulances and rapid medical units by medical capabilities and distance, then approve dispatch.',
+  },
+  {
+    step: '4. Response and Transport',
+    detail: 'Track unit arrival at scene, patient pickup, receiving hospital selection & confirmation, and transport arrival.',
+  },
+  {
+    step: '5. Closure',
+    detail: 'Record patient outcome summary, release unit back to Available, and archive permanently in Incident History.',
+  },
 ];
 
 export function OperatorGuideModal({
@@ -45,10 +57,10 @@ export function OperatorGuideModal({
                 id="operator-guide-title"
                 className="font-display text-base font-bold text-slate-900 dark:text-slate-50"
               >
-                First-Time Operator Guide
+                Operations Staff Quick Guide
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Everything you need to orient yourself quickly under pressure
+                Medical emergency dispatch workflow across 5 structured milestones
               </p>
             </div>
           </div>
@@ -63,7 +75,6 @@ export function OperatorGuideModal({
         </div>
 
         <div className="p-5 overflow-y-auto space-y-5 text-xs">
-          {/* 3 Core Questions */}
           <section className="space-y-2.5">
             <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
               Every Screen Answers Three Questions
@@ -75,7 +86,7 @@ export function OperatorGuideModal({
                   <span>1. What is happening?</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Top counts, map pins, and status badges show active incidents and available units at a glance.
+                  Command Centre KPIs, Lagos map markers, and unit badges show open medical emergencies and available fleet.
                 </p>
               </div>
               <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3.5 space-y-1">
@@ -84,7 +95,7 @@ export function OperatorGuideModal({
                   <span>2. What needs my attention?</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  The Situation Briefing highlights critical calls waiting for human takeover or unverified locations.
+                  Unassessed incidents, new calls waiting for takeover, and unverified locations are highlighted first.
                 </p>
               </div>
               <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3.5 space-y-1">
@@ -93,19 +104,18 @@ export function OperatorGuideModal({
                   <span>3. What should I do next?</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Inside any incident, the 8-step bar highlights the exact current step and offers a 1-click next action.
+                  Inside Incident Management, the 5-milestone bar guides you directly to the next required human decision.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* 8-Step Guided Operational Workflow */}
           <section className="space-y-2.5">
             <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-              8-Step Guided Operational Workflow
+              5 Grouped Incident Milestones
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {WORKFLOW_OVERVIEW.map((item) => (
+              {WORKFLOW_MILESTONES.map((item) => (
                 <div
                   key={item.step}
                   className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 flex items-start gap-2.5"
@@ -120,15 +130,14 @@ export function OperatorGuideModal({
             </div>
           </section>
 
-          {/* Human Control Safety Principle */}
           <section className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/35 p-3.5 flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <div className="font-semibold text-emerald-800 dark:text-emerald-200">
-                Human-Controlled Safety Rule
+                Human-Controlled Medical Safety Rule
               </div>
               <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                AI assists with calm caller intake and priority suggestions, but never dispatches response units, never verifies locations automatically from GPS alone, and never closes an incident without explicit human confirmation.
+                AI assists with caller triage and flags incomplete information as Unassessed, but never dispatches medical units, never auto-verifies coordinates, and never chooses hospitals without human confirmation.
               </p>
             </div>
           </section>
@@ -143,7 +152,7 @@ export function OperatorGuideModal({
             }}
             className="px-4 py-2 rounded-lg bg-white hover:bg-slate-100 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-blue-700 dark:text-blue-300"
           >
-            Try Live Simulation
+            Run 9-Stage Live Simulation
           </button>
           <button
             type="button"

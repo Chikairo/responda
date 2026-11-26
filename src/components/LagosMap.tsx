@@ -6,11 +6,11 @@ import {
   Layers,
   LocateFixed,
   MapPin,
+  Minus,
   Navigation,
   Plus,
-  Minus,
 } from 'lucide-react';
-import {
+import type {
   IncidentRecord,
   ResponseUnit,
   RouteResult,
@@ -18,6 +18,7 @@ import {
 import { formatDistanceKm, formatDurationMinutes, formatRelativeTime } from '../utils/incidentLogic';
 import {
   IncidentStatusBadge,
+  LocationFreshnessBadge,
   LocationSourceBadge,
   PriorityBadge,
   UnitAvailabilityBadge,
@@ -48,22 +49,22 @@ const LAGOS_CENTER: [number, number] = [6.505, 3.392];
 
 function getIncidentColor(priority: IncidentRecord['priority']): string {
   switch (priority) {
-    case 'CRITICAL':
+    case 'Critical':
       return '#EF4444';
-    case 'HIGH':
+    case 'Urgent':
       return '#F97316';
-    case 'MEDIUM':
-      return '#EAB308';
-    case 'LOW':
+    case 'Standard':
       return '#22C55E';
+    case 'Unassessed':
+    default:
+      return '#D97706';
   }
 }
 
 function getUnitColor(unit: ResponseUnit): string {
-  if (unit.availability === 'AVAILABLE') return '#22C55E';
-  if (unit.availability === 'UNAVAILABLE') return '#64748B';
-  if (unit.unitType === 'Security patrol') return '#3B82F6';
-  if (unit.unitType === 'Fire-response partner') return '#F97316';
+  if (unit.availability === 'Available') return '#22C55E';
+  if (unit.availability === 'Unavailable') return '#64748B';
+  if (unit.availability === 'Transporting') return '#0EA5E9';
   return '#06B6D4';
 }
 
@@ -77,6 +78,7 @@ function createIncidentIcon(
   const ring = selected
     ? `<span style="position:absolute;inset:-6px;border-radius:9999px;border:2px solid ${ringBorder};background:${color}22;"></span>`
     : '';
+  const symbol = incident.priority === 'Unassessed' ? '?' : '!';
   return L.divIcon({
     className: 'responda-incident-marker',
     iconSize: [28, 28],
@@ -85,7 +87,7 @@ function createIncidentIcon(
       ${ring}
       <div style="width:22px;height:22px;border-radius:9999px;background:${color};border:2px solid ${
       isDarkTiles ? '#0B1220' : '#FFFFFF'
-    };color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(15,23,42,0.35);">!</div>
+    };color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(15,23,42,0.35);">${symbol}</div>
     </div>`,
   });
 }
@@ -96,16 +98,7 @@ function createUnitIcon(
   isDarkTiles: boolean
 ): L.DivIcon {
   const color = getUnitColor(unit);
-  const shortTag =
-    unit.unitType === 'Ambulance'
-      ? 'A'
-      : unit.unitType === 'Security patrol'
-      ? 'S'
-      : unit.unitType === 'Fire-response partner'
-      ? 'F'
-      : unit.unitType === 'Rescue team'
-      ? 'R'
-      : 'V';
+  const shortTag = unit.unitType === 'Ambulance' ? 'A' : 'R';
   const bg = isDarkTiles ? '#111C2E' : '#FFFFFF';
   const selectedBorder = isDarkTiles ? '#F8FAFC' : '#0F172A';
 
@@ -259,7 +252,6 @@ export function LagosMap({
 
     group.clearLayers();
 
-    // Draw route if available
     if (route?.available && route.coordinates && route.coordinates.length > 1) {
       L.polyline(route.coordinates, {
         color: route.isSimulatedFallback ? '#22D3EE' : '#3B82F6',
@@ -269,7 +261,6 @@ export function LagosMap({
       }).addTo(group);
     }
 
-    // Draw hospital onward route if provided
     if (hospitalRouteCoordinates && hospitalRouteCoordinates.length > 1) {
       L.polyline(hospitalRouteCoordinates, {
         color: '#10B981',
@@ -281,35 +272,36 @@ export function LagosMap({
 
     const isDarkTiles = tileMode === 'dark';
 
-    // Draw hospital destination marker
     if (hospitalMarker && Number.isFinite(hospitalMarker.lat) && Number.isFinite(hospitalMarker.lng)) {
       const hMarker = L.marker([hospitalMarker.lat, hospitalMarker.lng], {
         icon: createHospitalIcon(isDarkTiles),
         zIndexOffset: 200,
       });
       hMarker.bindTooltip(
-        `${hospitalMarker.name} (Demo Hospital Destination)`,
+        `${hospitalMarker.name} (Confirmed Receiving Hospital)`,
         { direction: 'top', offset: [0, -12] }
       );
       hMarker.addTo(group);
     }
 
-    // Draw unit markers
     for (const unit of units) {
+      if (unit.registrationStatus === 'Inactive' || unit.legacyOutOfScope) continue;
       const marker = L.marker([unit.lat, unit.lng], {
         icon: createUnitIcon(unit, unit.id === selectedUnitId, isDarkTiles),
       });
-      marker.bindTooltip(`${unit.callsign} (${unit.availability.replace('_', ' ')})`, {
-        direction: 'top',
-        offset: [0, -10],
-      });
+      marker.bindTooltip(
+        `${unit.callsign} (${unit.availability} · ${unit.locationFreshness})`,
+        {
+          direction: 'top',
+          offset: [0, -10],
+        }
+      );
       marker.on('click', () => {
         onSelectUnit?.(unit.id);
       });
       marker.addTo(group);
     }
 
-    // Draw incident markers
     for (const inc of incidents) {
       if (typeof inc.location.lat !== 'number' || typeof inc.location.lng !== 'number') {
         continue;
@@ -328,7 +320,7 @@ export function LagosMap({
       });
       marker.addTo(group);
     }
-    // Draw subtle animated radar rings for location resolution when active
+
     if (radarCoords && Number.isFinite(radarCoords[0]) && Number.isFinite(radarCoords[1])) {
       const radarIcon = L.divIcon({
         className: 'responda-radar-overlay',
@@ -363,7 +355,6 @@ export function LagosMap({
     ? focusBoundsPoints.map((p) => `${p[0].toFixed(4)},${p[1].toFixed(4)}`).join('|')
     : '';
 
-  // Frame route / incident + unit cleanly when focusBoundsPoints changes significantly, or center on selected incident
   useEffect(() => {
     setCardDismissed(false);
     const map = mapRef.current;
@@ -424,7 +415,6 @@ export function LagosMap({
         } w-full h-full z-0`}
       />
 
-      {/* Map Controls Top-Left */}
       <div className="absolute top-3 left-3 z-[400] flex flex-col gap-1.5">
         <button
           type="button"
@@ -453,7 +443,6 @@ export function LagosMap({
         </button>
       </div>
 
-      {/* Tile switcher & editable hint Top-Right */}
       <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
         {editablePin && (
           <div className="px-2.5 py-1.5 rounded-lg bg-blue-600/95 text-white text-xs font-medium border border-blue-400/50 shadow-sm">
@@ -476,7 +465,6 @@ export function LagosMap({
         </div>
       )}
 
-      {/* Floating Info Panel for Selected Incident or Unit */}
       {showInfoCard && !cardDismissed && (selectedIncident || selectedUnit) && (
         <div className="absolute bottom-11 left-3 right-3 sm:right-auto sm:w-72 z-[400] rounded-xl bg-white/95 border border-slate-200 dark:bg-[#111C2E]/95 dark:border-[#26364B] p-3 shadow-xl backdrop-blur-sm">
           <button
@@ -524,7 +512,7 @@ export function LagosMap({
                   <Navigation className="w-3 h-3" />
                   <span>
                     Assigned: {assignedUnitForSelected.callsign} (
-                    {assignedUnitForSelected.availability.replace('_', ' ')})
+                    {assignedUnitForSelected.availability})
                   </span>
                 </div>
               )}
@@ -552,7 +540,7 @@ export function LagosMap({
                   onClick={() => onOpenIncidentWorkspace(selectedIncident.id)}
                   className="w-full mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
                 >
-                  <span>Open Incident Workspace</span>
+                  <span>Open in Incident Management</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -561,7 +549,9 @@ export function LagosMap({
             <div className="space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{selectedUnit.id}</div>
+                  <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                    {selectedUnit.id} · {selectedUnit.vehicleRegistration}
+                  </div>
                   <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                     {selectedUnit.callsign}
                   </div>
@@ -571,8 +561,11 @@ export function LagosMap({
                 </div>
                 <UnitAvailabilityBadge availability={selectedUnit.availability} />
               </div>
-              <div className="text-xs text-slate-700 dark:text-slate-300">
-                Location: {selectedUnit.locationName} ({selectedUnit.area})
+              <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+                <span>
+                  {selectedUnit.locationName} ({selectedUnit.area})
+                </span>
+                <LocationFreshnessBadge freshness={selectedUnit.locationFreshness} />
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200 dark:border-[#26364B]">
                 <span>
@@ -587,7 +580,6 @@ export function LagosMap({
         </div>
       )}
 
-      {/* Map Legend */}
       {showLegend && (
         <div className="absolute bottom-2 left-3 z-[400] hidden md:flex items-center gap-3 px-2.5 py-1 rounded-lg bg-white/95 border border-slate-200 text-[11px] text-slate-700 shadow-sm dark:bg-[#111C2E]/92 dark:border-[#26364B] dark:text-slate-300">
           <span className="inline-flex items-center gap-1">
@@ -596,11 +588,11 @@ export function LagosMap({
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-            High
+            Urgent
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
-            Medium
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
+            Unassessed
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm border border-emerald-500 bg-white dark:bg-[#111C2E]" />

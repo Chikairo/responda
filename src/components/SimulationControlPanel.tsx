@@ -3,8 +3,6 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  LogOut,
-  Maximize2,
   Pause,
   Play,
   RotateCcw,
@@ -12,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import {
+import type {
   SimulationRuntimeState,
   SimulationScenarioId,
 } from '../types/responda';
@@ -23,115 +21,32 @@ import {
 
 interface SimulationControlPanelProps {
   simState: SimulationRuntimeState;
-  immersiveOpen?: boolean;
   busy?: boolean;
   onPauseResume: () => void;
   onNextStep: () => void;
   onRestart: () => void;
-  onExitWorkspace?: () => void;
-  onReturnToWorkspace?: () => void;
   onEnd: () => void;
   onToggleAudio: () => void;
 }
 
-/**
- * Maps internal 10-step engine state into clear 9-stage judge presentation labels.
- */
-export function getPresentationStageMeta(stage: SimulationRuntimeState['stage']): {
-  stepNumber: number;
-  totalSteps: number;
-  title: string;
-  explanation: string;
-} {
-  switch (stage) {
-    case 1:
-      return {
-        stepNumber: 1,
-        totalSteps: 9,
-        title: 'Incoming Emergency Call',
-        explanation: 'A simulated Lagos emergency call is ringing into Responda alongside live location intelligence.',
-      };
-    case 2:
-    case 3:
-      return {
-        stepNumber: 2,
-        totalSteps: 9,
-        title: 'AI Conversation & Voice Intake',
-        explanation: 'Responda AI asks adaptive triage questions, speaks responses, and structures caller details live.',
-      };
-    case 4:
-      return {
-        stepNumber: 3,
-        totalSteps: 9,
-        title: 'Location Resolution',
-        explanation: 'Matching caller landmarks and Lagos coordinates while awaiting human operator verification.',
-      };
-    case 5:
-      return {
-        stepNumber: 4,
-        totalSteps: 9,
-        title: 'Human Operator Takeover',
-        explanation: 'Structured incident created. Transferring workflow responsibility from AI intake to a human operator.',
-      };
-    case 6:
-      return {
-        stepNumber: 5,
-        totalSteps: 9,
-        title: 'Incident Review',
-        explanation: 'Operator verifies location, hazards, priority, and transcript before selecting a response unit.',
-      };
-    case 7:
-      return {
-        stepNumber: 6,
-        totalSteps: 9,
-        title: 'Response Unit Selection',
-        explanation: 'Comparing available Lagos units by proximity and capability for the verified scene.',
-      };
-    case 8:
-      return {
-        stepNumber: 7,
-        totalSteps: 9,
-        title: 'Dispatch Approval',
-        explanation: 'Dedicated human authorization gate — explicit confirmation required before dispatch.',
-      };
-    case 9:
-      return {
-        stepNumber: 8,
-        totalSteps: 9,
-        title: 'Live Response Tracking',
-        explanation: 'Tracking the approved unit advancing along the Lagos route from Assigned to On Scene.',
-      };
-    case 10:
-      return {
-        stepNumber: 9,
-        totalSteps: 9,
-        title: 'Arrival & Incident Closure',
-        explanation: 'Unit has arrived On Scene. Operator reviews final summary and closes the incident.',
-      };
-  }
-}
-
 const PRESENTATION_STAGE_PIPS = [
   { step: 1, label: '1. Call' },
-  { step: 2, label: '2. AI Intake' },
+  { step: 2, label: '2. Intake' },
   { step: 3, label: '3. Location' },
-  { step: 4, label: '4. Takeover' },
-  { step: 5, label: '5. Review' },
+  { step: 4, label: '4. Created' },
+  { step: 5, label: '5. Takeover' },
   { step: 6, label: '6. Unit' },
   { step: 7, label: '7. Dispatch' },
-  { step: 8, label: '8. Tracking' },
+  { step: 8, label: '8. Transport' },
   { step: 9, label: '9. Closure' },
 ];
 
 export function SimulationControlPanel({
   simState,
-  immersiveOpen = true,
   busy = false,
   onPauseResume,
   onNextStep,
   onRestart,
-  onExitWorkspace,
-  onReturnToWorkspace,
   onEnd,
   onToggleAudio,
 }: SimulationControlPanelProps) {
@@ -141,61 +56,15 @@ export function SimulationControlPanel({
   const stageMeta =
     SIMULATION_STAGES.find((s) => s.stage === simState.stage) ||
     SIMULATION_STAGES[0];
-  const presentation = getPresentationStageMeta(simState.stage);
   const progressPct = simState.completed
     ? 100
-    : Math.round((presentation.stepNumber / presentation.totalSteps) * 100);
-
-  // Compact resume bar when user exited the immersive simulation view to inspect regular views
-  if (!immersiveOpen) {
-    return (
-      <div
-        data-testid="simulation-minimized-bar"
-        className="rounded-xl bg-white dark:bg-[#111C2E] border border-blue-200 dark:border-blue-500/40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs"
-      >
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-red-600 dark:text-red-400">
-            DEMO SIMULATION ACTIVE
-          </span>
-          <span className="text-slate-400" aria-hidden="true">·</span>
-          <span className="font-mono text-slate-700 dark:text-slate-200 tabular-nums">
-            Stage {presentation.stepNumber}/{presentation.totalSteps}: {presentation.title}
-          </span>
-          <span className="text-slate-400" aria-hidden="true">·</span>
-          <span className="font-mono text-slate-500 dark:text-slate-400">
-            {simState.incidentId || scenario.incidentId}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {onReturnToWorkspace && (
-            <button
-              type="button"
-              onClick={onReturnToWorkspace}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white whitespace-nowrap shrink-0 transition-colors"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-              <span>Return to Simulation Workspace</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onEnd}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-500/15 dark:hover:bg-red-500/25 border border-red-200 dark:border-red-500/35 text-xs font-semibold text-red-700 dark:text-red-300 whitespace-nowrap shrink-0 transition-colors"
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span>End Simulation</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
+    : Math.round((simState.stage / 9) * 100);
 
   return (
     <div
       data-testid="simulation-control-panel"
-      className="shrink-0 space-y-2"
+      className="shrink-0 space-y-2 mb-4"
     >
-      {/* Persistent Safety Notice & Controls Header */}
       <div
         role="status"
         className="rounded-lg bg-red-600 text-white px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold"
@@ -203,7 +72,7 @@ export function SimulationControlPanel({
         <div className="flex items-center gap-2 min-w-0">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">
-            DEMO SIMULATION — NO REAL EMERGENCY SERVICES CONNECTED.
+            LIVE DEMO SIMULATION — SYNCED ACROSS OPERATIONAL VIEWS (NO REAL EMERGENCY SERVICES CONNECTED).
           </span>
         </div>
         <div className="flex items-center gap-2 font-mono text-[11px] opacity-95 shrink-0">
@@ -213,13 +82,12 @@ export function SimulationControlPanel({
         </div>
       </div>
 
-      {/* Compact Stage Header & Toolbar */}
       <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-4 py-3 space-y-2.5">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div className="min-w-0 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span className="font-mono font-semibold text-blue-700 dark:text-blue-400 tabular-nums">
-                Stage {presentation.stepNumber} of {presentation.totalSteps}
+                Stage {simState.stage} of 9
               </span>
               <span aria-hidden="true">·</span>
               <span>
@@ -241,14 +109,11 @@ export function SimulationControlPanel({
             </div>
 
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <h1 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-50">
+              <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-50">
                 {simState.completed
-                  ? 'Simulation Completed — Incident Closed'
-                  : `${presentation.stepNumber}. ${presentation.title}`}
-              </h1>
-              <p className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-2xl">
-                {presentation.explanation}
-              </p>
+                  ? 'Simulation Completed — Archived Read-Only in Incident History'
+                  : `${stageMeta.stage}. ${stageMeta.title}`}
+              </h2>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300">
@@ -259,7 +124,6 @@ export function SimulationControlPanel({
             </p>
           </div>
 
-          {/* Demonstration Toolbar Controls */}
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             {!simState.completed && (
               <>
@@ -321,18 +185,6 @@ export function SimulationControlPanel({
               <span>Restart</span>
             </button>
 
-            {onExitWorkspace && (
-              <button
-                type="button"
-                onClick={onExitWorkspace}
-                data-testid="exit-simulation-button"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap shrink-0 transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Exit Simulation</span>
-              </button>
-            )}
-
             <button
               type="button"
               onClick={onEnd}
@@ -344,15 +196,12 @@ export function SimulationControlPanel({
           </div>
         </div>
 
-        {/* Clean 9-Stage Progress Strip */}
         <div className="space-y-1.5 pt-1.5 border-t border-slate-200 dark:border-[#26364B]">
           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
             <div className="hidden md:grid md:grid-cols-9 gap-1.5 flex-1 mr-4">
               {PRESENTATION_STAGE_PIPS.map((item) => {
-                const done =
-                  presentation.stepNumber > item.step || simState.completed;
-                const current =
-                  presentation.stepNumber === item.step && !simState.completed;
+                const done = simState.stage > item.step || simState.completed;
+                const current = simState.stage === item.step && !simState.completed;
                 return (
                   <div
                     key={item.step}
@@ -371,23 +220,17 @@ export function SimulationControlPanel({
               })}
             </div>
             <span className="md:hidden font-medium text-slate-700 dark:text-slate-200">
-              {presentation.stepNumber}. {presentation.title}
+              {stageMeta.shortLabel}
             </span>
             <span className="font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-200 shrink-0">
               {progressPct}%
             </span>
           </div>
-          <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-[#0B1220] overflow-hidden md:hidden">
-            <div
-              className="h-full rounded-full bg-blue-600 transition-all duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
         </div>
 
         {!simState.speechSupported && (
           <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-1">
-            Browser speech synthesis unavailable — live text transcript, speaker labels, and animated call indicators remain active.
+            Browser speech synthesis unavailable — live text transcript and call indicators remain active.
           </div>
         )}
       </div>

@@ -3,42 +3,58 @@ import {
   AlertOctagon,
   AlertTriangle,
   ArrowLeft,
+  Building2,
   CheckCircle2,
   Clock,
   FileText,
-  Headphones,
+  History,
   LocateFixed,
+  Lock,
   MapPin,
+  MessageSquare,
   Navigation,
+  PanelLeft,
+  PanelRight,
+  Send,
   ShieldCheck,
+  Stethoscope,
   Truck,
   UserCheck,
   Users,
+  X,
 } from 'lucide-react';
-import {
+import type {
+  ClinicalDetails,
+  HospitalDestination,
   IncidentPriority,
   IncidentRecord,
   IncidentStatus,
+  MedicalEmergencyCategory,
   ResponseUnit,
   RouteResult,
   SimulationRuntimeState,
   UserRole,
 } from '../types/responda';
 import {
+  canAddNote,
   canApproveDispatch,
   canTakeOver,
   canUpdateIncidentStatus,
-  canUpdateUnitStatus,
   canVerifyIncident,
   formatDistanceKm,
   formatDurationMinutes,
   formatRelativeTime,
   INCIDENT_STATUS_ORDER,
+  isActiveIncidentStatus,
+  MEDICAL_CATEGORIES,
 } from '../utils/incidentLogic';
-import { computeIncidentWorkflow } from '../utils/guidedWorkflow';
+import {
+  computeIncidentWorkflow,
+  type IncidentWorkspaceTabId,
+} from '../utils/guidedWorkflow';
 import {
   buildLocationIntelligenceMethods,
-  buildSimulationFinalSummary,
+  LAGOS_HOSPITAL_DESTINATIONS,
   rankUnitsForIncident,
 } from '../utils/simulationEngine';
 import { ConfirmActionModal } from './ConfirmActionModal';
@@ -46,32 +62,63 @@ import { DispatchConfirmModal } from './DispatchConfirmModal';
 import { LagosMap } from './LagosMap';
 import {
   IncidentStatusBadge,
+  LegacyBadge,
+  LocationFreshnessBadge,
   LocationSourceBadge,
   PriorityBadge,
   UnitAvailabilityBadge,
   VerificationBadge,
 } from './StatusBadges';
 
-export type WorkspaceTab =
-  | 'overview'
-  | 'transcript'
-  | 'location'
-  | 'units'
-  | 'timeline'
-  | 'notes';
+export interface IncidentWorkspaceDraft {
+  summary?: string;
+  category?: MedicalEmergencyCategory;
+  priority?: IncidentPriority;
+  priorityReason?: string;
+  peopleAffected?: string;
+  immediateDanger?: boolean;
+  dangerDetails?: string;
+  clinicalDetails?: ClinicalDetails;
+  correctedDesc?: string;
+  landmark?: string;
+  area?: string;
+  pinLat?: number;
+  pinLng?: number;
+  noteText?: string;
+  operatorReply?: string;
+}
 
 interface IncidentWorkspaceProps {
   incident: IncidentRecord;
+  incidents: IncidentRecord[];
   units: ResponseUnit[];
   userRole: UserRole;
   operatorName: string;
-  initialTab?: WorkspaceTab;
+  authFetch: typeof fetch;
+  readOnly?: boolean;
+  initialTab?: IncidentWorkspaceTabId;
   simState?: SimulationRuntimeState;
   carrierConfigured?: boolean;
   preselectedUnitId?: string | null;
+  requireLocationVerificationBeforeDispatch?: boolean;
+  draft?: IncidentWorkspaceDraft;
+  onUpdateDraft?: (incidentId: string, patch: Partial<IncidentWorkspaceDraft>) => void;
   onBack: () => void;
-  onOpenConversation?: (id: string) => void;
+  onSelectIncident: (id: string) => void;
   onTakeOver: (id: string) => Promise<void>;
+  onUpdateMedicalDetails: (
+    id: string,
+    payload: {
+      category?: MedicalEmergencyCategory;
+      priority?: IncidentPriority;
+      priorityReason?: string;
+      peopleAffected?: number | null;
+      immediateDanger?: boolean;
+      dangerDetails?: string;
+      clinicalDetails?: ClinicalDetails;
+      summary?: string;
+    }
+  ) => Promise<void>;
   onVerifyLocation: (
     id: string,
     payload: {
@@ -81,9 +128,6 @@ interface IncidentWorkspaceProps {
       lat?: number;
       lng?: number;
       markVerified: boolean;
-      summary?: string;
-      priority?: IncidentPriority;
-      peopleAffected?: number | null;
     }
   ) => Promise<void>;
   onUpdateStatus: (id: string, status: IncidentStatus, reason: string) => Promise<void>;
@@ -93,92 +137,134 @@ interface IncidentWorkspaceProps {
     notes: string,
     notifySms: boolean
   ) => Promise<void>;
-  onUpdateUnitStatus: (
-    unitId: string,
-    availability: ResponseUnit['availability'] | 'COMPLETED' | 'CANCELLED'
+  onTransportEvent: (
+    id: string,
+    payload: {
+      event:
+        | 'ARRIVED_ON_SCENE'
+        | 'PATIENT_PICKED_UP'
+        | 'CONFIRM_HOSPITAL'
+        | 'TRANSPORT_STARTED'
+        | 'HOSPITAL_ARRIVED'
+        | 'CLOSE_INCIDENT';
+      hospitalDestination?: HospitalDestination;
+      outcomeText?: string;
+    }
   ) => Promise<void>;
   onAddNote: (id: string, text: string) => Promise<void>;
+  onSendOperatorMessage: (id: string, text: string) => Promise<void>;
   onRouteCalculated?: (route: RouteResult | null) => void;
 }
 
 export function IncidentWorkspace({
   incident,
+  incidents,
   units,
   userRole,
   operatorName,
-  initialTab = 'overview',
+  authFetch,
+  readOnly = false,
+  initialTab = 'workflow',
   simState,
   carrierConfigured = false,
   preselectedUnitId = null,
+  requireLocationVerificationBeforeDispatch = true,
+  draft,
+  onUpdateDraft,
   onBack,
-  onOpenConversation,
+  onSelectIncident,
   onTakeOver,
+  onUpdateMedicalDetails,
   onVerifyLocation,
   onUpdateStatus,
   onDispatchUnit,
-  onUpdateUnitStatus,
+  onTransportEvent,
   onAddNote,
+  onSendOperatorMessage,
   onRouteCalculated,
 }: IncidentWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
+  const isLocked = readOnly || incident.status === 'Closed' || Boolean(incident.legacyOutOfScope);
+  const [activeTab, setActiveTab] = useState<IncidentWorkspaceTabId>(initialTab);
   const [busy, setBusy] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab, incident.id]);
 
-  // Location editing state
-  const [correctedDesc, setCorrectedDesc] = useState(
-    incident.location.correctedDescription || incident.location.description
-  );
-  const [landmark, setLandmark] = useState(incident.location.landmark || '');
-  const [area, setArea] = useState(incident.location.area || '');
-  const [pinLat, setPinLat] = useState<number | undefined>(incident.location.lat);
-  const [pinLng, setPinLng] = useState<number | undefined>(incident.location.lng);
+  // Controlled values backed by per-incident draft cache when available
+  const editSummary = draft?.summary ?? incident.summary;
+  const editCategory = (draft?.category ?? incident.category) as MedicalEmergencyCategory;
+  const editPriority = draft?.priority ?? incident.priority;
+  const editPriorityReason = draft?.priorityReason ?? incident.priorityReason;
+  const editPeopleAffected =
+    draft?.peopleAffected ??
+    (incident.peopleAffected !== null ? String(incident.peopleAffected) : '');
+  const editImmediateDanger = draft?.immediateDanger ?? incident.immediateDanger;
+  const editDangerDetails = draft?.dangerDetails ?? (incident.dangerDetails || '');
+  const editClinical: ClinicalDetails = draft?.clinicalDetails ?? (incident.clinicalDetails || {});
 
-  // Overview editing state
-  const [editSummary, setEditSummary] = useState(incident.summary);
-  const [editPriority, setEditPriority] = useState<IncidentPriority>(incident.priority);
+  const correctedDesc =
+    draft?.correctedDesc ??
+    (incident.location.correctedDescription || incident.location.description);
+  const landmark = draft?.landmark ?? (incident.location.landmark || '');
+  const area = draft?.area ?? (incident.location.area || '');
+  const pinLat = draft?.pinLat ?? incident.location.lat;
+  const pinLng = draft?.pinLng ?? incident.location.lng;
+
+  const noteText = draft?.noteText ?? '';
+  const operatorReply = draft?.operatorReply ?? '';
+
+  const setDraft = (patch: Partial<IncidentWorkspaceDraft>) => {
+    onUpdateDraft?.(incident.id, patch);
+  };
+
+  // Status update controls
   const [statusTarget, setStatusTarget] = useState<IncidentStatus>(incident.status);
   const [statusReason, setStatusReason] = useState('');
+  useEffect(() => {
+    setStatusTarget(incident.status);
+    setStatusReason('');
+  }, [incident.id, incident.status]);
 
   // Dispatch & Route state
   const [candidateUnitId, setCandidateUnitId] = useState<string | null>(
     incident.assignedUnitId || preselectedUnitId || null
   );
   const [route, setRoute] = useState<RouteResult | null>(null);
-  const [routeLoading, setRouteLoading] = useState(false);
-  const [allowSimRoute, setAllowSimRoute] = useState(Boolean(incident.isSimulated));
   const [confirmUnit, setConfirmUnit] = useState<ResponseUnit | null>(null);
+  const [confirmClosure, setConfirmClosure] = useState<{ defaultReason: string } | null>(null);
 
-  // Notes state
-  const [noteText, setNoteText] = useState('');
+  // Hospital selector state for Milestone 4
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(
+    incident.hospitalDestination?.id || LAGOS_HOSPITAL_DESTINATIONS[0]?.id || 'hosp-luth'
+  );
+  const [customHospitalMode, setCustomHospitalMode] = useState(
+    Boolean(incident.hospitalDestination?.isCustom)
+  );
+  const [customHospName, setCustomHospName] = useState(
+    incident.hospitalDestination?.isCustom ? incident.hospitalDestination.name : ''
+  );
+  const [customHospArea, setCustomHospArea] = useState(
+    incident.hospitalDestination?.isCustom ? incident.hospitalDestination.area : 'Lagos'
+  );
+  const [customHospLat, setCustomHospLat] = useState<string>(
+    incident.hospitalDestination?.isCustom ? String(incident.hospitalDestination.lat) : '6.5244'
+  );
+  const [customHospLng, setCustomHospLng] = useState<string>(
+    incident.hospitalDestination?.isCustom ? String(incident.hospitalDestination.lng) : '3.3792'
+  );
 
-  // Confirmation modal for closing/resolving incident
-  const [confirmClosure, setConfirmClosure] = useState<{
-    targetStatus: 'RESOLVED' | 'CLOSED';
-    defaultReason: string;
-  } | null>(null);
-
-  // Sync local fields when incident or preselectedUnitId updates
   useEffect(() => {
-    setCorrectedDesc(
-      incident.location.correctedDescription || incident.location.description
-    );
-    setLandmark(incident.location.landmark || '');
-    setArea(incident.location.area || '');
-    setPinLat(incident.location.lat);
-    setPinLng(incident.location.lng);
-    setEditSummary(incident.summary);
-    setEditPriority(incident.priority);
-    setStatusTarget(incident.status);
-    setAllowSimRoute(Boolean(incident.isSimulated));
     if (incident.assignedUnitId) {
       setCandidateUnitId(incident.assignedUnitId);
     } else if (preselectedUnitId) {
       setCandidateUnitId(preselectedUnitId);
+    } else {
+      setCandidateUnitId(null);
     }
-  }, [incident, preselectedUnitId]);
+  }, [incident.id, incident.assignedUnitId, preselectedUnitId]);
 
   const assignedUnit = incident.assignedUnitId
     ? units.find((u) => u.id === incident.assignedUnitId) || null
@@ -188,16 +274,16 @@ export function IncidentWorkspace({
     ? units.find((u) => u.id === candidateUnitId) || null
     : assignedUnit;
 
-  const isSimIncident = Boolean(
-    simState?.active && simState.incidentId === incident.id
-  );
+  const isSimIncident = Boolean(simState?.active && simState.incidentId === incident.id);
 
-  // Fetch route when candidateUnitId or allowSimRoute changes
+  // Fetch route when candidateUnitId changes
   useEffect(() => {
     if (
+      isLocked ||
       !selectedRouteUnit ||
       typeof incident.location.lat !== 'number' ||
-      typeof incident.location.lng !== 'number'
+      typeof incident.location.lng !== 'number' ||
+      userRole !== 'Operations Staff'
     ) {
       setRoute(null);
       onRouteCalculated?.(null);
@@ -205,8 +291,7 @@ export function IncidentWorkspace({
     }
 
     let cancelled = false;
-    setRouteLoading(true);
-    fetch('/api/routing', {
+    authFetch('/api/routing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -214,35 +299,34 @@ export function IncidentWorkspace({
         fromLng: selectedRouteUnit.lng,
         toLat: incident.location.lat,
         toLng: incident.location.lng,
-        allowSimulatedOverlay: allowSimRoute,
+        allowSimulatedOverlay: Boolean(incident.isSimulated),
       }),
     })
-      .then((r) => r.json())
-      .then((data: RouteResult) => {
-        if (!cancelled) {
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: RouteResult | null) => {
+        if (!cancelled && data) {
           setRoute(data);
           onRouteCalculated?.(data);
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setRoute(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setRouteLoading(false);
+        if (!cancelled) setRoute(null);
       });
 
     return () => {
       cancelled = true;
     };
   }, [
+    authFetch,
+    incident.isSimulated,
+    incident.location.lat,
+    incident.location.lng,
+    isLocked,
+    onRouteCalculated,
     selectedRouteUnit?.id,
     selectedRouteUnit?.lat,
     selectedRouteUnit?.lng,
-    incident.location.lat,
-    incident.location.lng,
-    allowSimRoute,
+    userRole,
   ]);
 
   const rankedUnits = useMemo(
@@ -260,48 +344,32 @@ export function IncidentWorkspace({
     [incident, carrierConfigured]
   );
 
-  const finalSimSummary = useMemo(
-    () => buildSimulationFinalSummary(incident, assignedUnit, route || simState?.activeRoute || null),
-    [incident, assignedUnit, route, simState?.activeRoute]
-  );
-
-  const isTakenOver = Boolean(incident.assignedOperator) || !incident.aiIntakeActive;
-  const needsTakeover =
-    incident.status === 'NEW' ||
-    incident.status === 'AI_INTAKE' ||
-    incident.status === 'AWAITING_OPERATOR';
-
-  const handleGpsCapture = () => {
-    if (!navigator.geolocation) {
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setPinLat(Number(pos.coords.latitude.toFixed(5)));
-        setPinLng(Number(pos.coords.longitude.toFixed(5)));
-      },
-      () => {
-        // Handled cleanly via UI text if denied
-      }
-    );
-  };
-
-  const tabs: Array<{ id: WorkspaceTab; label: string; tip: string; count?: number }> = [
-    { id: 'overview', label: 'Overview', tip: 'Incident summary, people affected, danger indicators, and status' },
-    { id: 'transcript', label: 'AI Transcript', tip: 'Verbatim caller and AI intake messages', count: incident.transcript.length },
-    { id: 'location', label: 'Location', tip: 'Verify Lagos street address, landmark, and map pin' },
-    { id: 'units', label: 'Response Units', tip: 'Choose a response unit, check route, and approve dispatch' },
-    { id: 'timeline', label: 'Activity Timeline', tip: 'Full timestamped audit log of every action', count: incident.timeline.length },
-    { id: 'notes', label: 'Notes', tip: 'Record operator notes and access instructions', count: incident.notes.length },
-  ];
-
   const workflow = computeIncidentWorkflow(
     incident,
     assignedUnit,
     Boolean(candidateUnitId && !incident.assignedUnitId)
   );
 
-  const handleGuidedNextAction = async () => {
+  const isTakenOver = Boolean(incident.assignedOperator) || !incident.aiIntakeActive;
+  const needsTakeover = !isLocked && incident.status === 'New' && !incident.assignedOperator;
+  const dispatchBlockedByPolicy =
+    requireLocationVerificationBeforeDispatch && incident.location.verificationStatus !== 'VERIFIED';
+
+  const queueList = useMemo(() => {
+    return readOnly
+      ? incidents.filter((i) => i.status === 'Closed' || i.legacyOutOfScope)
+      : incidents.filter((i) => !i.legacyOutOfScope && isActiveIncidentStatus(i.status));
+  }, [incidents, readOnly]);
+
+  const tabs: Array<{ id: IncidentWorkspaceTabId; label: string; count?: number }> = [
+    { id: 'workflow', label: 'Workflow & Notes', count: incident.transcript.length },
+    { id: 'medical-details', label: 'Medical Details' },
+    { id: 'location', label: 'Location' },
+    { id: 'response', label: 'Response & Transport' },
+  ];
+
+  const handleGuidedAction = async () => {
+    if (isLocked) return;
     if (workflow.nextActionType === 'TAKE_OVER' && canTakeOver(userRole)) {
       setBusy(true);
       await onTakeOver(incident.id);
@@ -309,634 +377,451 @@ export function IncidentWorkspace({
       return;
     }
     if (workflow.nextActionType === 'APPROVE_DISPATCH') {
-      const targetUnit = candidateUnitId ? units.find((u) => u.id === candidateUnitId) || null : null;
-      if (targetUnit && targetUnit.availability === 'AVAILABLE' && canApproveDispatch(userRole)) {
-        setActiveTab('units');
-        setConfirmUnit(targetUnit);
+      const target = candidateUnitId ? units.find((u) => u.id === candidateUnitId) || null : null;
+      if (target && target.availability === 'Available' && canApproveDispatch(userRole)) {
+        setActiveTab('response');
+        setConfirmUnit(target);
         return;
       }
     }
     if (workflow.nextActionType === 'CLOSE_INCIDENT' && canUpdateIncidentStatus(userRole)) {
       setConfirmClosure({
-        targetStatus: 'CLOSED',
-        defaultReason: isSimIncident
-          ? 'Simulation completed successfully — unit arrived on scene and incident closed.'
-          : 'Field response completed and confirmed safe by human operator.',
+        defaultReason: incident.hospitalDestination
+          ? `Patient handed over safely at ${incident.hospitalDestination.name}.`
+          : 'Medical response completed and verified by operator.',
       });
       return;
     }
     setActiveTab(workflow.nextTabTarget);
   };
 
-  const showTrackingCard = Boolean(
-    assignedUnit &&
-      (isSimIncident
-        ? (simState?.stage ?? 0) >= 9 || simState?.trackingProgressPct
-        : assignedUnit.availability === 'ASSIGNED' ||
-          assignedUnit.availability === 'ACKNOWLEDGED' ||
-          assignedUnit.availability === 'EN_ROUTE' ||
-          assignedUnit.availability === 'ON_SCENE')
-  );
-
-  const trackingPct = isSimIncident
-    ? simState?.trackingProgressPct ?? 0
-    : assignedUnit?.availability === 'ON_SCENE'
-    ? 100
-    : assignedUnit?.availability === 'EN_ROUTE'
-    ? 60
-    : assignedUnit?.availability === 'ACKNOWLEDGED'
-    ? 25
-    : 10;
+  const handleConfirmHospitalSubmit = async () => {
+    if (isLocked) return;
+    let payload: HospitalDestination;
+    if (customHospitalMode) {
+      const latNum = Number(customHospLat);
+      const lngNum = Number(customHospLng);
+      if (!customHospName.trim() || !Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+        return;
+      }
+      payload = {
+        id: `hosp-custom-${Date.now()}`,
+        name: customHospName.trim(),
+        area: customHospArea.trim() || 'Lagos',
+        lat: latNum,
+        lng: lngNum,
+        isCustom: true,
+        isSimulatedDemo: incident.isSimulated,
+      };
+    } else {
+      const preset =
+        LAGOS_HOSPITAL_DESTINATIONS.find((h) => h.id === selectedHospitalId) ||
+        LAGOS_HOSPITAL_DESTINATIONS[0];
+      payload = preset;
+    }
+    setBusy(true);
+    await onTransportEvent(incident.id, {
+      event: 'CONFIRM_HOSPITAL',
+      hospitalDestination: payload,
+    });
+    setBusy(false);
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Workspace Header */}
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2.5">
+    <div className="flex flex-col lg:flex-row gap-4 items-start">
+      {/* Collapsible Left Incident Queue Drawer */}
+      {queueOpen && (
+        <aside className="w-full lg:w-64 shrink-0 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 space-y-2 shadow-2xs dark:shadow-none">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+              {readOnly ? 'Archived Cases' : 'Active Medical Queue'} ({queueList.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => setQueueOpen(false)}
+              className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400"
+              aria-label="Close incident queue drawer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="space-y-1.5 max-h-[560px] overflow-y-auto">
+            {queueList.map((item) => (
               <button
+                key={item.id}
                 type="button"
-                onClick={onBack}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors"
+                onClick={() => onSelectIncident(item.id)}
+                className={`w-full text-left rounded-lg border p-2.5 text-xs transition-colors ${
+                  item.id === incident.id
+                    ? 'bg-blue-50 border-blue-400 dark:bg-blue-500/15 dark:border-blue-500/60'
+                    : 'bg-slate-50 border-slate-200 hover:border-slate-300 dark:bg-[#0B1220] dark:border-[#26364B]'
+                }`}
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back</span>
+                <div className="flex items-center justify-between gap-1 font-mono text-[11px] font-bold text-slate-900 dark:text-slate-100">
+                  <span>{item.id}</span>
+                  <span className="text-[10px] font-normal text-slate-500">{item.priority}</span>
+                </div>
+                <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate mt-0.5">
+                  {item.category} · {item.location.area || 'Lagos'}
+                </div>
               </button>
-              <span className="font-mono text-base font-bold text-slate-900 dark:text-slate-50">
-                {incident.id}
-              </span>
-              <span className="text-slate-400 dark:text-slate-500">·</span>
-              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {incident.category}
-              </span>
-              <PriorityBadge priority={incident.priority} />
-              <IncidentStatusBadge status={incident.status} />
+            ))}
+          </div>
+        </aside>
+      )}
+
+      {/* Main Workspace Column */}
+      <div className="flex-1 min-w-0 w-full space-y-4">
+        {/* Persistent Header */}
+        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-800 dark:text-slate-200"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQueueOpen((q) => !q)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-700 dark:text-slate-200"
+                >
+                  <PanelLeft className="w-3.5 h-3.5" />
+                  <span>{queueOpen ? 'Hide Queue' : 'Queue'}</span>
+                </button>
+
+                <span className="font-mono text-base font-bold text-slate-900 dark:text-slate-50">
+                  {incident.id}
+                </span>
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  {incident.category}
+                </span>
+                <PriorityBadge priority={incident.priority} />
+                <IncidentStatusBadge status={incident.status} />
+                <VerificationBadge status={incident.location.verificationStatus} />
+                {incident.legacyOutOfScope && <LegacyBadge />}
+                {isLocked && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600 text-[11px] font-semibold">
+                    <Lock className="w-3 h-3" />
+                    <span>Read-Only Archive</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
+                <span>Received {formatRelativeTime(incident.createdAt)}</span>
+                <span>·</span>
+                <span>
+                  Caller:{' '}
+                  <strong className="text-slate-800 dark:text-slate-200">
+                    {incident.callerName || 'Anonymous'}
+                    {incident.callerPhone ? ` (${incident.callerPhone})` : ''}
+                  </strong>
+                </span>
+                <span>·</span>
+                <span>
+                  Operator:{' '}
+                  <strong className="text-slate-800 dark:text-slate-200">
+                    {incident.assignedOperator || 'Unassigned'}
+                  </strong>
+                </span>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-              <span>Received {formatRelativeTime(incident.createdAt)}</span>
-              <span>·</span>
-              <span>
-                Operator:{' '}
-                <strong className="text-slate-800 dark:text-slate-200">
-                  {incident.assignedOperator || 'Unassigned'}
-                </strong>
-              </span>
-              <span>·</span>
-              <span>
-                Control State:{' '}
-                <strong
-                  className={
-                    isTakenOver
-                      ? 'text-emerald-700 dark:text-emerald-400'
-                      : 'text-amber-700 dark:text-amber-300'
-                  }
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {needsTakeover && canTakeOver(userRole) && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    await onTakeOver(incident.id);
+                    setBusy(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold"
                 >
-                  {isTakenOver ? 'HUMAN OPERATOR CONTROL' : 'AI INTAKE ACTIVE'}
-                </strong>
-              </span>
-              {incident.isSimulated && (
-                <>
-                  <span>·</span>
-                  <span className="font-mono text-amber-700 dark:text-amber-300 font-semibold">
-                    SIMULATED RECORD
-                  </span>
-                </>
+                  <UserCheck className="w-4 h-4" />
+                  <span>Take Over Incident</span>
+                </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setAuditOpen((a) => !a)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-200"
+              >
+                <PanelRight className="w-3.5 h-3.5" />
+                <span>Audit Log ({incident.timeline.length})</span>
+              </button>
             </div>
           </div>
 
-          {/* Role-Gated Primary Actions */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {onOpenConversation && (
+          {/* 4 Navigation Tabs */}
+          <div
+            role="tablist"
+            aria-label="Incident workspace tabs"
+            className="flex flex-wrap items-center gap-1.5 mt-4 pt-3 border-t border-slate-200 dark:border-[#26364B]"
+          >
+            {tabs.map((tab) => (
               <button
+                key={tab.id}
                 type="button"
-                onClick={() => onOpenConversation(incident.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-blue-700 dark:text-blue-300 transition-colors whitespace-nowrap"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-[#0B1220] dark:text-slate-300 dark:hover:bg-[#172438] dark:border-[#26364B]'
+                }`}
               >
-                <Headphones className="w-4 h-4" />
-                <span>Conversation Centre</span>
+                {tab.label}
+                {tab.count !== undefined ? ` (${tab.count})` : ''}
               </button>
-            )}
-            {needsTakeover && canTakeOver(userRole) && (
+            ))}
+          </div>
+        </div>
+
+        {/* 5-Milestone Guided Workflow Bar */}
+        <section
+          aria-label="5-milestone emergency workflow"
+          className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+            {workflow.milestones.map((m) => (
+              <div
+                key={m.id}
+                className={`rounded-lg border px-2.5 py-2 text-[11px] font-semibold flex items-center gap-2 min-w-0 ${
+                  m.status === 'done'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-500/15 dark:border-emerald-500/35 dark:text-emerald-300'
+                    : m.status === 'current'
+                    ? 'bg-blue-50 border-blue-400 text-blue-900 dark:bg-blue-600/25 dark:border-blue-400 dark:text-blue-100'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-400'
+                }`}
+              >
+                <span
+                  className={`w-4 h-4 rounded-full text-[10px] font-mono flex items-center justify-center shrink-0 ${
+                    m.status === 'done'
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : m.status === 'current'
+                      ? 'bg-blue-600 text-white font-bold'
+                      : 'bg-slate-200 text-slate-600 dark:bg-[#172438] dark:text-slate-400'
+                  }`}
+                >
+                  {m.number}
+                </span>
+                <span className="truncate">{m.shortLabel}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 text-xs">
+              <div>
+                <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                  Current Stage
+                </div>
+                <p className="text-slate-700 dark:text-slate-200 mt-0.5">{workflow.whatIsHappening}</p>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                  Needs Attention
+                </div>
+                <p className="text-slate-700 dark:text-slate-200 mt-0.5">{workflow.needsAttention}</p>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  Recommended Next Step
+                </div>
+                <p className="text-slate-600 dark:text-slate-300 mt-0.5">
+                  {workflow.nextActionDescription}
+                </p>
+              </div>
+            </div>
+
+            {!isLocked && (
               <button
                 type="button"
                 disabled={busy}
-                data-testid="workspace-takeover-btn"
-                onClick={async () => {
-                  setBusy(true);
-                  await onTakeOver(incident.id);
-                  setBusy(false);
-                }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors whitespace-nowrap"
+                onClick={handleGuidedAction}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white whitespace-nowrap shrink-0"
               >
-                <UserCheck className="w-4 h-4" />
-                <span>TAKE OVER INCIDENT</span>
-              </button>
-            )}
-
-            {incident.location.verificationStatus !== 'VERIFIED' &&
-              canVerifyIncident(userRole) && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    await onVerifyLocation(incident.id, {
-                      correctedDescription: correctedDesc,
-                      landmark,
-                      area,
-                      lat: pinLat,
-                      lng: pinLng,
-                      markVerified: true,
-                    });
-                    setBusy(false);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Verify Incident</span>
-                </button>
-              )}
-
-            {!incident.assignedUnitId && canApproveDispatch(userRole) && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('units')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
-              >
-                <Truck className="w-4 h-4" />
-                <span>Assign Unit</span>
+                <span>{workflow.nextActionLabel}</span>
               </button>
             )}
           </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div
-          role="tablist"
-          aria-label="Incident workspace sections"
-          className="flex flex-wrap items-center gap-1.5 mt-4 pt-3 border-t border-slate-200 dark:border-[#26364B]"
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              title={tab.tip}
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-[#0B1220] dark:text-slate-300 dark:hover:bg-[#172438] dark:border-[#26364B]'
-              }`}
-            >
-              {tab.label}
-              {tab.count !== undefined ? ` (${tab.count})` : ''}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Stage 9–10 Live Response Tracking & Arrival Summary Card */}
-      {(showTrackingCard || (isSimIncident && (simState?.arrivedOnScene || simState?.completed))) && (
-        <section
-          aria-label="Live unit tracking and arrival status"
-          className="rounded-xl bg-white dark:bg-[#111C2E] border border-cyan-300 dark:border-cyan-500/40 p-4 space-y-3 shadow-2xs dark:shadow-none"
-        >
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <Navigation className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  {assignedUnit ? `${assignedUnit.callsign} — Live Response Tracking` : 'Response Tracking Summary'}
-                </span>
-                {assignedUnit && <UnitAvailabilityBadge availability={assignedUnit.availability} />}
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                {assignedUnit?.availability === 'ON_SCENE' || simState?.arrivedOnScene
-                  ? `${assignedUnit?.callsign || 'Response unit'} has arrived On Scene at ${
-                      incident.location.correctedDescription || incident.location.description
-                    }.`
-                  : `Unit moving along ${
-                      route?.isSimulatedFallback ? 'simulated demo Lagos corridor' : 'calculated route'
-                    } (${trackingPct}% complete).`}
-              </p>
-            </div>
-
-            {assignedUnit && (
-              <div className="text-right font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                Position: {assignedUnit.lat.toFixed(4)}, {assignedUnit.lng.toFixed(4)}
-              </div>
-            )}
-          </div>
-
-          {/* Progress Bar: Assigned -> Acknowledged -> En Route -> On Scene */}
-          <div className="space-y-1.5">
-            <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-[#0B1220] overflow-hidden">
-              <div
-                className="h-full rounded-full bg-cyan-500 transition-all duration-300"
-                style={{ width: `${Math.max(8, trackingPct)}%` }}
-              />
-            </div>
-            <div className="grid grid-cols-4 gap-2 text-[11px] font-semibold">
-              {[
-                { label: 'Assigned', done: trackingPct >= 10 },
-                {
-                  label: 'Acknowledged',
-                  done:
-                    trackingPct >= 25 ||
-                    assignedUnit?.availability === 'ACKNOWLEDGED' ||
-                    assignedUnit?.availability === 'EN_ROUTE' ||
-                    assignedUnit?.availability === 'ON_SCENE',
-                },
-                {
-                  label: 'En Route',
-                  done:
-                    trackingPct >= 40 ||
-                    assignedUnit?.availability === 'EN_ROUTE' ||
-                    assignedUnit?.availability === 'ON_SCENE',
-                },
-                {
-                  label: 'On Scene',
-                  done:
-                    trackingPct >= 100 ||
-                    assignedUnit?.availability === 'ON_SCENE' ||
-                    simState?.arrivedOnScene,
-                },
-              ].map((s) => (
-                <div
-                  key={s.label}
-                  className={`px-2 py-1 rounded text-center border ${
-                    s.done
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/35 dark:text-emerald-300'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-400'
-                  }`}
-                >
-                  {s.label}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {(simState?.arrivedOnScene || incident.status === 'RESOLVED' || incident.status === 'CLOSED') && (
-            <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
-              <div className="space-y-1">
-                <div className="font-bold text-emerald-700 dark:text-emerald-300">
-                  {incident.status === 'CLOSED' || simState?.completed
-                    ? 'Simulation completed successfully.'
-                    : 'Arrival Confirmed — Ready for Final Review & Closure'}
-                </div>
-                <div className="text-slate-700 dark:text-slate-200">{finalSimSummary.headline}</div>
-                <div className="text-slate-500 dark:text-slate-400">
-                  {finalSimSummary.locationLine} · {finalSimSummary.unitLine} · {finalSimSummary.timelineCount} audit events
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {finalSimSummary.routingNote}
-                </div>
-              </div>
-
-              {incident.status !== 'CLOSED' && canUpdateIncidentStatus(userRole) && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  data-testid="close-incident-summary-btn"
-                  onClick={() =>
-                    setConfirmClosure({
-                      targetStatus: 'CLOSED',
-                      defaultReason:
-                        'Simulation completed successfully — unit arrived on scene and incident closed.',
-                    })
-                  }
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white whitespace-nowrap shrink-0"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Close Incident</span>
-                </button>
-              )}
-            </div>
-          )}
         </section>
-      )}
 
-      {/* 8-Step Guided Operational Workflow Bar */}
-      <section
-        aria-label="Guided operational workflow"
-        className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none"
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 2xl:grid-cols-8 gap-2">
-          {workflow.steps.map((step) => (
-            <div
-              key={step.id}
-              title={`Step ${step.number}: ${step.label}`}
-              className={`rounded-lg border px-2.5 py-2 text-[11px] font-semibold flex items-center gap-2 transition-colors min-w-0 ${
-                step.status === 'done'
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-500/15 dark:border-emerald-500/35 dark:text-emerald-300'
-                  : step.status === 'current'
-                  ? 'bg-blue-50 border-blue-400 text-blue-900 dark:bg-blue-600/25 dark:border-blue-400 dark:text-blue-100'
-                  : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-400'
-              }`}
-            >
-              <span
-                className={`w-4 h-4 rounded-full text-[10px] font-mono flex items-center justify-center shrink-0 ${
-                  step.status === 'done'
-                    ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950 font-bold'
-                    : step.status === 'current'
-                    ? 'bg-blue-600 text-white font-bold'
-                    : 'bg-slate-200 text-slate-600 dark:bg-[#172438] dark:text-slate-400'
-                }`}
-              >
-                {step.number}
-              </span>
-              <span className="truncate">{step.label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 text-xs">
-            <div>
-              <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">
-                What is happening
-              </div>
-              <p className="text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">
-                {workflow.whatIsHappening}
-              </p>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                What needs attention
-              </div>
-              <p className="text-slate-700 dark:text-slate-200 mt-0.5 leading-snug">
-                {workflow.needsAttention}
-              </p>
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                Recommended next step
-              </div>
-              <p className="text-slate-600 dark:text-slate-300 mt-0.5 leading-snug">
-                {workflow.nextActionDescription}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleGuidedNextAction}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white transition-colors whitespace-nowrap"
-            >
-              <span>
-                {workflow.nextActionType === 'TAKE_OVER'
-                  ? 'TAKE OVER INCIDENT'
-                  : workflow.nextActionLabel}
-              </span>
-            </button>
-            {incident.status !== 'CLOSED' &&
-              incident.status !== 'RESOLVED' &&
-              canUpdateIncidentStatus(userRole) && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    setConfirmClosure({
-                      targetStatus: 'CLOSED',
-                      defaultReason: 'Case reviewed and closed by human operator.',
-                    })
-                  }
-                  title="Close this incident after confirming all actions are complete"
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-white hover:bg-slate-100 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors whitespace-nowrap"
-                >
-                  <span>Close Incident</span>
-                </button>
-              )}
-          </div>
-        </div>
-      </section>
-
-      {/* TAB 1: OVERVIEW */}
-      {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-7 space-y-4">
-            <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                  AI &amp; Operator Incident Summary
+        {/* TAB 1: WORKFLOW, TRANSCRIPT & NOTES */}
+        {activeTab === 'workflow' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="lg:col-span-7 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
+                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Live Call Transcript &amp; Operator Reply</span>
                 </h2>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Channel: {incident.callChannel.replace(/_/g, ' ')}
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  {isTakenOver ? 'HUMAN CONTROL' : 'AI INTAKE ACTIVE'}
                 </span>
               </div>
 
-              <p className="text-sm text-slate-900 dark:text-slate-100 leading-relaxed">
-                {incident.summary}
-              </p>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Original Report: {incident.description}
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200 dark:border-[#26364B]">
-                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    People Affected
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                    <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>
-                      {incident.peopleAffected !== null
-                        ? incident.peopleAffected
-                        : 'Unknown'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Immediate Danger
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-sm font-bold">
-                    {incident.immediateDanger ? (
-                      <span className="text-red-700 dark:text-red-400 inline-flex items-center gap-1">
-                        <AlertOctagon className="w-4 h-4" />
-                        Yes
-                      </span>
-                    ) : (
-                      <span className="text-slate-700 dark:text-slate-300">
-                        Not reported
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Caller Contact
-                  </div>
-                  <div className="mt-1 text-xs font-mono text-slate-800 dark:text-slate-200 truncate">
-                    {incident.callerName || 'Anonymous'}
-                    {incident.callerPhone ? ` · ${incident.callerPhone}` : ''}
-                  </div>
-                </div>
+              <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                {incident.transcript.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">
+                    No transcript messages recorded.
+                  </p>
+                ) : (
+                  incident.transcript.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`rounded-lg border p-2.5 text-xs space-y-1 ${
+                        m.speaker === 'CALLER'
+                          ? 'bg-blue-50/70 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30'
+                          : m.speaker === 'OPERATOR'
+                          ? 'bg-emerald-50/70 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/30'
+                          : 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                        <span>{m.speaker}</span>
+                        <span className="font-mono">
+                          {new Date(m.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-slate-800 dark:text-slate-100">{m.text}</p>
+                    </div>
+                  ))
+                )}
               </div>
 
-              {incident.dangerDetails && (
-                <div className="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 p-3 text-xs text-red-900 dark:text-red-200 flex items-start gap-2">
-                  <AlertOctagon className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                  <span>Danger Indicator: {incident.dangerDetails}</span>
+              {!isLocked && canTakeOver(userRole) && (
+                <div className="pt-2 border-t border-slate-200 dark:border-[#26364B] space-y-2">
+                  {!isTakenOver ? (
+                    <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2">
+                      <span>Take over this incident before sending direct operator messages.</span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          await onTakeOver(incident.id);
+                          setBusy(false);
+                        }}
+                        className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] whitespace-nowrap"
+                      >
+                        Take Over
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={operatorReply}
+                        onChange={(e) => setDraft({ operatorReply: e.target.value })}
+                        placeholder="Record operator message into call transcript..."
+                        className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        disabled={busy || !operatorReply.trim()}
+                        onClick={async () => {
+                          setBusy(true);
+                          await onSendOperatorMessage(incident.id, operatorReply.trim());
+                          setDraft({ operatorReply: '' });
+                          setBusy(false);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-
-              {incident.missingInfoFlags.length > 0 && (
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <span>Missing Information Flags</span>
-                  </div>
-                  <ul className="list-disc list-inside text-amber-800 dark:text-amber-100/90 space-y-0.5">
-                    {incident.missingInfoFlags.map((flag, idx) => (
-                      <li key={idx}>{flag}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="text-xs text-slate-500 dark:text-slate-400 pt-1">
-                Priority Explanation:{' '}
-                <span className="text-slate-800 dark:text-slate-200">
-                  {incident.priorityReason}
-                </span>
-              </div>
             </div>
 
-            {/* Operator Edit Incident Details */}
-            {canVerifyIncident(userRole) && (
+            <div className="lg:col-span-5 space-y-4">
+              {/* Operator Notes */}
               <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-                <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Operator Corrections &amp; Triage Override
+                <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Operational Notes ({incident.notes.length})</span>
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label
-                      htmlFor="op-summary"
-                      className="block text-xs text-slate-600 dark:text-slate-400 mb-1"
-                    >
-                      Verified Summary
-                    </label>
+
+                {!isLocked && canAddNote(userRole) && (
+                  <div className="flex items-center gap-2">
                     <input
-                      id="op-summary"
                       type="text"
-                      value={editSummary}
-                      onChange={(e) => setEditSummary(e.target.value)}
-                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                      value={noteText}
+                      onChange={(e) => setDraft({ noteText: e.target.value })}
+                      placeholder="Add clinical or dispatch note..."
+                      className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
                     />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="op-priority"
-                      className="block text-xs text-slate-600 dark:text-slate-400 mb-1"
+                    <button
+                      type="button"
+                      disabled={busy || !noteText.trim()}
+                      onClick={async () => {
+                        setBusy(true);
+                        await onAddNote(incident.id, noteText.trim());
+                        setDraft({ noteText: '' });
+                        setBusy(false);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
                     >
-                      Priority Level
-                    </label>
-                    <select
-                      id="op-priority"
-                      value={editPriority}
-                      onChange={(e) =>
-                        setEditPriority(e.target.value as IncidentPriority)
-                      }
-                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100"
-                    >
-                      <option value="CRITICAL">CRITICAL</option>
-                      <option value="HIGH">HIGH</option>
-                      <option value="MEDIUM">MEDIUM</option>
-                      <option value="LOW">LOW</option>
-                    </select>
+                      Save Note
+                    </button>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    await onVerifyLocation(incident.id, {
-                      summary: editSummary,
-                      priority: editPriority,
-                      markVerified:
-                        incident.location.verificationStatus === 'VERIFIED',
-                    });
-                    setBusy(false);
-                  }}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-blue-700 dark:text-blue-300"
-                >
-                  Save Operator Corrections
-                </button>
-              </div>
-            )}
-          </div>
+                )}
 
-          <div className="lg:col-span-5 space-y-4">
-            {/* Location Snapshot */}
-            <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Location Intelligence
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('location')}
-                  className="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline"
-                >
-                  Manage Location →
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <LocationSourceBadge source={incident.location.source} />
-                <VerificationBadge status={incident.location.verificationStatus} />
-              </div>
-              <p className="text-xs text-slate-800 dark:text-slate-200">
-                {incident.location.correctedDescription || incident.location.description}
-              </p>
-              {incident.location.lat && incident.location.lng && (
-                <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                  {incident.location.lat.toFixed(5)}, {incident.location.lng.toFixed(5)}
-                  {incident.location.accuracyMeters
-                    ? ` (±${incident.location.accuracyMeters}m)`
-                    : ''}
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {incident.notes.length === 0 ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      No operational notes recorded yet.
+                    </p>
+                  ) : (
+                    incident.notes.map((n) => (
+                      <div
+                        key={n.id}
+                        className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5 text-xs space-y-1"
+                      >
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {n.author} ({n.role})
+                          </span>
+                          <span className="font-mono">{formatRelativeTime(n.timestamp)}</span>
+                        </div>
+                        <p className="text-slate-800 dark:text-slate-200">{n.text}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
-              )}
-              <LagosMap
-                incidents={[incident]}
-                units={assignedUnit ? [assignedUnit] : []}
-                selectedIncidentId={incident.id}
-                route={route}
-                heightClass="h-[210px]"
-                showLegend={false}
-                showInfoCard={false}
-              />
-            </div>
+              </div>
 
-            {/* Authorised Status Transition */}
-            {canUpdateIncidentStatus(userRole) && (
-              <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-                <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Update Incident Status
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Authorised operators record a mandatory reason for every status change. Dispatch statuses require unit approval.
-                </p>
-                <div className="space-y-2">
+              {/* Manual Incident Status Update (Hidden / Locked when Closed) */}
+              {!isLocked && canUpdateIncidentStatus(userRole) && (
+                <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-2.5 shadow-2xs dark:shadow-none">
+                  <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Update Incident Status
+                  </h3>
                   <select
                     aria-label="Target incident status"
                     value={statusTarget}
                     onChange={(e) => setStatusTarget(e.target.value as IncidentStatus)}
                     className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
                   >
-                    {INCIDENT_STATUS_ORDER.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
+                    {INCIDENT_STATUS_ORDER.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
                       </option>
                     ))}
                   </select>
@@ -944,687 +829,917 @@ export function IncidentWorkspace({
                     type="text"
                     value={statusReason}
                     onChange={(e) => setStatusReason(e.target.value)}
-                    placeholder="Reason for status change (required)"
-                    aria-label="Reason for status change"
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                    placeholder="Mandatory reason for status update"
+                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
                   />
                   <button
                     type="button"
-                    disabled={
-                      busy ||
-                      (!statusReason.trim() &&
-                        statusTarget !== 'RESOLVED' &&
-                        statusTarget !== 'CLOSED')
-                    }
+                    disabled={busy || (!statusReason.trim() && statusTarget !== 'Closed')}
                     onClick={async () => {
-                      if (statusTarget === 'RESOLVED' || statusTarget === 'CLOSED') {
+                      if (statusTarget === 'Closed') {
                         setConfirmClosure({
-                          targetStatus: statusTarget,
                           defaultReason:
                             statusReason.trim() ||
-                            (statusTarget === 'CLOSED'
-                              ? 'Incident confirmed complete and closed by operator.'
-                              : 'Field response completed and incident resolved.'),
+                            'Medical response completed and verified by human operator.',
                         });
                         return;
                       }
                       setBusy(true);
-                      await onUpdateStatus(incident.id, statusTarget, statusReason);
+                      await onUpdateStatus(incident.id, statusTarget, statusReason.trim());
                       setStatusReason('');
                       setBusy(false);
                     }}
-                    className="w-full px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+                    className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
                   >
                     Record Status Change
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: AI TRANSCRIPT */}
-      {activeTab === 'transcript' && (
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-5 space-y-4 shadow-2xs dark:shadow-none">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#26364B]">
-            <div>
-              <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                Intake Conversation Transcript
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Preserved verbatim alongside extracted tags and human takeover records.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onOpenConversation && (
-                <button
-                  type="button"
-                  onClick={() => onOpenConversation(incident.id)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white transition-colors"
-                >
-                  <Headphones className="w-3.5 h-3.5" />
-                  <span>Open in Conversation Centre</span>
-                </button>
               )}
-              <div
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-                  isTakenOver
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/35'
-                    : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/35'
-                }`}
-              >
-                {isTakenOver
-                  ? `Human Operator Connected (${incident.assignedOperator || operatorName}) — AI Halted`
-                  : 'Responda Automated AI Intake Active'}
-              </div>
+
+              {incident.outcome && (
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/35 p-4 text-xs space-y-1">
+                  <div className="font-bold text-emerald-800 dark:text-emerald-300">
+                    Recorded Closure Outcome
+                  </div>
+                  <p className="text-emerald-900 dark:text-emerald-100">{incident.outcome}</p>
+                </div>
+              )}
             </div>
           </div>
+        )}
 
-          {incident.transcript.length === 0 ? (
-            <div className="text-center py-8 text-xs text-slate-500 dark:text-slate-400">
-              No transcript messages recorded for this incident.
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-              {incident.transcript.map((msg) => {
-                const isCaller = msg.speaker === 'CALLER';
-                const isOp = msg.speaker === 'OPERATOR';
-                return (
-                  <div
-                    key={msg.id}
-                    className={`rounded-xl p-3.5 border ${
-                      isCaller
-                        ? 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] mr-8'
-                        : isOp
-                        ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/35 ml-8'
-                        : 'bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30 ml-8'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[11px] mb-1">
-                      <span
-                        className={`font-semibold ${
-                          isCaller
-                            ? 'text-slate-800 dark:text-slate-200'
-                            : isOp
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : 'text-blue-700 dark:text-blue-400'
-                        }`}
-                      >
-                        {isCaller
-                          ? 'Caller'
-                          : isOp
-                          ? 'Human Operator'
-                          : 'Responda AI Assistant'}
-                      </span>
-                      <span className="font-mono text-slate-500 dark:text-slate-400">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-900 dark:text-slate-100 leading-relaxed">
-                      {msg.text}
-                    </p>
-                    {msg.extractedTags && msg.extractedTags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-blue-700 dark:text-blue-300 font-mono">
-                        {msg.extractedTags.map((tag, idx) => (
-                          <span key={idx}>#{tag}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: LOCATION INTELLIGENCE */}
-      {activeTab === 'location' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-5 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-4 shadow-2xs dark:shadow-none">
-            <div>
-              <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                Multi-Source Location Verification
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Coordinates alone never auto-verify an incident. Operators verify and preserve original caller text.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <LocationSourceBadge source={incident.location.source} />
-              <VerificationBadge status={incident.location.verificationStatus} />
-            </div>
-
-            {/* 4 Explicit Location Intelligence Methods */}
-            <div
-              data-testid="location-methods-list"
-              className="grid grid-cols-1 gap-2"
-            >
-              {locationMethods.map((method) => (
-                <div
-                  key={method.key}
-                  className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-1 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">
-                      {method.label}
-                    </span>
-                    <span
-                      className={`font-mono text-[11px] font-semibold ${
-                        method.key === 'NETWORK_DERIVED' && !method.available
-                          ? 'text-amber-700 dark:text-amber-300'
-                          : method.available
-                          ? 'text-emerald-700 dark:text-emerald-300'
-                          : 'text-slate-500 dark:text-slate-400'
-                      }`}
-                    >
-                      {method.statusText}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
-                    {method.detail}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-[#26364B]">
+        {/* TAB 2: MEDICAL DETAILS */}
+        {activeTab === 'medical-details' && (
+          <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-5 space-y-4 shadow-2xs dark:shadow-none">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#26364B]">
               <div>
-                <label
-                  htmlFor="loc-desc"
-                  className="block text-xs text-slate-700 dark:text-slate-300 mb-1"
+                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Clinical Assessment &amp; Medical Details</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Unsaved edits stay preserved if you switch between open incidents.
+                </p>
+              </div>
+              {editPriority === 'Unassessed' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 border border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/40 dark:text-amber-200 text-xs font-semibold">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Priority is Unassessed — assign Clinical Priority</span>
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Medical Category
+                </label>
+                <select
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editCategory}
+                  onChange={(e) =>
+                    setDraft({ category: e.target.value as MedicalEmergencyCategory })
+                  }
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
                 >
-                  Operator-Verified Address / Description
+                  {MEDICAL_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Clinical Priority
+                </label>
+                <select
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editPriority}
+                  onChange={(e) => setDraft({ priority: e.target.value as IncidentPriority })}
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                >
+                  <option value="Critical">Critical</option>
+                  <option value="Urgent">Urgent</option>
+                  <option value="Standard">Standard</option>
+                  <option value="Unassessed">Unassessed (Insufficient info)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Patients Affected
                 </label>
                 <input
-                  id="loc-desc"
-                  type="text"
-                  value={correctedDesc}
-                  onChange={(e) => setCorrectedDesc(e.target.value)}
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                  type="number"
+                  min={0}
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editPeopleAffected}
+                  onChange={(e) => setDraft({ peopleAffected: e.target.value })}
+                  placeholder="Unknown"
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label
-                    htmlFor="loc-landmark"
-                    className="block text-xs text-slate-700 dark:text-slate-300 mb-1"
-                  >
-                    Landmark
-                  </label>
-                  <input
-                    id="loc-landmark"
-                    type="text"
-                    value={landmark}
-                    onChange={(e) => setLandmark(e.target.value)}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="loc-area"
-                    className="block text-xs text-slate-700 dark:text-slate-300 mb-1"
-                  >
-                    Lagos Area
-                  </label>
-                  <input
-                    id="loc-area"
-                    type="text"
-                    value={area}
-                    onChange={(e) => setArea(e.target.value)}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
-                  />
-                </div>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Verified Summary
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editSummary}
+                  onChange={(e) => setDraft({ summary: e.target.value })}
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label
-                    htmlFor="loc-lat"
-                    className="block text-xs text-slate-700 dark:text-slate-300 mb-1"
-                  >
-                    Latitude
-                  </label>
-                  <input
-                    id="loc-lat"
-                    type="number"
-                    step="0.0001"
-                    value={pinLat ?? ''}
-                    onChange={(e) => setPinLat(Number(e.target.value))}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="loc-lng"
-                    className="block text-xs text-slate-700 dark:text-slate-300 mb-1"
-                  >
-                    Longitude
-                  </label>
-                  <input
-                    id="loc-lng"
-                    type="number"
-                    step="0.0001"
-                    value={pinLng ?? ''}
-                    onChange={(e) => setPinLng(Number(e.target.value))}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100"
-                  />
-                </div>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Priority Justification
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editPriorityReason}
+                  onChange={(e) => setDraft({ priorityReason: e.target.value })}
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleGpsCapture}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs text-slate-800 dark:text-slate-200"
-                >
-                  <LocateFixed className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span>Use Browser GPS</span>
-                </button>
-                {canVerifyIncident(userRole) && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      await onVerifyLocation(incident.id, {
-                        correctedDescription: correctedDesc,
-                        landmark,
-                        area,
-                        lat: pinLat,
-                        lng: pinLng,
-                        markVerified: true,
-                      });
-                      setBusy(false);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Save &amp; Verify Location</span>
-                  </button>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Chief Complaint
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editClinical.chiefComplaint || ''}
+                  onChange={(e) =>
+                    setDraft({
+                      clinicalDetails: { ...editClinical, chiefComplaint: e.target.value },
+                    })
+                  }
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Consciousness
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editClinical.consciousness || ''}
+                  onChange={(e) =>
+                    setDraft({
+                      clinicalDetails: { ...editClinical, consciousness: e.target.value },
+                    })
+                  }
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Breathing
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editClinical.breathing || ''}
+                  onChange={(e) =>
+                    setDraft({
+                      clinicalDetails: { ...editClinical, breathing: e.target.value },
+                    })
+                  }
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Bleeding / Injury Details
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editClinical.bleedingOrInjury || ''}
+                  onChange={(e) =>
+                    setDraft({
+                      clinicalDetails: { ...editClinical, bleedingOrInjury: e.target.value },
+                    })
+                  }
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Clinical Triage Notes
+                </label>
+                <input
+                  type="text"
+                  disabled={isLocked || !canVerifyIncident(userRole)}
+                  value={editClinical.clinicalNotes || ''}
+                  onChange={(e) =>
+                    setDraft({
+                      clinicalDetails: { ...editClinical, clinicalNotes: e.target.value },
+                    })
+                  }
+                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                />
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-4 pt-1">
+                <label className="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    disabled={isLocked || !canVerifyIncident(userRole)}
+                    checked={editImmediateDanger}
+                    onChange={(e) => setDraft({ immediateDanger: e.target.checked })}
+                    className="rounded border-slate-300"
+                  />
+                  <span>Immediate life / scene hazard present</span>
+                </label>
+                {editImmediateDanger && (
+                  <input
+                    type="text"
+                    disabled={isLocked || !canVerifyIncident(userRole)}
+                    value={editDangerDetails}
+                    onChange={(e) => setDraft({ dangerDetails: e.target.value })}
+                    placeholder="Specify immediate hazard details..."
+                    className="flex-1 min-w-[220px] rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                  />
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="lg:col-span-7 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>Click anywhere on the Lagos map to adjust the operator pin</span>
-              </div>
-            </div>
-            <LagosMap
-              incidents={[
-                {
-                  ...incident,
-                  location: {
-                    ...incident.location,
-                    lat: pinLat,
-                    lng: pinLng,
-                  },
-                },
-              ]}
-              units={units}
-              selectedIncidentId={incident.id}
-              editablePin={canVerifyIncident(userRole)}
-              onPinMove={(lat, lng) => {
-                setPinLat(lat);
-                setPinLng(lng);
-              }}
-              heightClass="h-[460px]"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: RESPONSE UNITS & HUMAN-APPROVED DISPATCH */}
-      {activeTab === 'units' && (
-        <div className="space-y-4">
-          {/* Workflow Stepper */}
-          <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none">
-            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2.5">
-              Human-Controlled Dispatch Sequence
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-[11px]">
-              {[
-                {
-                  label: '1. Incident Verified',
-                  done:
-                    incident.location.verificationStatus === 'VERIFIED' ||
-                    Boolean(incident.assignedUnitId),
-                },
-                { label: '2. Unit Selected', done: Boolean(candidateUnitId || assignedUnit) },
-                { label: '3. Human Approval', done: Boolean(incident.dispatchedAt) },
-                { label: '4. Unit Assigned', done: Boolean(incident.assignedUnitId) },
-                {
-                  label: '5. Acknowledged',
-                  done:
-                    Boolean(incident.acknowledgedAt) ||
-                    assignedUnit?.availability === 'ACKNOWLEDGED' ||
-                    assignedUnit?.availability === 'EN_ROUTE' ||
-                    assignedUnit?.availability === 'ON_SCENE',
-                },
-                {
-                  label: '6. En Route',
-                  done:
-                    assignedUnit?.availability === 'EN_ROUTE' ||
-                    assignedUnit?.availability === 'ON_SCENE',
-                },
-                {
-                  label: '7. On Scene',
-                  done: assignedUnit?.availability === 'ON_SCENE',
-                },
-              ].map((step) => (
-                <div
-                  key={step.label}
-                  className={`px-2.5 py-2 rounded-lg border font-medium ${
-                    step.done
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/35 dark:text-emerald-300'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-400'
-                  }`}
+            {!isLocked && canVerifyIncident(userRole) && (
+              <div className="pt-3 border-t border-slate-200 dark:border-[#26364B] flex justify-end">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    const parsedPeople =
+                      editPeopleAffected.trim() !== '' &&
+                      Number.isFinite(Number(editPeopleAffected))
+                        ? Math.max(0, Math.round(Number(editPeopleAffected)))
+                        : null;
+                    await onUpdateMedicalDetails(incident.id, {
+                      category: editCategory,
+                      priority: editPriority,
+                      priorityReason: editPriorityReason,
+                      peopleAffected: parsedPeople,
+                      immediateDanger: editImmediateDanger,
+                      dangerDetails: editDangerDetails,
+                      clinicalDetails: editClinical,
+                      summary: editSummary,
+                    });
+                    setBusy(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white"
                 >
-                  {step.label}
-                </div>
-              ))}
-            </div>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Save Medical Assessment</span>
+                </button>
+              </div>
+            )}
           </div>
+        )}
 
+        {/* TAB 3: LOCATION VERIFICATION */}
+        {activeTab === 'location' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <div className="lg:col-span-6 space-y-3">
-              {/* Assigned Unit Status Controls */}
-              {assignedUnit && (
-                <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-cyan-300 dark:border-cyan-500/40 p-4 space-y-3 shadow-2xs dark:shadow-none">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-cyan-700 dark:text-cyan-300 font-semibold">
-                        Assigned Response Unit {assignedUnit.isSimulated ? '(Simulated Demo Mode)' : ''}
-                      </div>
-                      <div className="text-sm font-bold text-slate-900 dark:text-slate-50">
-                        {assignedUnit.callsign} · {assignedUnit.unitType}
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {assignedUnit.crewDescription}
-                      </div>
-                    </div>
-                    <UnitAvailabilityBadge availability={assignedUnit.availability} />
+            <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#26364B]">
+                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Location Verification</span>
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  <LocationSourceBadge source={incident.location.source} />
+                  <VerificationBadge status={incident.location.verificationStatus} />
+                </div>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Verified / Corrected Street Description
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isLocked || !canVerifyIncident(userRole)}
+                    value={correctedDesc}
+                    onChange={(e) => setDraft({ correctedDesc: e.target.value })}
+                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Nearest Landmark
+                    </label>
+                    <input
+                      type="text"
+                      disabled={isLocked || !canVerifyIncident(userRole)}
+                      value={landmark}
+                      onChange={(e) => setDraft({ landmark: e.target.value })}
+                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                    />
                   </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Lagos Area
+                    </label>
+                    <input
+                      type="text"
+                      disabled={isLocked || !canVerifyIncident(userRole)}
+                      value={area}
+                      onChange={(e) => setDraft({ area: e.target.value })}
+                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
 
-                  {canUpdateUnitStatus(userRole) && (
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
-                      {(
-                        [
-                          { key: 'ACKNOWLEDGED', label: 'Acknowledged' },
-                          { key: 'EN_ROUTE', label: 'En route' },
-                          { key: 'ON_SCENE', label: 'On scene' },
-                          { key: 'COMPLETED', label: 'Completed' },
-                          { key: 'CANCELLED', label: 'Cancelled' },
-                        ] as const
-                      ).map((act) => (
-                        <button
-                          key={act.key}
-                          type="button"
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            await onUpdateUnitStatus(assignedUnit.id, act.key);
-                            setBusy(false);
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors"
-                        >
-                          {act.label}
-                        </button>
-                      ))}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Latitude (Lagos)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      disabled={isLocked || !canVerifyIncident(userRole)}
+                      value={pinLat ?? ''}
+                      onChange={(e) =>
+                        setDraft({ pinLat: e.target.value ? Number(e.target.value) : undefined })
+                      }
+                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Longitude (Lagos)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      disabled={isLocked || !canVerifyIncident(userRole)}
+                      value={pinLng ?? ''}
+                      onChange={(e) =>
+                        setDraft({ pinLng: e.target.value ? Number(e.target.value) : undefined })
+                      }
+                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                {!isLocked && canVerifyIncident(userRole) && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!navigator.geolocation) return;
+                        navigator.geolocation.getCurrentPosition((pos) => {
+                          setDraft({
+                            pinLat: Number(pos.coords.latitude.toFixed(5)),
+                            pinLng: Number(pos.coords.longitude.toFixed(5)),
+                          });
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-200"
+                    >
+                      <LocateFixed className="w-3.5 h-3.5" />
+                      <span>Use Browser GPS</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        await onVerifyLocation(incident.id, {
+                          correctedDescription: correctedDesc,
+                          landmark,
+                          area,
+                          lat: pinLat,
+                          lng: pinLng,
+                          markVerified: false,
+                        });
+                        setBusy(false);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200"
+                    >
+                      Save Draft
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        await onVerifyLocation(incident.id, {
+                          correctedDescription: correctedDesc,
+                          landmark,
+                          area,
+                          lat: pinLat,
+                          lng: pinLng,
+                          markVerified: true,
+                        });
+                        setBusy(false);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Confirm &amp; Verify Location</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 4 Honest Location Intelligence Methods */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
+                {locationMethods.map((m) => (
+                  <div
+                    key={m.key}
+                    className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5 text-[11px] space-y-0.5"
+                  >
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">{m.label}</div>
+                    <div
+                      className={`font-medium ${
+                        m.available
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-amber-700 dark:text-amber-300'
+                      }`}
+                    >
+                      {m.statusText}
                     </div>
-                  )}
-                </div>
-              )}
-
-              {/* Unit Selection List (Ranked by Proximity & Type) */}
-              <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Lagos Response Units (Ranked by Distance)
-                  </h3>
-                  {!canApproveDispatch(userRole) && (
-                    <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                      Role &apos;{userRole}&apos; is read-only for dispatch approval
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                  {rankedUnits.map(({ unit, distanceKm, recommended, reason }) => {
-                    const isSelected = candidateUnitId === unit.id;
-                    const isAvailable = unit.availability === 'AVAILABLE';
-                    return (
-                      <div
-                        key={unit.id}
-                        className={`rounded-xl border p-3 transition-colors ${
-                          isSelected
-                            ? 'bg-blue-50 border-blue-500 dark:bg-[#172438] dark:border-blue-500/60'
-                            : 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B]'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setCandidateUnitId(unit.id)}
-                            className="text-left flex-1"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                                {unit.id}
-                              </span>
-                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                {unit.callsign}
-                              </span>
-                              {recommended && (
-                                <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
-                                  Recommended
-                                </span>
-                              )}
-                              {distanceKm !== null && (
-                                <span className="font-mono text-[11px] text-blue-700 dark:text-blue-300 font-semibold">
-                                  {distanceKm.toFixed(1)} km
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                              {unit.unitType} · {unit.locationName}, {unit.area}
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                              {reason}
-                            </div>
-                          </button>
-                          <UnitAvailabilityBadge availability={unit.availability} />
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-200 dark:border-[#26364B]/70 text-[11px] text-slate-500 dark:text-slate-400">
-                          <span>{unit.crewDescription}</span>
-                          {isAvailable &&
-                            !incident.assignedUnitId &&
-                            canApproveDispatch(userRole) && (
-                              <button
-                                type="button"
-                                data-testid={`approve-dispatch-${unit.id}`}
-                                onClick={() => {
-                                  setCandidateUnitId(unit.id);
-                                  setConfirmUnit(unit);
-                                }}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-bold whitespace-nowrap"
-                              >
-                                <ShieldCheck className="w-3.5 h-3.5" />
-                                <span>APPROVE &amp; DISPATCH UNIT</span>
-                              </button>
-                            )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                    <p className="text-slate-500 dark:text-slate-400 leading-snug">{m.detail}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Route & Map Comparison */}
-            <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Dispatch Route Preview
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {routeLoading
-                      ? 'Calculating OpenRouteService route...'
-                      : route?.available
-                      ? route.isSimulatedFallback
-                        ? 'Simulated demo corridor overlay active (no ORS key — real ETA not fabricated)'
-                        : `${formatDistanceKm(route.distanceMeters)} · Estimated ${formatDurationMinutes(route.durationSeconds)} via OpenRouteService`
-                      : route?.message || 'Select a unit to inspect location and routing status.'}
-                  </p>
-                </div>
-
-                <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowSimRoute}
-                    onChange={(e) => setAllowSimRoute(e.target.checked)}
-                    className="rounded border-slate-300 dark:border-[#26364B] bg-white dark:bg-[#0B1220] text-blue-600"
-                  />
-                  <span>Show Simulated Demo Route Overlay</span>
-                </label>
+            <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none space-y-2">
+              <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                Lagos Scene Map Pin Preview
               </div>
-
               <LagosMap
-                incidents={[incident]}
-                units={units}
+                incidents={[
+                  {
+                    ...incident,
+                    location: {
+                      ...incident.location,
+                      lat: pinLat,
+                      lng: pinLng,
+                    },
+                  },
+                ]}
+                units={assignedUnit ? [assignedUnit] : []}
                 selectedIncidentId={incident.id}
-                selectedUnitId={candidateUnitId}
                 route={route}
-                onSelectUnit={(id) => setCandidateUnitId(id)}
                 heightClass="h-[400px]"
+                showInfoCard={false}
               />
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* TAB 5: ACTIVITY TIMELINE */}
-      {activeTab === 'timeline' && (
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-5 shadow-2xs dark:shadow-none">
-          <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 mb-4">
-            Immutable Audit &amp; Activity Timeline
-          </h2>
+        {/* TAB 4: RESPONSE & PATIENT TRANSPORT */}
+        {activeTab === 'response' && (
           <div className="space-y-4">
-            {incident.timeline.map((ev, idx) => (
-              <div key={ev.id} className="flex gap-3.5">
-                <div className="flex flex-col items-center">
-                  <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-[#172438] border border-slate-200 dark:border-[#26364B] flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                    <Clock className="w-3.5 h-3.5" />
+            {/* Milestone 4 Scene & Transport Sequential Lifecycle Card */}
+            {(assignedUnit || incident.dispatchedAt || incident.status === 'Patient Transport') && (
+              <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-cyan-300 dark:border-cyan-500/40 p-4 space-y-4 shadow-2xs dark:shadow-none">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Navigation className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                      <span>
+                        {assignedUnit ? `${assignedUnit.callsign} — ` : ''}Response &amp; Patient Transport
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Sequential medical response milestones (each action records once to audit history).
+                    </p>
                   </div>
-                  {idx < incident.timeline.length - 1 && (
-                    <div className="w-px flex-1 bg-slate-200 dark:bg-[#26364B] my-1" />
-                  )}
+                  {assignedUnit && <UnitAvailabilityBadge availability={assignedUnit.availability} />}
                 </div>
-                <div className="pb-4 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                      {ev.title}
-                    </div>
-                    <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                      {new Date(ev.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                    {ev.description}
-                  </p>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    <span>
-                      Actor: {ev.actor} ({ev.actorRole})
+
+                {isSimIncident && simState?.stage === 8 && !simState.arrivedOnScene && (
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/35 px-3 py-2 text-xs text-blue-900 dark:text-blue-200 flex items-center justify-between">
+                    <span>{simState.trackingStatusText || 'Unit en route to incident scene...'}</span>
+                    <span className="font-mono font-bold">
+                      {simState.trackingProgressPct}% · {simState.trackingRemainingSec}s
                     </span>
-                    {ev.isSimulated && (
-                      <>
-                        <span>·</span>
-                        <span className="text-amber-700 dark:text-amber-300 font-mono">
-                          SIMULATED
-                        </span>
-                      </>
+                  </div>
+                )}
+
+                {/* 5 Explicit Milestone Steps */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs">
+                  {/* 1. Arrived at Scene */}
+                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                      1. Scene Arrival
+                    </div>
+                    {incident.arrivedAtSceneAt ? (
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        Confirmed {formatRelativeTime(incident.arrivedAtSceneAt)}
+                      </div>
+                    ) : !isLocked ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          await onTransportEvent(incident.id, { event: 'ARRIVED_ON_SCENE' });
+                          setBusy(false);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold"
+                      >
+                        Mark Arrived at Scene
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Not recorded</span>
                     )}
                   </div>
+
+                  {/* 2. Patient Picked Up */}
+                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                      2. Patient Pickup
+                    </div>
+                    {incident.patientPickedUpAt ? (
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        Picked up {formatRelativeTime(incident.patientPickedUpAt)}
+                      </div>
+                    ) : !isLocked ? (
+                      <button
+                        type="button"
+                        disabled={busy || !incident.arrivedAtSceneAt}
+                        onClick={async () => {
+                          setBusy(true);
+                          await onTransportEvent(incident.id, { event: 'PATIENT_PICKED_UP' });
+                          setBusy(false);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[11px] font-semibold"
+                      >
+                        Mark Patient Picked Up
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                    )}
+                  </div>
+
+                  {/* 3. Hospital Confirmed */}
+                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-1.5">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                      3. Receiving Hospital
+                    </div>
+                    {incident.hospitalDestination ? (
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        {incident.hospitalDestination.name}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                        Select hospital below
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. Start Transport */}
+                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                      4. Transport Started
+                    </div>
+                    {incident.transportStartedAt ? (
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        En route {formatRelativeTime(incident.transportStartedAt)}
+                      </div>
+                    ) : !isLocked ? (
+                      <button
+                        type="button"
+                        disabled={busy || !incident.hospitalDestination}
+                        onClick={async () => {
+                          setBusy(true);
+                          await onTransportEvent(incident.id, { event: 'TRANSPORT_STARTED' });
+                          setBusy(false);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-[11px] font-semibold"
+                      >
+                        Start Patient Transport
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                    )}
+                  </div>
+
+                  {/* 5. Hospital Arrival & Close */}
+                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                      5. Hospital Arrival
+                    </div>
+                    {incident.hospitalArrivedAt ? (
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                          Arrived {formatRelativeTime(incident.hospitalArrivedAt)}
+                        </div>
+                        {!isLocked && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirmClosure({
+                                defaultReason: `Patient delivered safely to ${
+                                  incident.hospitalDestination?.name || 'receiving hospital'
+                                }.`,
+                              })
+                            }
+                            className="w-full px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold"
+                          >
+                            Close Incident
+                          </button>
+                        )}
+                      </div>
+                    ) : !isLocked ? (
+                      <button
+                        type="button"
+                        disabled={busy || !incident.transportStartedAt}
+                        onClick={async () => {
+                          setBusy(true);
+                          await onTransportEvent(incident.id, { event: 'HOSPITAL_ARRIVED' });
+                          setBusy(false);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-semibold"
+                      >
+                        Confirm Hospital Arrival
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Operator Hospital Destination Selector (Never hardcoded by scenario) */}
+                {!isLocked && !incident.transportStartedAt && (
+                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2.5 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span>Operator Hospital Destination Selection</span>
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={customHospitalMode}
+                          onChange={(e) => setCustomHospitalMode(e.target.checked)}
+                        />
+                        <span>Enter custom receiving facility</span>
+                      </label>
+                    </div>
+
+                    {!customHospitalMode ? (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <select
+                          aria-label="Select Lagos receiving hospital"
+                          value={selectedHospitalId}
+                          onChange={(e) => setSelectedHospitalId(e.target.value)}
+                          className="flex-1 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100"
+                        >
+                          {LAGOS_HOSPITAL_DESTINATIONS.map((h) => (
+                            <option key={h.id} value={h.id}>
+                              {h.name} — {h.area}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={handleConfirmHospitalSubmit}
+                          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white whitespace-nowrap"
+                        >
+                          Confirm Hospital Destination
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={customHospName}
+                          onChange={(e) => setCustomHospName(e.target.value)}
+                          placeholder="Hospital name"
+                          className="sm:col-span-2 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5"
+                        />
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={customHospLat}
+                          onChange={(e) => setCustomHospLat(e.target.value)}
+                          placeholder="Lat"
+                          className="rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono"
+                        />
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={customHospLng}
+                          onChange={(e) => setCustomHospLng(e.target.value)}
+                          placeholder="Lng"
+                          className="rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono"
+                        />
+                        <input
+                          type="text"
+                          value={customHospArea}
+                          onChange={(e) => setCustomHospArea(e.target.value)}
+                          placeholder="Area"
+                          className="sm:col-span-2 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5"
+                        />
+                        <button
+                          type="button"
+                          disabled={busy || !customHospName.trim()}
+                          onClick={handleConfirmHospitalSubmit}
+                          className="sm:col-span-2 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
+                        >
+                          Confirm Custom Hospital
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Unit Selection & Human-Approved Dispatch Section */}
+            <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#26364B]">
+                <div>
+                  <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span>Active Medical Response Units Comparison</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Only Active registered medical vehicles appear here. Human operator confirmation is mandatory for dispatch.
+                  </p>
+                </div>
+                {route && route.available && !route.isSimulatedFallback && (
+                  <span className="font-mono text-xs text-blue-700 dark:text-blue-300">
+                    ORS Route: {formatDistanceKm(route.distanceMeters)} ·{' '}
+                    {formatDurationMinutes(route.durationSeconds)}
+                  </span>
+                )}
+              </div>
+
+              {dispatchBlockedByPolicy && !incident.assignedUnitId && !isLocked && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2">
+                  <span>
+                    Organisation policy requires verifying the Lagos location before dispatching any medical unit.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('location')}
+                    className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-bold text-[11px] whitespace-nowrap"
+                  >
+                    Verify Location
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-2.5">
+                {rankedUnits.map(({ unit, distanceKm, recommended, reason }) => {
+                  const isAssigned = incident.assignedUnitId === unit.id;
+                  const canSelectDispatch =
+                    !isLocked &&
+                    !incident.assignedUnitId &&
+                    unit.availability === 'Available' &&
+                    canApproveDispatch(userRole);
+
+                  return (
+                    <div
+                      key={unit.id}
+                      onClick={() => setCandidateUnitId(unit.id)}
+                      className={`rounded-xl border p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer transition-colors ${
+                        isAssigned
+                          ? 'bg-emerald-50/60 border-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/40'
+                          : candidateUnitId === unit.id
+                          ? 'bg-blue-50/70 border-blue-400 dark:bg-blue-500/10 dark:border-blue-500/50'
+                          : 'bg-slate-50/70 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B]'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                            {unit.callsign}
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                            {unit.unitType} · {unit.vehicleRegistration}
+                          </span>
+                          <UnitAvailabilityBadge availability={unit.availability} />
+                          <LocationFreshnessBadge freshness={unit.locationFreshness} />
+                          {recommended && (
+                            <span className="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
+                              RECOMMENDED
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                          {unit.operationalBase} ({unit.area}) · Crew: {unit.crewDescription}
+                        </div>
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {unit.medicalCapabilities.map((cap) => (
+                            <span
+                              key={cap}
+                              className="px-1.5 py-0.5 rounded bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] text-[10px] text-slate-700 dark:text-slate-300"
+                            >
+                              {cap}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right text-[11px]">
+                          <div className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                            {distanceKm !== null ? `${distanceKm} km` : 'Distance N/A'}
+                          </div>
+                          <div className="text-slate-500 dark:text-slate-400">{reason}</div>
+                        </div>
+
+                        {canSelectDispatch && (
+                          <button
+                            type="button"
+                            disabled={dispatchBlockedByPolicy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCandidateUnitId(unit.id);
+                              setConfirmUnit(unit);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white whitespace-nowrap"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Approve Dispatch</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Expandable Right Audit Timeline Drawer */}
+      {auditOpen && (
+        <aside className="w-full lg:w-80 shrink-0 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <History className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Audit Timeline ({incident.timeline.length})</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setAuditOpen(false)}
+              className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400"
+              aria-label="Close audit timeline drawer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-2.5 max-h-[580px] overflow-y-auto pr-1">
+            {[...incident.timeline].reverse().map((ev) => (
+              <div
+                key={ev.id}
+                className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5 text-[11px] space-y-1"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {ev.title}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                    {new Date(ev.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-300 leading-snug">{ev.description}</p>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                  {ev.actor} · {ev.actorRole}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </aside>
       )}
 
-      {/* TAB 6: OPERATOR NOTES */}
-      {activeTab === 'notes' && (
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-5 space-y-4 shadow-2xs dark:shadow-none">
-          <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-            Operator Notes &amp; Decisions
-          </h2>
-
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!noteText.trim()) return;
-              setBusy(true);
-              await onAddNote(incident.id, noteText.trim());
-              setNoteText('');
-              setBusy(false);
-            }}
-            className="flex flex-col sm:flex-row gap-2"
-          >
-            <input
-              type="text"
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Record verification note, gate access instruction, or clinical/security context..."
-              aria-label="Operator note"
-              className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-            />
-            <button
-              type="submit"
-              disabled={busy || !noteText.trim()}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white whitespace-nowrap"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Add Note</span>
-            </button>
-          </form>
-
-          {incident.notes.length === 0 ? (
-            <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-6 text-center text-xs text-slate-500 dark:text-slate-400">
-              No operator notes added yet.
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {incident.notes.map((n) => (
-                <div
-                  key={n.id}
-                  className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 text-xs space-y-1"
-                >
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {n.author} ({n.role})
-                    </span>
-                    <span className="font-mono">
-                      {new Date(n.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="text-slate-800 dark:text-slate-200">{n.text}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {confirmUnit && (
+      {confirmUnit && !isLocked && (
         <DispatchConfirmModal
           incident={incident}
           unit={confirmUnit}
@@ -1641,31 +1756,26 @@ export function IncidentWorkspace({
         />
       )}
 
-      {confirmClosure && (
+      {confirmClosure && !isLocked && (
         <ConfirmActionModal
-          title={
-            confirmClosure.targetStatus === 'CLOSED'
-              ? `Confirm Closing ${incident.id}`
-              : `Confirm Marking ${incident.id} Resolved`
-          }
-          description={
-            confirmClosure.targetStatus === 'CLOSED'
-              ? `Closing ${incident.id} moves it from the Live Incidents queue into Incident History. Please confirm that the situation is safe and record a short closure reason.`
-              : `Marking ${incident.id} as Resolved indicates field assistance has finished. Please record a short resolution reason for the audit trail.`
-          }
-          confirmLabel={
-            confirmClosure.targetStatus === 'CLOSED'
-              ? 'Confirm & Close Incident'
-              : 'Confirm & Mark Resolved'
-          }
+          title={`Close Incident ${incident.id}`}
+          description="Closing an incident archives it as a permanent read-only record in Incident History and returns any assigned medical unit to Available."
+          confirmLabel="Close Incident"
+          reasonLabel="Final Patient / Incident Outcome Summary"
           defaultReason={confirmClosure.defaultReason}
-          tone={confirmClosure.targetStatus === 'CLOSED' ? 'danger' : 'warning'}
+          tone="primary"
           submitting={busy}
           onCancel={() => setConfirmClosure(null)}
           onConfirm={async (reason) => {
             setBusy(true);
-            await onUpdateStatus(incident.id, confirmClosure.targetStatus, reason);
-            setStatusReason('');
+            if (incident.assignedUnitId) {
+              await onTransportEvent(incident.id, {
+                event: 'CLOSE_INCIDENT',
+                outcomeText: reason,
+              });
+            } else {
+              await onUpdateStatus(incident.id, 'Closed', reason);
+            }
             setConfirmClosure(null);
             setBusy(false);
           }}

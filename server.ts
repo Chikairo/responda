@@ -6,22 +6,26 @@ import http from 'http';
 import path from 'path';
 import type {
   CallChannel,
+  ClinicalDetails,
+  CrewMemberRecord,
+  HospitalDestination,
   IncidentLocation,
   IncidentPriority,
   IncidentRecord,
   IncidentStatus,
-  LocationSource,
+  MedicalCapability,
+  OrganisationSettings,
+  ResponseUnit,
   SimulationScenarioId,
+  StaffAccount,
+  StaffAccountStatus,
   TranscriptMessage,
   UnitAvailability,
+  UnitRegistrationStatus,
+  UnitType,
   UserRole,
 } from './src/types/responda.ts';
 import {
-  canApproveDispatch,
-  canTakeOver,
-  canUpdateIncidentStatus,
-  canUpdateUnitStatus,
-  canVerifyIncident,
   mapUnitAvailabilityToIncidentStatus,
   validateStatusTransition,
 } from './src/utils/incidentLogic.ts';
@@ -31,6 +35,11 @@ import {
   sanitizeCategory,
   sanitizePriority,
 } from './src/utils/intakeParser.ts';
+import {
+  createAuthMiddleware,
+  issueDemoSession,
+  type AuthenticatedRequest,
+} from './server/auth.ts';
 import { attachWebSocketServers, broadcastEvent } from './server/liveBridge.ts';
 import {
   isGeminiConfigured,
@@ -53,21 +62,8 @@ import {
 
 const PORT = Number(process.env.PORT) || 3000;
 
-function getRoleFromReq(req: express.Request): { role: UserRole; operatorName: string } {
-  const rawRole = String(req.headers['x-responda-role'] || req.body?.actorRole || 'Dispatcher');
-  const validRoles: UserRole[] = [
-    'Administrator',
-    'Call Operator',
-    'Dispatcher',
-    'Responder',
-  ];
-  const role: UserRole = validRoles.includes(rawRole as UserRole)
-    ? (rawRole as UserRole)
-    : 'Dispatcher';
-  const operatorName = String(
-    req.headers['x-responda-operator'] || req.body?.actorName || 'Seyi Ogunleye'
-  ).slice(0, 80);
-  return { role, operatorName };
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 async function startServer(): Promise<void> {
@@ -77,7 +73,12 @@ async function startServer(): Promise<void> {
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  // Health & Bootstrap
+  const { requireAuth, requireRole } = createAuthMiddleware(async () => {
+    const db = await store.getState();
+    return db.staffAccounts;
+  });
+
+  // Public Health & Demo Auth Directory
   app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
@@ -87,18 +88,70 @@ async function startServer(): Promise<void> {
     });
   });
 
-  app.get('/api/bootstrap', async (_req, res) => {
+  app.get('/api/auth/accounts', async (_req, res) => {
+    const db = await store.getState();
+    res.json({
+      accounts: db.staffAccounts,
+      isDemoSessionSupported: true,
+    });
+  });
+
+  app.post('/api/auth/demo-session', async (req, res) => {
+    const { accountId } = req.body as { accountId?: string };
+    if (!accountId || typeof accountId !== 'string') {
+      res.status(400).json({ error: 'accountId is required.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const outcome = await store.mutate((db) => {
+      const account = db.staffAccounts.find((a) => a.id === accountId);
+      if (!account) {
+        return { error: 'Staff account not found.', code: 404 as const };
+      }
+      if (account.accountStatus !== 'ACTIVE') {
+        return {
+          error: `Account '${account.name}' has status '${account.accountStatus}' and cannot start an active session.`,
+          code: 403 as const,
+        };
+      }
+      account.lastActive = now;
+      return { session: issueDemoSession(account) };
+    });
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    res.json(outcome.session);
+  });
+
+  app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res) => {
+    res.json({
+      account: req.authAccount,
+      isDemoSession: true,
+    });
+  });
+
+  app.get('/api/bootstrap', requireAuth, async (_req, res) => {
     const db = await store.getState();
     res.json({
       incidents: db.incidents,
       units: db.units,
       notifications: db.notifications,
+      staffAccounts: db.staffAccounts,
+      organisationSettings: db.organisationSettings,
       integrations: getIntegrationStatuses(),
     });
   });
 
+  // ============================================================================
+  // OPERATIONS STAFF ROUTES (Strict server-side role & active account checks)
+  // ============================================================================
+
   // AI Intake Turn (Text Simulation or Live Gemini)
-  app.post('/api/intake/message', async (req, res) => {
+  app.post('/api/intake/message', requireRole('Operations Staff'), async (req, res) => {
     const {
       message,
       history = [],
@@ -154,7 +207,6 @@ async function startServer(): Promise<void> {
       return;
     }
 
-    // In 'auto' mode when Gemini key is absent, return explicit status so UI informs operator cleanly
     res.status(503).json({
       configured: geminiRes.configured,
       error:
@@ -163,8 +215,9 @@ async function startServer(): Promise<void> {
     });
   });
 
-  // Create structured incident from AI intake or manual report
-  app.post('/api/incidents', async (req, res) => {
+  // Create structured medical incident from AI intake or manual report
+  app.post('/api/incidents', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const {
       category,
       priority,
@@ -176,6 +229,7 @@ async function startServer(): Promise<void> {
       peopleAffected,
       immediateDanger,
       dangerDetails,
+      clinicalDetails,
       missingInfoFlags,
       transcript,
       locationDescription,
@@ -195,6 +249,7 @@ async function startServer(): Promise<void> {
       peopleAffected?: number | null;
       immediateDanger?: boolean;
       dangerDetails?: string;
+      clinicalDetails?: ClinicalDetails;
       missingInfoFlags?: string[];
       transcript?: TranscriptMessage[];
       locationDescription?: string;
@@ -211,12 +266,24 @@ async function startServer(): Promise<void> {
     }
 
     const now = new Date().toISOString();
+    // Voice telephony calls never fabricate handset GPS unless real GPS coordinates were explicitly passed
+    const effectiveGps =
+      callChannel === 'TELEPHONY_ADAPTER' || callChannel === 'WEB_VOICE'
+        ? gps && isValidLagosCoords(gps.lat, gps.lng)
+          ? gps
+          : null
+        : gps;
+
     const location = buildLocationFromIntake({
       callerDescription: locationDescription,
       landmark,
       area,
-      gps,
+      gps: effectiveGps,
+      isSimulated: Boolean(isSimulated),
     });
+
+    const sanitizedCat = sanitizeCategory(category);
+    const sanitizedPri = sanitizePriority(priority);
 
     const incident = await store.mutate((db) => {
       const id = `INC-2026-${db.sequenceCounter++}`;
@@ -224,12 +291,14 @@ async function startServer(): Promise<void> {
         id,
         createdAt: now,
         updatedAt: now,
-        category: sanitizeCategory(category),
-        priority: sanitizePriority(priority),
+        category: sanitizedCat,
+        priority: sanitizedPri,
         priorityReason:
           priorityReason?.trim() ||
-          'Priority suggested by automated intake; awaiting human operator verification.',
-        status: 'AWAITING_OPERATOR',
+          (sanitizedPri === 'Unassessed'
+            ? 'Insufficient clinical information; flagged Unassessed for operator triage.'
+            : 'Priority suggested during intake; awaiting human operator verification.'),
+        status: 'New',
         callerName: callerName?.trim() || undefined,
         callerPhone: callerPhone?.trim() || undefined,
         summary: (summary || description || '').trim(),
@@ -240,15 +309,27 @@ async function startServer(): Promise<void> {
             : null,
         immediateDanger: Boolean(immediateDanger),
         dangerDetails: dangerDetails?.trim() || undefined,
+        clinicalDetails: clinicalDetails
+          ? {
+              chiefComplaint: clinicalDetails.chiefComplaint?.trim() || undefined,
+              consciousness: clinicalDetails.consciousness?.trim() || undefined,
+              breathing: clinicalDetails.breathing?.trim() || undefined,
+              bleedingOrInjury: clinicalDetails.bleedingOrInjury?.trim() || undefined,
+              clinicalNotes: clinicalDetails.clinicalNotes?.trim() || undefined,
+            }
+          : undefined,
         missingInfoFlags: Array.isArray(missingInfoFlags) ? missingInfoFlags : [],
         transcript: Array.isArray(transcript) ? transcript : [],
-        location,
+        location: {
+          ...location,
+          carrierNote: location.carrierNote || 'Carrier location integration not configured',
+        },
         timeline: [
           {
             id: `ev-${Date.now()}-1`,
             type: 'INCIDENT_RECEIVED',
-            title: 'Emergency report received',
-            description: `Intake initiated via ${callChannel}.`,
+            title: 'Medical emergency report received',
+            description: `Intake initiated via ${callChannel} (logged by ${actor.name}).`,
             actor: 'Responda Intake Gateway',
             actorRole: 'System',
             timestamp: now,
@@ -258,7 +339,7 @@ async function startServer(): Promise<void> {
             id: `ev-${Date.now()}-2`,
             type: 'INCIDENT_CREATED',
             title: 'Structured incident record created',
-            description: `${sanitizeCategory(category)} · ${sanitizePriority(priority)} suggested · Location source: ${location.source} (UNVERIFIED).`,
+            description: `${sanitizedCat} · Priority: ${sanitizedPri} · Location source: ${location.source} (UNVERIFIED).`,
             actor: 'Responda AI Intake',
             actorRole: 'AI Assistant',
             timestamp: now,
@@ -268,7 +349,7 @@ async function startServer(): Promise<void> {
             id: `ev-${Date.now()}-3`,
             type: 'OPERATOR_NOTIFIED',
             title: 'Command Centre alerted for human takeover',
-            description: 'No unit dispatched; awaiting operator verification.',
+            description: 'No unit dispatched; awaiting Operations Staff review.',
             actor: 'Responda Router',
             actorRole: 'System',
             timestamp: now,
@@ -286,7 +367,7 @@ async function startServer(): Promise<void> {
         id: `notif-${Date.now()}`,
         channel: 'SYSTEM_ALERT',
         recipient: 'Command Centre Queue',
-        message: `${id} (${record.category} · ${record.location.area || 'Lagos'}) created — awaiting human operator takeover.`,
+        message: `${id} (${record.category} · ${record.location.area || 'Lagos'}) created — awaiting operator takeover.`,
         incidentId: id,
         status: 'DELIVERED_DEMO',
         providerResponse: 'Real-time WebSocket command alert broadcast',
@@ -301,63 +382,143 @@ async function startServer(): Promise<void> {
   });
 
   // Human Operator Takeover
-  app.post('/api/incidents/:id/takeover', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
-    if (!canTakeOver(role)) {
-      res.status(403).json({
-        error: `Role '${role}' is not authorised to take over incidents. Switch to Call Operator, Dispatcher, or Administrator.`,
-      });
-      return;
-    }
-
+  app.post('/api/incidents/:id/takeover', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const now = new Date().toISOString();
-    const updated = await store.mutate((db) => {
-      const inc = db.incidents.find((i) => i.id === req.params.id);
-      if (!inc) return null;
 
-      inc.status = 'UNDER_REVIEW';
-      inc.assignedOperator = operatorName;
+    const outcome = await store.mutate((db) => {
+      const inc = db.incidents.find((i) => i.id === req.params.id);
+      if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Closed or archived incidents are read-only.', code: 400 as const };
+      }
+
+      if (inc.status === 'New') {
+        inc.status = 'Under Review';
+      }
+      inc.assignedOperator = actor.name;
       inc.acceptedAt = inc.acceptedAt || now;
       inc.updatedAt = now;
       inc.aiIntakeActive = false;
       inc.transcript.push({
         id: `t-${Date.now()}`,
         speaker: 'OPERATOR',
-        text: `Human operator ${operatorName} (${role}) took over this session. Automated AI intake stopped.`,
+        text: `${actor.name} (${actor.role}) took over this session. Automated AI intake stopped.`,
         timestamp: now,
       });
       inc.timeline.push({
         id: `ev-${Date.now()}`,
         type: 'OPERATOR_TAKEOVER',
         title: 'Human operator took over incident',
-        description: `${operatorName} (${role}) assumed control and halted AI intake.`,
-        actor: operatorName,
-        actorRole: role,
+        description: `${actor.name} (${actor.role}) assumed control and halted AI intake.`,
+        actor: actor.name,
+        actorRole: actor.role,
         timestamp: now,
         isSimulated: inc.isSimulated,
       });
-      return inc;
+      return { incident: inc };
     });
 
-    if (!updated) {
-      res.status(404).json({ error: 'Incident not found.' });
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
       return;
     }
 
-    broadcastEvent('incident:updated', updated);
-    res.json({ incident: updated });
+    broadcastEvent('incident:updated', outcome.incident);
+    res.json({ incident: outcome.incident });
+  });
+
+  // Update Medical & Clinical Assessment Details
+  app.patch('/api/incidents/:id/medical-details', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
+    const {
+      category,
+      priority,
+      priorityReason,
+      peopleAffected,
+      immediateDanger,
+      dangerDetails,
+      clinicalDetails,
+      summary,
+      description,
+    } = req.body as {
+      category?: string;
+      priority?: IncidentPriority;
+      priorityReason?: string;
+      peopleAffected?: number | null;
+      immediateDanger?: boolean;
+      dangerDetails?: string;
+      clinicalDetails?: ClinicalDetails;
+      summary?: string;
+      description?: string;
+    };
+
+    const now = new Date().toISOString();
+    const outcome = await store.mutate((db) => {
+      const inc = db.incidents.find((i) => i.id === req.params.id);
+      if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Closed incidents are permanently read-only.', code: 400 as const };
+      }
+
+      if (category) inc.category = sanitizeCategory(category);
+      if (priority) inc.priority = sanitizePriority(priority);
+      if (priorityReason !== undefined) inc.priorityReason = priorityReason.trim();
+      if (peopleAffected !== undefined) {
+        inc.peopleAffected =
+          typeof peopleAffected === 'number' && Number.isFinite(peopleAffected)
+            ? Math.max(0, Math.round(peopleAffected))
+            : null;
+      }
+      if (immediateDanger !== undefined) inc.immediateDanger = Boolean(immediateDanger);
+      if (dangerDetails !== undefined) inc.dangerDetails = dangerDetails.trim() || undefined;
+      if (summary?.trim()) inc.summary = summary.trim();
+      if (description?.trim()) inc.description = description.trim();
+      if (clinicalDetails) {
+        inc.clinicalDetails = {
+          ...(inc.clinicalDetails || {}),
+          chiefComplaint: clinicalDetails.chiefComplaint?.trim() ?? inc.clinicalDetails?.chiefComplaint,
+          consciousness: clinicalDetails.consciousness?.trim() ?? inc.clinicalDetails?.consciousness,
+          breathing: clinicalDetails.breathing?.trim() ?? inc.clinicalDetails?.breathing,
+          bleedingOrInjury: clinicalDetails.bleedingOrInjury?.trim() ?? inc.clinicalDetails?.bleedingOrInjury,
+          clinicalNotes: clinicalDetails.clinicalNotes?.trim() ?? inc.clinicalDetails?.clinicalNotes,
+        };
+      }
+
+      if (inc.status === 'New') {
+        inc.status = 'Under Review';
+      }
+      inc.assignedOperator = inc.assignedOperator || actor.name;
+      inc.acceptedAt = inc.acceptedAt || now;
+      inc.aiIntakeActive = false;
+      inc.updatedAt = now;
+
+      inc.timeline.push({
+        id: `ev-${Date.now()}`,
+        type: 'INCIDENT_VERIFIED',
+        title: `Medical assessment updated (${inc.priority} · ${inc.category})`,
+        description: `Clinical triage details reviewed by ${actor.name}.`,
+        actor: actor.name,
+        actorRole: actor.role,
+        timestamp: now,
+        isSimulated: inc.isSimulated,
+      });
+
+      return { incident: inc };
+    });
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    broadcastEvent('incident:updated', outcome.incident);
+    res.json({ incident: outcome.incident });
   });
 
   // Operator Edit / Verify Location & Incident Details
-  app.post('/api/incidents/:id/verify-location', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
-    if (!canVerifyIncident(role)) {
-      res.status(403).json({
-        error: `Role '${role}' is not authorised to verify incident locations.`,
-      });
-      return;
-    }
-
+  app.post('/api/incidents/:id/verify-location', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const {
       correctedDescription,
       landmark,
@@ -388,9 +549,12 @@ async function startServer(): Promise<void> {
     }
 
     const now = new Date().toISOString();
-    const updated = await store.mutate((db) => {
+    const outcome = await store.mutate((db) => {
       const inc = db.incidents.find((i) => i.id === req.params.id);
-      if (!inc) return null;
+      if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Closed incidents cannot be modified.', code: 400 as const };
+      }
 
       const updatedLoc: IncidentLocation = {
         ...inc.location,
@@ -405,10 +569,10 @@ async function startServer(): Promise<void> {
       if (markVerified) {
         updatedLoc.source = 'OPERATOR_VERIFIED';
         updatedLoc.verificationStatus = 'VERIFIED';
-        updatedLoc.verifiedBy = operatorName;
+        updatedLoc.verifiedBy = actor.name;
         updatedLoc.verifiedAt = now;
-        if (inc.status === 'UNDER_REVIEW' || inc.status === 'AWAITING_OPERATOR') {
-          inc.status = 'VERIFIED';
+        if (inc.status === 'New') {
+          inc.status = 'Under Review';
         }
       }
 
@@ -417,7 +581,7 @@ async function startServer(): Promise<void> {
       if (peopleAffected !== undefined) inc.peopleAffected = peopleAffected;
 
       inc.location = updatedLoc;
-      inc.assignedOperator = inc.assignedOperator || operatorName;
+      inc.assignedOperator = inc.assignedOperator || actor.name;
       inc.acceptedAt = inc.acceptedAt || now;
       inc.aiIntakeActive = false;
       inc.updatedAt = now;
@@ -428,37 +592,38 @@ async function startServer(): Promise<void> {
         title: markVerified
           ? 'Location verified by human operator'
           : 'Location details updated',
-        description: `${updatedLoc.correctedDescription || updatedLoc.description}${updatedLoc.lat && updatedLoc.lng ? ` (${updatedLoc.lat.toFixed(4)}, ${updatedLoc.lng.toFixed(4)})` : ''}`,
-        actor: operatorName,
-        actorRole: role,
+        description: `${updatedLoc.correctedDescription || updatedLoc.description}${
+          updatedLoc.lat && updatedLoc.lng
+            ? ` (${updatedLoc.lat.toFixed(4)}, ${updatedLoc.lng.toFixed(4)})`
+            : ''
+        }`,
+        actor: actor.name,
+        actorRole: actor.role,
         timestamp: now,
         isSimulated: inc.isSimulated,
       });
 
-      return inc;
+      return { incident: inc };
     });
 
-    if (!updated) {
-      res.status(404).json({ error: 'Incident not found.' });
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
       return;
     }
 
-    broadcastEvent('incident:updated', updated);
-    res.json({ incident: updated });
+    broadcastEvent('incident:updated', outcome.incident);
+    res.json({ incident: outcome.incident });
   });
 
-  // Update Incident Status (with recorded reason & strict anti-auto-dispatch validation)
-  app.post('/api/incidents/:id/status', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
-    if (!canUpdateIncidentStatus(role)) {
-      res.status(403).json({ error: `Role '${role}' cannot update incident status.` });
-      return;
-    }
-
-    const { status, reason } = req.body as {
+  // Update Incident Status (with recorded reason & strict validation)
+  app.post('/api/incidents/:id/status', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
+    const { status, reason, outcome: closureOutcome } = req.body as {
       status?: IncidentStatus;
       reason?: string;
+      outcome?: string;
     };
+
     if (!status || !reason || !reason.trim()) {
       res.status(400).json({
         error: 'Both target status and a recorded reason are required.',
@@ -482,25 +647,38 @@ async function startServer(): Promise<void> {
       const prev = inc.status;
       inc.status = status;
       inc.updatedAt = now;
-      if (status === 'RESOLVED' || status === 'CLOSED') {
+      if (status === 'Closed') {
+        inc.closedAt = inc.closedAt || now;
         inc.resolvedAt = inc.resolvedAt || now;
+        inc.outcome = closureOutcome?.trim() || reason.trim();
         if (inc.assignedUnitId) {
           const unit = db.units.find((u) => u.id === inc.assignedUnitId);
           if (unit) {
-            unit.availability = 'AVAILABLE';
+            unit.availability = 'Available';
             unit.currentAssignmentId = undefined;
             unit.lastLocationUpdate = now;
+            unit.activityLog = [
+              {
+                id: `uact-${Date.now()}`,
+                timestamp: now,
+                actor: actor.name,
+                actorRole: actor.role,
+                action: `Cleared from ${inc.id}`,
+                details: `Returned to Available upon incident closure: ${reason.trim()}`,
+              },
+              ...(unit.activityLog || []),
+            ];
           }
         }
       }
 
       inc.timeline.push({
         id: `ev-${Date.now()}`,
-        type: 'STATUS_CHANGED',
+        type: status === 'Closed' ? 'UNIT_COMPLETED' : 'STATUS_CHANGED',
         title: `Status updated: ${prev} → ${status}`,
         description: `Reason: ${reason.trim()}`,
-        actor: operatorName,
-        actorRole: role,
+        actor: actor.name,
+        actorRole: actor.role,
         timestamp: now,
         isSimulated: inc.isSimulated,
       });
@@ -519,15 +697,8 @@ async function startServer(): Promise<void> {
   });
 
   // Human-Approved Dispatch
-  app.post('/api/incidents/:id/dispatch', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
-    if (!canApproveDispatch(role)) {
-      res.status(403).json({
-        error: `Role '${role}' is not authorised to approve dispatch. Only Dispatcher or Administrator roles may confirm unit assignments.`,
-      });
-      return;
-    }
-
+  app.post('/api/incidents/:id/dispatch', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const {
       unitId,
       humanConfirmed,
@@ -558,10 +729,30 @@ async function startServer(): Promise<void> {
     const result = await store.mutate(async (db) => {
       const inc = db.incidents.find((i) => i.id === req.params.id);
       if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Cannot dispatch units to a closed or out-of-scope incident.', code: 400 as const };
+      }
+
+      if (
+        db.organisationSettings.requireLocationVerificationBeforeDispatch &&
+        inc.location.verificationStatus !== 'VERIFIED'
+      ) {
+        return {
+          error:
+            'Organisation policy requires location verification before unit dispatch. Verify the location first.',
+          code: 400 as const,
+        };
+      }
 
       const unit = db.units.find((u) => u.id === unitId);
       if (!unit) return { error: 'Response unit not found.', code: 404 as const };
-      if (unit.availability !== 'AVAILABLE') {
+      if (unit.registrationStatus !== 'Active' || unit.legacyOutOfScope) {
+        return {
+          error: `Unit ${unit.callsign} is ${unit.registrationStatus} / out-of-scope and cannot be dispatched.`,
+          code: 400 as const,
+        };
+      }
+      if (unit.availability !== 'Available') {
         return {
           error: `Unit ${unit.callsign} is currently ${unit.availability} and cannot be newly assigned.`,
           code: 400 as const,
@@ -569,24 +760,40 @@ async function startServer(): Promise<void> {
       }
 
       inc.assignedUnitId = unit.id;
-      inc.assignedOperator = inc.assignedOperator || operatorName;
+      inc.assignedOperator = inc.assignedOperator || actor.name;
       inc.acceptedAt = inc.acceptedAt || now;
       inc.dispatchedAt = now;
-      inc.status = 'UNIT_ASSIGNED';
+      inc.acknowledgedAt = inc.acknowledgedAt || now;
+      inc.status = 'Dispatched';
       inc.aiIntakeActive = false;
       inc.updatedAt = now;
 
-      unit.availability = 'ASSIGNED';
+      unit.availability = 'Responding';
       unit.currentAssignmentId = inc.id;
       unit.lastLocationUpdate = now;
+      unit.activityLog = [
+        {
+          id: `uact-${Date.now()}`,
+          timestamp: now,
+          actor: actor.name,
+          actorRole: actor.role,
+          action: `Dispatched to ${inc.id}`,
+          details: `Approved dispatch to ${inc.location.correctedDescription || inc.location.description}.${
+            notes?.trim() ? ` Note: ${notes.trim()}` : ''
+          }`,
+        },
+        ...(unit.activityLog || []),
+      ];
 
       inc.timeline.push({
         id: `ev-${Date.now()}`,
         type: 'UNIT_ASSIGNED',
         title: `Human-approved dispatch: ${unit.callsign} (${unit.id})`,
-        description: `Destination: ${inc.location.correctedDescription || inc.location.description}.${notes?.trim() ? ` Note: ${notes.trim()}` : ''}`,
-        actor: operatorName,
-        actorRole: role,
+        description: `Destination: ${inc.location.correctedDescription || inc.location.description}.${
+          notes?.trim() ? ` Note: ${notes.trim()}` : ''
+        }`,
+        actor: actor.name,
+        actorRole: actor.role,
         timestamp: now,
         isSimulated: inc.isSimulated || unit.isSimulated,
       });
@@ -595,7 +802,9 @@ async function startServer(): Promise<void> {
       if (notifyUnitSms) {
         notification = await sendDispatchNotification({
           recipient: unitContactNumber?.trim() || `${unit.callsign} (Demo Crew)`,
-          message: `RESPONDA DISPATCH: ${inc.id} (${inc.category}, ${inc.priority}) at ${inc.location.correctedDescription || inc.location.description}. Approved by ${operatorName}.`,
+          message: `RESPONDA DISPATCH: ${inc.id} (${inc.category}, ${inc.priority}) at ${
+            inc.location.correctedDescription || inc.location.description
+          }. Approved by ${actor.name}.`,
           incidentId: inc.id,
           unitId: unit.id,
         });
@@ -628,9 +837,243 @@ async function startServer(): Promise<void> {
     res.json(result);
   });
 
+  // Explicit Idempotent Scene & Patient Transport Events (Once-Only, Never Bundled)
+  app.post('/api/incidents/:id/transport-event', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
+    const { event, hospitalDestination, outcomeText } = req.body as {
+      event?:
+        | 'ARRIVED_ON_SCENE'
+        | 'PATIENT_PICKED_UP'
+        | 'CONFIRM_HOSPITAL'
+        | 'TRANSPORT_STARTED'
+        | 'HOSPITAL_ARRIVED'
+        | 'CLOSE_INCIDENT';
+      hospitalDestination?: HospitalDestination;
+      outcomeText?: string;
+    };
+
+    if (!event) {
+      res.status(400).json({ error: 'Transport event type is required.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const outcome = await store.mutate((db) => {
+      const inc = db.incidents.find((i) => i.id === req.params.id);
+      if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Closed incidents are archived read-only.', code: 400 as const };
+      }
+
+      const unit = inc.assignedUnitId
+        ? db.units.find((u) => u.id === inc.assignedUnitId)
+        : undefined;
+
+      if (event === 'ARRIVED_ON_SCENE') {
+        if (!unit) return { error: 'No unit assigned to mark arrival at scene.', code: 400 as const };
+        if (inc.arrivedAtSceneAt) {
+          return { incident: inc, unit, alreadyApplied: true };
+        }
+        inc.arrivedAtSceneAt = now;
+        inc.updatedAt = now;
+        unit.availability = 'At Scene';
+        if (typeof inc.location.lat === 'number' && typeof inc.location.lng === 'number') {
+          unit.lat = inc.location.lat;
+          unit.lng = inc.location.lng;
+        }
+        unit.lastLocationUpdate = now;
+        inc.timeline.push({
+          id: `ev-${Date.now()}`,
+          type: 'UNIT_ON_SCENE',
+          title: `${unit.callsign} arrived at scene`,
+          description: `Medical team arrived at ${inc.location.correctedDescription || inc.location.description}.`,
+          actor: actor.name,
+          actorRole: actor.role,
+          timestamp: now,
+          isSimulated: inc.isSimulated,
+        });
+        return { incident: inc, unit };
+      }
+
+      if (event === 'PATIENT_PICKED_UP') {
+        if (!unit) return { error: 'No assigned unit on scene.', code: 400 as const };
+        if (inc.patientPickedUpAt) {
+          return { incident: inc, unit, alreadyApplied: true };
+        }
+        if (!inc.arrivedAtSceneAt) {
+          inc.arrivedAtSceneAt = now;
+        }
+        inc.patientPickedUpAt = now;
+        inc.updatedAt = now;
+        inc.timeline.push({
+          id: `ev-${Date.now()}`,
+          type: 'PATIENT_PICKED_UP',
+          title: 'Patient picked up and loaded for care',
+          description: `${unit.callsign} secured patient for medical transfer.`,
+          actor: actor.name,
+          actorRole: actor.role,
+          timestamp: now,
+          isSimulated: inc.isSimulated,
+        });
+        return { incident: inc, unit };
+      }
+
+      if (event === 'CONFIRM_HOSPITAL') {
+        if (
+          !hospitalDestination ||
+          !hospitalDestination.name?.trim() ||
+          typeof hospitalDestination.lat !== 'number' ||
+          typeof hospitalDestination.lng !== 'number'
+        ) {
+          return { error: 'Valid receiving hospital name and coordinates are required.', code: 400 as const };
+        }
+        const cleanHospital: HospitalDestination = {
+          id: hospitalDestination.id,
+          name: hospitalDestination.name.trim(),
+          area: hospitalDestination.area?.trim() || 'Lagos',
+          lat: hospitalDestination.lat,
+          lng: hospitalDestination.lng,
+          isSimulatedDemo: Boolean(hospitalDestination.isSimulatedDemo),
+          isCustom: Boolean(hospitalDestination.isCustom),
+          selectedBy: actor.name,
+          selectedAt: now,
+        };
+        const isSame =
+          inc.hospitalDestination && inc.hospitalDestination.name === cleanHospital.name;
+        inc.hospitalDestination = cleanHospital;
+        inc.updatedAt = now;
+        if (!isSame) {
+          inc.timeline.push({
+            id: `ev-${Date.now()}`,
+            type: 'HOSPITAL_CONFIRMED',
+            title: `Hospital destination confirmed: ${cleanHospital.name}`,
+            description: `Operator confirmed receiving hospital (${cleanHospital.area}).`,
+            actor: actor.name,
+            actorRole: actor.role,
+            timestamp: now,
+            isSimulated: inc.isSimulated,
+          });
+        }
+        return { incident: inc, unit };
+      }
+
+      if (event === 'TRANSPORT_STARTED') {
+        if (!unit) return { error: 'No assigned unit for transport.', code: 400 as const };
+        if (!inc.hospitalDestination) {
+          return {
+            error: 'Select and confirm a hospital destination before starting patient transport.',
+            code: 400 as const,
+          };
+        }
+        if (inc.transportStartedAt) {
+          return { incident: inc, unit, alreadyApplied: true };
+        }
+        if (!inc.patientPickedUpAt) {
+          inc.patientPickedUpAt = now;
+        }
+        inc.transportStartedAt = now;
+        inc.status = 'Patient Transport';
+        inc.updatedAt = now;
+        unit.availability = 'Transporting';
+        unit.lastLocationUpdate = now;
+        inc.timeline.push({
+          id: `ev-${Date.now()}`,
+          type: 'TRANSPORT_STARTED',
+          title: `Patient transport started → ${inc.hospitalDestination.name}`,
+          description: `${unit.callsign} departed scene toward ${inc.hospitalDestination.name}.`,
+          actor: actor.name,
+          actorRole: actor.role,
+          timestamp: now,
+          isSimulated: inc.isSimulated,
+        });
+        return { incident: inc, unit };
+      }
+
+      if (event === 'HOSPITAL_ARRIVED') {
+        if (!unit) return { error: 'No assigned unit found.', code: 400 as const };
+        if (!inc.transportStartedAt || !inc.hospitalDestination) {
+          return { error: 'Patient transport must be started before confirming hospital arrival.', code: 400 as const };
+        }
+        if (inc.hospitalArrivedAt) {
+          return { incident: inc, unit, alreadyApplied: true };
+        }
+        inc.hospitalArrivedAt = now;
+        inc.updatedAt = now;
+        unit.lat = inc.hospitalDestination.lat;
+        unit.lng = inc.hospitalDestination.lng;
+        unit.lastLocationUpdate = now;
+        inc.timeline.push({
+          id: `ev-${Date.now()}`,
+          type: 'HOSPITAL_ARRIVED',
+          title: `Arrived at ${inc.hospitalDestination.name}`,
+          description: `Patient delivered to emergency reception by ${unit.callsign}.`,
+          actor: actor.name,
+          actorRole: actor.role,
+          timestamp: now,
+          isSimulated: inc.isSimulated,
+        });
+        return { incident: inc, unit };
+      }
+
+      if (event === 'CLOSE_INCIDENT') {
+        const finalOutcome = outcomeText?.trim();
+        if (!finalOutcome) {
+          return { error: 'Closure outcome summary is required.', code: 400 as const };
+        }
+        inc.status = 'Closed';
+        inc.closedAt = now;
+        inc.resolvedAt = inc.resolvedAt || now;
+        inc.outcome = finalOutcome;
+        inc.updatedAt = now;
+
+        if (unit) {
+          unit.availability = 'Available';
+          unit.currentAssignmentId = undefined;
+          unit.lastLocationUpdate = now;
+          unit.activityLog = [
+            {
+              id: `uact-${Date.now()}`,
+              timestamp: now,
+              actor: actor.name,
+              actorRole: actor.role,
+              action: `Returned Available (${inc.id} closed)`,
+              details: finalOutcome,
+            },
+            ...(unit.activityLog || []),
+          ];
+        }
+
+        inc.timeline.push({
+          id: `ev-${Date.now()}`,
+          type: 'UNIT_COMPLETED',
+          title: 'Incident closed and archived',
+          description: finalOutcome,
+          actor: actor.name,
+          actorRole: actor.role,
+          timestamp: now,
+          isSimulated: inc.isSimulated,
+        });
+        return { incident: inc, unit };
+      }
+
+      return { error: 'Unsupported transport event.', code: 400 as const };
+    });
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    broadcastEvent('incident:updated', outcome.incident);
+    if (outcome.unit) {
+      broadcastEvent('unit:updated', outcome.unit);
+    }
+    res.json(outcome);
+  });
+
   // Add Operator Note
-  app.post('/api/incidents/:id/notes', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
+  app.post('/api/incidents/:id/notes', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const { text } = req.body as { text?: string };
     if (!text || !text.trim()) {
       res.status(400).json({ error: 'Note text is required.' });
@@ -638,14 +1081,17 @@ async function startServer(): Promise<void> {
     }
 
     const now = new Date().toISOString();
-    const updated = await store.mutate((db) => {
+    const outcome = await store.mutate((db) => {
       const inc = db.incidents.find((i) => i.id === req.params.id);
-      if (!inc) return null;
+      if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Cannot add notes to closed or archived incidents.', code: 400 as const };
+      }
 
       inc.notes.unshift({
         id: `note-${Date.now()}`,
-        author: operatorName,
-        role,
+        author: actor.name,
+        role: actor.role,
         text: text.trim(),
         timestamp: now,
       });
@@ -655,33 +1101,26 @@ async function startServer(): Promise<void> {
         type: 'NOTE_ADDED',
         title: 'Operator note recorded',
         description: text.trim(),
-        actor: operatorName,
-        actorRole: role,
+        actor: actor.name,
+        actorRole: actor.role,
         timestamp: now,
         isSimulated: inc.isSimulated,
       });
-      return inc;
+      return { incident: inc };
     });
 
-    if (!updated) {
-      res.status(404).json({ error: 'Incident not found.' });
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
       return;
     }
 
-    broadcastEvent('incident:updated', updated);
-    res.json({ incident: updated });
+    broadcastEvent('incident:updated', outcome.incident);
+    res.json({ incident: outcome.incident });
   });
 
-  // Append Live Operator Transcript Message (Preserves AI Transcript History)
-  app.post('/api/incidents/:id/transcript', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
-    if (!canTakeOver(role)) {
-      res.status(403).json({
-        error: `Role '${role}' is not authorised to send operator responses on active calls.`,
-      });
-      return;
-    }
-
+  // Append Live Operator Transcript Message
+  app.post('/api/incidents/:id/transcript', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const { text, extractedTags } = req.body as {
       text?: string;
       extractedTags?: string[];
@@ -695,6 +1134,9 @@ async function startServer(): Promise<void> {
     const result = await store.mutate((db) => {
       const inc = db.incidents.find((i) => i.id === req.params.id);
       if (!inc) return { error: 'Incident not found.', code: 404 as const };
+      if (inc.status === 'Closed' || inc.legacyOutOfScope) {
+        return { error: 'Closed incidents are permanently read-only.', code: 400 as const };
+      }
 
       if (inc.aiIntakeActive && !inc.assignedOperator) {
         return {
@@ -727,18 +1169,11 @@ async function startServer(): Promise<void> {
     res.json({ incident: result.incident });
   });
 
-  // Update Response Unit Availability Status (Assigned -> Acknowledged -> En route -> On scene -> Completed / Cancelled)
-  app.post('/api/units/:id/status', async (req, res) => {
-    const { role, operatorName } = getRoleFromReq(req);
-    if (!canUpdateUnitStatus(role)) {
-      res.status(403).json({
-        error: `Role '${role}' is not authorised to update response unit status.`,
-      });
-      return;
-    }
-
+  // Operations Staff: Temporary Operational Unit Status Override / Update (requires reason for manual override)
+  app.post('/api/units/:id/status', requireRole('Operations Staff'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
     const { availability, note } = req.body as {
-      availability?: UnitAvailability | 'COMPLETED' | 'CANCELLED';
+      availability?: UnitAvailability | 'CANCELLED';
       note?: string;
     };
 
@@ -747,52 +1182,54 @@ async function startServer(): Promise<void> {
       return;
     }
 
+    if (!note || !note.trim()) {
+      res.status(400).json({
+        error: 'A recorded operational reason is required when updating unit availability.',
+      });
+      return;
+    }
+
     const now = new Date().toISOString();
     const result = await store.mutate((db) => {
       const unit = db.units.find((u) => u.id === req.params.id);
       if (!unit) return { error: 'Response unit not found.', code: 404 as const };
+      if (unit.registrationStatus !== 'Active' || unit.legacyOutOfScope) {
+        return {
+          error: `Unit ${unit.callsign} is ${unit.registrationStatus} and cannot change operational availability.`,
+          code: 400 as const,
+        };
+      }
 
       const assignedIncident = unit.currentAssignmentId
         ? db.incidents.find((i) => i.id === unit.currentAssignmentId)
         : undefined;
 
-      if (availability === 'COMPLETED') {
-        unit.availability = 'AVAILABLE';
-        unit.currentAssignmentId = undefined;
-        unit.lastLocationUpdate = now;
-        if (assignedIncident) {
-          assignedIncident.status = 'RESOLVED';
-          assignedIncident.resolvedAt = now;
-          assignedIncident.updatedAt = now;
-          assignedIncident.timeline.push({
-            id: `ev-${Date.now()}`,
-            type: 'UNIT_COMPLETED',
-            title: `${unit.callsign} completed response (Simulated)`,
-            description: note?.trim() || 'Incident marked RESOLVED upon unit completion.',
-            actor: operatorName,
-            actorRole: role,
-            timestamp: now,
-            isSimulated: unit.isSimulated,
-          });
-        }
-        return { unit, incident: assignedIncident };
-      }
-
       if (availability === 'CANCELLED') {
-        unit.availability = 'AVAILABLE';
+        unit.availability = 'Available';
         unit.currentAssignmentId = undefined;
         unit.lastLocationUpdate = now;
+        unit.activityLog = [
+          {
+            id: `uact-${Date.now()}`,
+            timestamp: now,
+            actor: actor.name,
+            actorRole: actor.role,
+            action: 'Assignment cancelled',
+            details: note.trim(),
+          },
+          ...(unit.activityLog || []),
+        ];
         if (assignedIncident) {
           assignedIncident.assignedUnitId = undefined;
-          assignedIncident.status = 'VERIFIED';
+          assignedIncident.status = 'Under Review';
           assignedIncident.updatedAt = now;
           assignedIncident.timeline.push({
             id: `ev-${Date.now()}`,
             type: 'UNIT_CANCELLED',
             title: `Assignment cancelled for ${unit.callsign}`,
-            description: note?.trim() || 'Unit returned to AVAILABLE; incident returned to VERIFIED.',
-            actor: operatorName,
-            actorRole: role,
+            description: note.trim(),
+            actor: actor.name,
+            actorRole: actor.role,
             timestamp: now,
             isSimulated: unit.isSimulated,
           });
@@ -800,48 +1237,48 @@ async function startServer(): Promise<void> {
         return { unit, incident: assignedIncident };
       }
 
+      const prevAvail = unit.availability;
       unit.availability = availability;
       unit.lastLocationUpdate = now;
+      unit.activityLog = [
+        {
+          id: `uact-${Date.now()}`,
+          timestamp: now,
+          actor: actor.name,
+          actorRole: actor.role,
+          action: `Availability: ${prevAvail} → ${availability}`,
+          details: note.trim(),
+        },
+        ...(unit.activityLog || []),
+      ];
 
       if (assignedIncident) {
         const mappedStatus = mapUnitAvailabilityToIncidentStatus(availability);
-        if (mappedStatus) {
+        if (mappedStatus && assignedIncident.status !== 'Closed') {
           assignedIncident.status = mappedStatus;
         }
-        if (availability === 'ACKNOWLEDGED') {
-          assignedIncident.acknowledgedAt = assignedIncident.acknowledgedAt || now;
-          // Move simulated unit slightly toward incident when acknowledging / going en route
-          if (assignedIncident.location.lat && assignedIncident.location.lng) {
-            unit.lat = Number((unit.lat + (assignedIncident.location.lat - unit.lat) * 0.25).toFixed(5));
-            unit.lng = Number((unit.lng + (assignedIncident.location.lng - unit.lng) * 0.25).toFixed(5));
-          }
-        } else if (availability === 'EN_ROUTE') {
-          if (assignedIncident.location.lat && assignedIncident.location.lng) {
-            unit.lat = Number((unit.lat + (assignedIncident.location.lat - unit.lat) * 0.45).toFixed(5));
-            unit.lng = Number((unit.lng + (assignedIncident.location.lng - unit.lng) * 0.45).toFixed(5));
-          }
-        } else if (availability === 'ON_SCENE') {
+        if (availability === 'At Scene') {
+          assignedIncident.arrivedAtSceneAt = assignedIncident.arrivedAtSceneAt || now;
           if (assignedIncident.location.lat && assignedIncident.location.lng) {
             unit.lat = assignedIncident.location.lat;
             unit.lng = assignedIncident.location.lng;
           }
         }
         assignedIncident.updatedAt = now;
-
-        const eventTypeMap: Record<string, IncidentRecord['timeline'][number]['type']> = {
-          ACKNOWLEDGED: 'UNIT_ACKNOWLEDGED',
-          EN_ROUTE: 'UNIT_EN_ROUTE',
-          ON_SCENE: 'UNIT_ON_SCENE',
-          ASSIGNED: 'UNIT_ASSIGNED',
-        };
-
         assignedIncident.timeline.push({
           id: `ev-${Date.now()}`,
-          type: eventTypeMap[availability] || 'STATUS_CHANGED',
-          title: `${unit.callsign} status: ${availability.replace('_', ' ')}${unit.isSimulated ? ' (Simulated)' : ''}`,
-          description: note?.trim() || `Unit updated status to ${availability}.`,
-          actor: operatorName,
-          actorRole: role,
+          type:
+            availability === 'At Scene'
+              ? 'UNIT_ON_SCENE'
+              : availability === 'Transporting'
+              ? 'TRANSPORT_STARTED'
+              : availability === 'Responding'
+              ? 'UNIT_EN_ROUTE'
+              : 'STATUS_CHANGED',
+          title: `${unit.callsign} status: ${availability}`,
+          description: note.trim(),
+          actor: actor.name,
+          actorRole: actor.role,
           timestamp: now,
           isSimulated: unit.isSimulated,
         });
@@ -863,7 +1300,7 @@ async function startServer(): Promise<void> {
   });
 
   // Routing endpoint (OpenRouteService with honest fallback)
-  app.post('/api/routing', async (req, res) => {
+  app.post('/api/routing', requireRole('Operations Staff'), async (req, res) => {
     const { fromLat, fromLng, toLat, toLng, allowSimulatedOverlay = false } =
       req.body as {
         fromLat?: number;
@@ -893,61 +1330,8 @@ async function startServer(): Promise<void> {
     res.json(route);
   });
 
-  // Integration Status & Connection Test
-  app.get('/api/integrations/status', async (_req, res) => {
-    const carrier = await queryCarrierLocationAdapter();
-    res.json({
-      integrations: getIntegrationStatuses(),
-      carrierAdapter: carrier,
-    });
-  });
-
-  app.post('/api/integrations/test/:id', async (req, res) => {
-    const id = req.params.id;
-    const statuses = getIntegrationStatuses();
-    const target = statuses.find((s) => s.id === id);
-    if (!target) {
-      res.status(404).json({ error: 'Integration adapter not found.' });
-      return;
-    }
-
-    if (id === 'gemini') {
-      const ok = isGeminiConfigured();
-      res.json({
-        id,
-        ok,
-        message: ok
-          ? 'GEMINI_API_KEY detected and client initialized.'
-          : 'GEMINI_API_KEY missing. Configure it in Settings > Secrets.',
-      });
-      return;
-    }
-
-    if (id === 'carrier_location') {
-      const carrier = await queryCarrierLocationAdapter();
-      res.json({
-        id,
-        ok: carrier.configured,
-        message: carrier.statusText,
-      });
-      return;
-    }
-
-    res.json({
-      id,
-      ok: target.configured,
-      message: target.configured
-        ? `${target.name} environment variables detected.`
-        : `${target.name} is operating in safe demonstration fallback mode (${target.envVars.join(', ')} not configured).`,
-    });
-  });
-
-  // Provider-Independent Telephony Adapter Routes (Local Simulation Active)
-  app.get('/api/telephony/status', (_req, res) => {
-    res.json(voiceProvider.getStatusSummary());
-  });
-
-  app.post('/api/telephony/simulate-call', async (req, res) => {
+  // Simulated Voice Adapter Inbound Call
+  app.post('/api/telephony/simulate-call', requireRole('Operations Staff'), async (req, res) => {
     const { sessionId, callerNumber, callerName, areaHint } = req.body as {
       sessionId?: string;
       callerNumber?: string;
@@ -975,26 +1359,27 @@ async function startServer(): Promise<void> {
         id,
         createdAt: now,
         updatedAt: now,
-        category: 'Other urgent incident',
-        priority: 'HIGH',
+        category: 'Other medical emergency',
+        priority: 'Unassessed',
         priorityReason:
-          'Simulated voice-adapter emergency call session awaiting human operator review.',
-        status: 'AWAITING_OPERATOR',
+          'Simulated voice-adapter emergency call session; clinical details incomplete and flagged Unassessed for operator triage.',
+        status: 'New',
         callerName: callerName?.trim() || 'Simulated Voice Caller',
         callerPhone: maskedPhone,
-        summary: `Simulated voice call session (${sid}) — awaiting human operator intake.`,
+        summary: `Simulated voice call session (${sid}) — awaiting operator assessment.`,
         description: `Local Simulation Voice Adapter received simulated inbound call (${areaHint || 'Lagos'}). Real telephone integration not configured.`,
         peopleAffected: null,
         immediateDanger: false,
-        missingInfoFlags: ['Emergency description', 'Location verification'],
+        missingInfoFlags: ['Clinical severity assessment', 'Exact location verification'],
         transcript: [
           {
             id: `t-${Date.now()}`,
             speaker: 'AI',
-            text: 'Connected via Local Simulation Voice Adapter (real telephone integration not configured). Please describe the emergency and nearest Lagos landmark.',
+            text: 'Connected via Local Simulation Voice Adapter (real telephone integration not configured). Please describe the medical emergency and nearest Lagos landmark.',
             timestamp: now,
           },
         ],
+        // Voice calls must NEVER fabricate device GPS coordinates
         location: {
           source: 'UNKNOWN',
           verificationStatus: 'UNVERIFIED',
@@ -1031,7 +1416,7 @@ async function startServer(): Promise<void> {
   });
 
   // Live Simulation Engine Sync Endpoints (Idempotent — zero duplicates on restart)
-  app.post('/api/simulation/prepare', async (req, res) => {
+  app.post('/api/simulation/prepare', requireRole('Operations Staff'), async (req, res) => {
     const { scenarioId = 'yaba-accident' } = req.body as {
       scenarioId?: SimulationScenarioId;
     };
@@ -1040,7 +1425,6 @@ async function startServer(): Promise<void> {
     const now = new Date().toISOString();
 
     const state = await store.mutate((db) => {
-      // Remove any previous copy of the deterministic simulation incident IDs so Restart is clean
       const simIncidentIds = new Set(
         Object.values(SIMULATION_SCENARIOS).map((s) => s.incidentId)
       );
@@ -1049,7 +1433,6 @@ async function startServer(): Promise<void> {
         (n) => !n.incidentId || !simIncidentIds.has(n.incidentId)
       );
 
-      // Upsert the 4 dedicated simulation units cleanly without duplicates
       const simUnits = createSimulationFleetUnits(now);
       const simUnitIds = new Set(simUnits.map((u) => u.id));
       const nonSimUnits = db.units.filter((u) => !simUnitIds.has(u.id));
@@ -1080,7 +1463,7 @@ async function startServer(): Promise<void> {
     res.json(state);
   });
 
-  app.post('/api/simulation/incident', async (req, res) => {
+  app.post('/api/simulation/incident', requireRole('Operations Staff'), async (req, res) => {
     const {
       scenarioId = 'yaba-accident',
       turnCount = 6,
@@ -1099,11 +1482,10 @@ async function startServer(): Promise<void> {
     await voiceProvider.answerCall(`SIM-${scenario.incidentId}`);
 
     const outcome = await store.mutate((db) => {
-      const existingIdx = db.incidents.findIndex(
-        (i) => i.id === scenario.incidentId
-      );
+      const existingIdx = db.incidents.findIndex((i) => i.id === scenario.incidentId);
       const transcript = buildScenarioTranscript(scenario, turnCount, now);
-      const lastTurn = scenario.dialogue[Math.max(0, Math.min(turnCount, scenario.dialogue.length) - 1)];
+      const lastTurn =
+        scenario.dialogue[Math.max(0, Math.min(turnCount, scenario.dialogue.length) - 1)];
 
       const record: IncidentRecord =
         existingIdx >= 0
@@ -1116,11 +1498,13 @@ async function startServer(): Promise<void> {
               updatedAt: now,
               location: {
                 ...db.incidents[existingIdx].location,
+                source: includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION',
                 lat: includeCoords ? scenario.resolvedCoords.lat : undefined,
                 lng: includeCoords ? scenario.resolvedCoords.lng : undefined,
-                accuracyMeters: includeCoords
-                  ? scenario.resolvedCoords.accuracyMeters
-                  : undefined,
+                accuracyMeters:
+                  includeCoords && markLocationResolved
+                    ? scenario.resolvedCoords.accuracyMeters
+                    : undefined,
               },
             }
           : {
@@ -1128,9 +1512,9 @@ async function startServer(): Promise<void> {
               createdAt: now,
               updatedAt: now,
               category: scenario.category,
-              priority: scenario.priority,
+              priority: turnCount < 3 ? 'Unassessed' : scenario.priority,
               priorityReason: scenario.priorityReason,
-              status: 'AWAITING_OPERATOR',
+              status: 'New',
               callerName: scenario.callerName,
               callerPhone: scenario.callerPhone,
               summary: scenario.summary,
@@ -1138,12 +1522,13 @@ async function startServer(): Promise<void> {
               peopleAffected: scenario.peopleAffected,
               immediateDanger: scenario.immediateDanger,
               dangerDetails: scenario.dangerDetails,
+              clinicalDetails: scenario.clinicalDetails,
               missingInfoFlags: lastTurn
                 ? lastTurn.remainingMissingFlags
                 : ['Operator verification of exact location'],
               transcript,
               location: {
-                source: 'CALLER_DESCRIPTION',
+                source: includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION',
                 verificationStatus: 'UNVERIFIED',
                 description: scenario.vagueLocationDescription,
                 landmark: scenario.landmark,
@@ -1161,7 +1546,7 @@ async function startServer(): Promise<void> {
                 {
                   id: `ev-${Date.now()}-1`,
                   type: 'INCIDENT_RECEIVED',
-                  title: 'Simulated emergency call received',
+                  title: 'Simulated medical emergency call received',
                   description: `${scenario.incomingCallNotification} Real telephone integration not configured.`,
                   actor: voiceProvider.name,
                   actorRole: 'Telephony Adapter',
@@ -1172,7 +1557,7 @@ async function startServer(): Promise<void> {
                   id: `ev-${Date.now()}-2`,
                   type: 'INCIDENT_CREATED',
                   title: 'Structured incident record created (Simulation)',
-                  description: `${scenario.category} · ${scenario.priority} suggested · Location: CALLER_DESCRIPTION (UNVERIFIED).`,
+                  description: `${scenario.category} · Location: ${includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION'} (UNVERIFIED).`,
                   actor: 'Responda AI Intake',
                   actorRole: 'AI Assistant',
                   timestamp: now,
@@ -1212,7 +1597,7 @@ async function startServer(): Promise<void> {
     res.status(outcome.created ? 201 : 200).json(outcome);
   });
 
-  app.post('/api/simulation/unit-position', async (req, res) => {
+  app.post('/api/simulation/unit-position', requireRole('Operations Staff'), async (req, res) => {
     const {
       unitId,
       lat,
@@ -1257,26 +1642,28 @@ async function startServer(): Promise<void> {
       if (incidentId) {
         incident = db.incidents.find((i) => i.id === incidentId);
         if (incident) {
-          if (incidentStatus) incident.status = incidentStatus;
-          if (availability === 'ACKNOWLEDGED') {
-            incident.acknowledgedAt = incident.acknowledgedAt || now;
+          if (incidentStatus && incident.status !== 'Closed') {
+            incident.status = incidentStatus;
+          }
+          if (availability === 'At Scene') {
+            incident.arrivedAtSceneAt = incident.arrivedAtSceneAt || now;
           }
           incident.updatedAt = now;
           if (timelineTitle) {
             incident.timeline.push({
               id: `ev-sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
               type:
-                availability === 'ON_SCENE'
+                availability === 'At Scene'
                   ? 'UNIT_ON_SCENE'
-                  : availability === 'EN_ROUTE'
+                  : availability === 'Transporting'
+                  ? 'TRANSPORT_STARTED'
+                  : availability === 'Responding'
                   ? 'UNIT_EN_ROUTE'
-                  : availability === 'ACKNOWLEDGED'
-                  ? 'UNIT_ACKNOWLEDGED'
                   : 'STATUS_CHANGED',
               title: timelineTitle,
               description: timelineDescription || 'Simulation unit tracking update.',
               actor: unit.callsign,
-              actorRole: 'Responder (Simulation)',
+              actorRole: 'Medical Unit (Simulation)',
               timestamp: now,
               isSimulated: true,
             });
@@ -1290,7 +1677,7 @@ async function startServer(): Promise<void> {
                 title: extra.title,
                 description: extra.description || '',
                 actor: unit.callsign,
-                actorRole: 'Responder (Simulation)',
+                actorRole: 'Medical Unit (Simulation)',
                 timestamp: now,
                 isSimulated: true,
               });
@@ -1313,19 +1700,514 @@ async function startServer(): Promise<void> {
     res.json(result);
   });
 
-  // Repeatable Competition Demo Scenario Reset / Launch
-  app.post('/api/demo/reset', async (_req, res) => {
-    const fresh = await store.mutate((db) => {
-      const seed = createSeedData();
-      db.incidents = seed.incidents;
-      db.units = seed.units;
-      db.notifications = seed.notifications;
-      db.sequenceCounter = seed.sequenceCounter;
-      return db;
+  // ============================================================================
+  // ORGANISATION ADMINISTRATOR ROUTES (Strictly segregated from dispatch)
+  // ============================================================================
+
+  // Invite New Staff Member (Creates INVITED record; honestly notes no external email is sent)
+  app.post('/api/staff/invite', requireRole('Organisation Administrator'), async (req, res) => {
+    const { name, email, role, badgeCode } = req.body as {
+      name?: string;
+      email?: string;
+      role?: UserRole;
+      badgeCode?: string;
+    };
+
+    if (!name?.trim() || !email?.trim() || !isValidEmail(email)) {
+      res.status(400).json({ error: 'Valid staff name and email address are required.' });
+      return;
+    }
+    if (role !== 'Operations Staff' && role !== 'Organisation Administrator') {
+      res.status(400).json({ error: 'Role must be Operations Staff or Organisation Administrator.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const outcome = await store.mutate((db) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (db.staffAccounts.some((a) => a.email.toLowerCase() === normalizedEmail)) {
+        return { error: 'A staff account with this email already exists.', code: 409 as const };
+      }
+
+      const account: StaffAccount = {
+        id: `staff-${Date.now()}`,
+        name: name.trim(),
+        email: normalizedEmail,
+        role,
+        accountStatus: 'INVITED',
+        badgeCode:
+          badgeCode?.trim() ||
+          `${role === 'Organisation Administrator' ? 'ADM' : 'OPS'}-${Math.floor(200 + Math.random() * 799)}`,
+        dateAdded: now,
+      };
+      db.staffAccounts.push(account);
+      return { account };
     });
-    broadcastEvent('state:reset', fresh);
-    res.json(fresh);
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    broadcastEvent('staff:updated', outcome.account);
+    res.status(201).json({
+      account: outcome.account,
+      notice:
+        'No external email is sent in this prototype — share the invite status with the team member.',
+    });
   });
+
+  // Update Staff Account (Role, Active/Inactive Status — enforces Last Active Admin Guard)
+  app.patch('/api/staff/:id', requireRole('Organisation Administrator'), async (req, res) => {
+    const { role, accountStatus, name, badgeCode } = req.body as {
+      role?: UserRole;
+      accountStatus?: StaffAccountStatus;
+      name?: string;
+      badgeCode?: string;
+    };
+
+    if (
+      role !== undefined &&
+      role !== 'Operations Staff' &&
+      role !== 'Organisation Administrator'
+    ) {
+      res.status(400).json({ error: 'Invalid role specified.' });
+      return;
+    }
+
+    if (
+      accountStatus !== undefined &&
+      accountStatus !== 'ACTIVE' &&
+      accountStatus !== 'INVITED' &&
+      accountStatus !== 'INACTIVE'
+    ) {
+      res.status(400).json({ error: 'Invalid accountStatus specified.' });
+      return;
+    }
+
+    const outcome = await store.mutate((db) => {
+      const target = db.staffAccounts.find((a) => a.id === req.params.id);
+      if (!target) return { error: 'Staff account not found.', code: 404 as const };
+
+      const nextRole = role ?? target.role;
+      const nextStatus = accountStatus ?? target.accountStatus;
+
+      // Last active Organisation Administrator safeguard
+      const activeAdminsAfterChange = db.staffAccounts.filter((a) => {
+        const effRole = a.id === target.id ? nextRole : a.role;
+        const effStatus = a.id === target.id ? nextStatus : a.accountStatus;
+        return effRole === 'Organisation Administrator' && effStatus === 'ACTIVE';
+      });
+
+      if (activeAdminsAfterChange.length === 0) {
+        return {
+          error:
+            'Cannot deactivate or demote the last active Organisation Administrator. At least one active administrator is required.',
+          code: 400 as const,
+        };
+      }
+
+      target.role = nextRole;
+      target.accountStatus = nextStatus;
+      if (name?.trim()) target.name = name.trim();
+      if (badgeCode?.trim()) target.badgeCode = badgeCode.trim();
+
+      return { account: target };
+    });
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    broadcastEvent('staff:updated', outcome.account);
+    res.json({ account: outcome.account });
+  });
+
+  // Register New Medical Response Unit (Admin only)
+  app.post('/api/admin/units', requireRole('Organisation Administrator'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
+    const {
+      callsign,
+      organisation,
+      unitType,
+      vehicleRegistration,
+      operationalBase,
+      area,
+      locationName,
+      lat,
+      lng,
+      medicalCapabilities,
+      customEquipment,
+      crewMembers,
+      registrationStatus = 'Active',
+      availability = 'Available',
+      adminNotes,
+    } = req.body as {
+      callsign?: string;
+      organisation?: string;
+      unitType?: UnitType;
+      vehicleRegistration?: string;
+      operationalBase?: string;
+      area?: string;
+      locationName?: string;
+      lat?: number;
+      lng?: number;
+      medicalCapabilities?: MedicalCapability[];
+      customEquipment?: string[];
+      crewMembers?: CrewMemberRecord[];
+      registrationStatus?: UnitRegistrationStatus;
+      availability?: UnitAvailability;
+      adminNotes?: string;
+    };
+
+    if (!callsign?.trim() || !vehicleRegistration?.trim() || !operationalBase?.trim()) {
+      res.status(400).json({
+        error: 'Callsign, vehicle registration, and operational base are required.',
+      });
+      return;
+    }
+
+    if (unitType !== 'Ambulance' && unitType !== 'Rapid response vehicle') {
+      res.status(400).json({
+        error: 'Unit type must be Ambulance or Rapid response vehicle.',
+      });
+      return;
+    }
+
+    const safeLat = typeof lat === 'number' && isValidLagosCoords(lat, lng) ? lat : 6.5244;
+    const safeLng = typeof lng === 'number' && isValidLagosCoords(lat, lng) ? lng : 3.3792;
+    const cleanCrew = Array.isArray(crewMembers)
+      ? crewMembers.filter((m) => m && m.name?.trim())
+      : [];
+
+    const now = new Date().toISOString();
+    const unit = await store.mutate((db) => {
+      const id = `UNIT-MED-${Math.floor(100 + Math.random() * 899)}`;
+      const record: ResponseUnit = {
+        id,
+        callsign: callsign.trim(),
+        organisation: organisation?.trim() || db.organisationSettings.name,
+        unitType,
+        registrationStatus: registrationStatus === 'Inactive' ? 'Inactive' : 'Active',
+        vehicleRegistration: vehicleRegistration.trim(),
+        operationalBase: operationalBase.trim(),
+        crewDescription:
+          cleanCrew.length > 0
+            ? cleanCrew.map((m) => `${m.name} (${m.medicalRole || 'EMT'})`).join(', ')
+            : 'Crew pending assignment',
+        crewMembers: cleanCrew.map((m, idx) => ({
+          id: m.id || `cr-${Date.now()}-${idx}`,
+          name: m.name.trim(),
+          medicalRole: m.medicalRole?.trim() || 'Paramedic',
+          qualification: m.qualification?.trim() || 'BLS',
+        })),
+        medicalCapabilities:
+          Array.isArray(medicalCapabilities) && medicalCapabilities.length > 0
+            ? medicalCapabilities
+            : ['Basic Life Support (BLS)'],
+        customEquipment: Array.isArray(customEquipment)
+          ? customEquipment.map((x) => String(x).trim()).filter(Boolean)
+          : undefined,
+        locationName: locationName?.trim() || operationalBase.trim(),
+        area: area?.trim() || 'Lagos',
+        lat: safeLat,
+        lng: safeLng,
+        locationFreshness: 'MANUAL',
+        locationSourceLabel: 'Station Registration Coordinates',
+        availability: registrationStatus === 'Inactive' ? 'Unavailable' : availability,
+        lastLocationUpdate: now,
+        adminNotes: adminNotes?.trim() || undefined,
+        activityLog: [
+          {
+            id: `uact-${Date.now()}`,
+            timestamp: now,
+            actor: actor.name,
+            actorRole: actor.role,
+            action: 'Unit Registered',
+            details: `Registered ${unitType} (${vehicleRegistration.trim()}) at ${operationalBase.trim()}.`,
+          },
+        ],
+        isSimulated: false,
+      };
+      db.units.push(record);
+      return record;
+    });
+
+    broadcastEvent('unit:updated', unit);
+    res.status(201).json({ unit });
+  });
+
+  // Update Medical Unit Record (Admin only)
+  app.patch('/api/admin/units/:id', requireRole('Organisation Administrator'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
+    const {
+      callsign,
+      organisation,
+      unitType,
+      vehicleRegistration,
+      operationalBase,
+      area,
+      locationName,
+      lat,
+      lng,
+      medicalCapabilities,
+      customEquipment,
+      crewMembers,
+      availability,
+      adminNotes,
+    } = req.body as Partial<ResponseUnit>;
+
+    if (lat !== undefined && lng !== undefined && !isValidLagosCoords(lat, lng)) {
+      res.status(400).json({ error: 'Coordinates must fall inside Lagos bounds.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const outcome = await store.mutate((db) => {
+      const unit = db.units.find((u) => u.id === req.params.id);
+      if (!unit) return { error: 'Response unit not found.', code: 404 as const };
+      if (unit.legacyOutOfScope) {
+        return {
+          error: 'Legacy out-of-scope units are permanently inactive.',
+          code: 400 as const,
+        };
+      }
+
+      if (callsign?.trim()) unit.callsign = callsign.trim();
+      if (organisation?.trim()) unit.organisation = organisation.trim();
+      if (unitType === 'Ambulance' || unitType === 'Rapid response vehicle') {
+        unit.unitType = unitType;
+      }
+      if (vehicleRegistration?.trim()) unit.vehicleRegistration = vehicleRegistration.trim();
+      if (operationalBase?.trim()) unit.operationalBase = operationalBase.trim();
+      if (area?.trim()) unit.area = area.trim();
+      if (locationName?.trim()) unit.locationName = locationName.trim();
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        unit.lat = lat;
+        unit.lng = lng;
+        unit.locationFreshness = 'MANUAL';
+      }
+      if (Array.isArray(medicalCapabilities)) unit.medicalCapabilities = medicalCapabilities;
+      if (Array.isArray(customEquipment)) unit.customEquipment = customEquipment;
+      if (Array.isArray(crewMembers)) {
+        unit.crewMembers = crewMembers
+          .filter((m) => m && m.name?.trim())
+          .map((m, idx) => ({
+            id: m.id || `cr-${Date.now()}-${idx}`,
+            name: m.name.trim(),
+            medicalRole: m.medicalRole?.trim() || 'Paramedic',
+            qualification: m.qualification?.trim() || 'BLS',
+          }));
+        unit.crewDescription =
+          unit.crewMembers.length > 0
+            ? unit.crewMembers.map((m) => `${m.name} (${m.medicalRole})`).join(', ')
+            : 'Crew pending assignment';
+      }
+      if (availability && !unit.currentAssignmentId && unit.registrationStatus === 'Active') {
+        unit.availability = availability;
+      }
+      if (adminNotes !== undefined) unit.adminNotes = adminNotes.trim() || undefined;
+      unit.lastLocationUpdate = now;
+      unit.activityLog = [
+        {
+          id: `uact-${Date.now()}`,
+          timestamp: now,
+          actor: actor.name,
+          actorRole: actor.role,
+          action: 'Unit Profile Updated',
+          details: 'Updated medical unit details, capabilities, or assigned crew.',
+        },
+        ...(unit.activityLog || []),
+      ];
+
+      return { unit };
+    });
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    broadcastEvent('unit:updated', outcome.unit);
+    res.json({ unit: outcome.unit });
+  });
+
+  // Deactivate or Reactivate Medical Unit (No hard delete; blocks if actively assigned)
+  app.post('/api/admin/units/:id/registration', requireRole('Organisation Administrator'), async (req: AuthenticatedRequest, res) => {
+    const actor = req.authAccount!;
+    const { registrationStatus, reason } = req.body as {
+      registrationStatus?: UnitRegistrationStatus;
+      reason?: string;
+    };
+
+    if (registrationStatus !== 'Active' && registrationStatus !== 'Inactive') {
+      res.status(400).json({ error: 'registrationStatus must be Active or Inactive.' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const outcome = await store.mutate((db) => {
+      const unit = db.units.find((u) => u.id === req.params.id);
+      if (!unit) return { error: 'Response unit not found.', code: 404 as const };
+      if (unit.legacyOutOfScope && registrationStatus === 'Active') {
+        return {
+          error: 'Legacy non-medical units cannot be reactivated in medical-only scope.',
+          code: 400 as const,
+        };
+      }
+
+      if (
+        registrationStatus === 'Inactive' &&
+        (unit.currentAssignmentId ||
+          unit.availability === 'Responding' ||
+          unit.availability === 'At Scene' ||
+          unit.availability === 'Transporting')
+      ) {
+        return {
+          error: `Cannot deactivate ${unit.callsign} while it is actively assigned (${unit.currentAssignmentId || unit.availability}).`,
+          code: 400 as const,
+        };
+      }
+
+      unit.registrationStatus = registrationStatus;
+      unit.availability = registrationStatus === 'Inactive' ? 'Unavailable' : 'Available';
+      unit.lastLocationUpdate = now;
+      unit.activityLog = [
+        {
+          id: `uact-${Date.now()}`,
+          timestamp: now,
+          actor: actor.name,
+          actorRole: actor.role,
+          action: registrationStatus === 'Inactive' ? 'Unit Deactivated' : 'Unit Reactivated',
+          details: reason?.trim() || `Registration changed to ${registrationStatus}.`,
+        },
+        ...(unit.activityLog || []),
+      ];
+
+      return { unit };
+    });
+
+    if ('error' in outcome) {
+      res.status(outcome.code ?? 400).json({ error: outcome.error });
+      return;
+    }
+
+    broadcastEvent('unit:updated', outcome.unit);
+    res.json({ unit: outcome.unit });
+  });
+
+  // Update Organisation Settings (Admin only)
+  app.patch('/api/organisation', requireRole('Organisation Administrator'), async (req, res) => {
+    const body = req.body as Partial<OrganisationSettings>;
+    const updated = await store.mutate((db) => {
+      db.organisationSettings = {
+        ...db.organisationSettings,
+        name: body.name?.trim() || db.organisationSettings.name,
+        city: body.city?.trim() || db.organisationSettings.city,
+        contactEmail: body.contactEmail?.trim() || db.organisationSettings.contactEmail,
+        contactPhone: body.contactPhone?.trim() || db.organisationSettings.contactPhone,
+        defaultOperationalArea:
+          body.defaultOperationalArea?.trim() || db.organisationSettings.defaultOperationalArea,
+        requireLocationVerificationBeforeDispatch:
+          typeof body.requireLocationVerificationBeforeDispatch === 'boolean'
+            ? body.requireLocationVerificationBeforeDispatch
+            : db.organisationSettings.requireLocationVerificationBeforeDispatch,
+        clinicalTriageNotice:
+          body.clinicalTriageNotice?.trim() || db.organisationSettings.clinicalTriageNotice,
+      };
+      return db.organisationSettings;
+    });
+
+    broadcastEvent('organisation:updated', updated);
+    res.json({ organisationSettings: updated });
+  });
+
+  // Integration Status & Connection Test
+  app.get('/api/integrations/status', requireAuth, async (_req, res) => {
+    const carrier = await queryCarrierLocationAdapter();
+    res.json({
+      integrations: getIntegrationStatuses(),
+      carrierAdapter: carrier,
+    });
+  });
+
+  app.post('/api/integrations/test/:id', requireRole('Organisation Administrator'), async (req, res) => {
+    const id = req.params.id;
+    const statuses = getIntegrationStatuses();
+    const target = statuses.find((s) => s.id === id);
+    if (!target) {
+      res.status(404).json({ error: 'Integration adapter not found.' });
+      return;
+    }
+
+    if (id === 'gemini') {
+      const ok = isGeminiConfigured();
+      res.json({
+        id,
+        ok,
+        state: ok ? 'CONNECTED' : 'SIMULATED',
+        message: ok
+          ? 'GEMINI_API_KEY detected and @google/genai client verified.'
+          : 'GEMINI_API_KEY missing. Operating in Simulated Demo Intake mode.',
+      });
+      return;
+    }
+
+    if (id === 'persistence') {
+      res.json({
+        id,
+        ok: true,
+        state: 'CONNECTED',
+        message: 'Atomic JSON persistence and session validation are active.',
+      });
+      return;
+    }
+
+    if (id === 'carrier_location') {
+      const carrier = await queryCarrierLocationAdapter();
+      res.json({
+        id,
+        ok: carrier.configured,
+        state: carrier.configured ? 'CONNECTED' : 'NOT_CONFIGURED',
+        message: carrier.statusText,
+      });
+      return;
+    }
+
+    res.json({
+      id,
+      ok: target.configured,
+      state: target.state,
+      message: target.configured
+        ? `${target.name} environment variables detected and ready.`
+        : `${target.name}: ${target.statusLabel}.`,
+    });
+  });
+
+  app.get('/api/telephony/status', requireAuth, (_req, res) => {
+    res.json(voiceProvider.getStatusSummary());
+  });
+
+  // Repeatable Competition Demo Scenario Reset
+  app.post(
+    '/api/demo/reset',
+    requireRole('Operations Staff', 'Organisation Administrator'),
+    async (_req, res) => {
+      const fresh = await store.mutate((db) => {
+        const seed = createSeedData();
+        db.incidents = seed.incidents;
+        db.units = seed.units;
+        db.notifications = seed.notifications;
+        db.staffAccounts = seed.staffAccounts;
+        db.organisationSettings = seed.organisationSettings;
+        db.sequenceCounter = seed.sequenceCounter;
+        return db;
+      });
+      broadcastEvent('state:reset', fresh);
+      res.json(fresh);
+    }
+  );
 
   // Vite middleware in dev, static dist in prod
   if (process.env.NODE_ENV !== 'production') {

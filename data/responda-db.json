@@ -1,20 +1,28 @@
 {
+  "schemaVersion": 2,
   "incidents": [
     {
       "id": "INC-2026-1048",
-      "createdAt": "2026-11-23T17:27:57.654Z",
-      "updatedAt": "2026-11-23T17:28:57.654Z",
+      "createdAt": "2026-11-26T00:54:01.680Z",
+      "updatedAt": "2026-11-26T00:55:01.680Z",
       "category": "Road accident",
-      "priority": "CRITICAL",
-      "priorityReason": "Multi-vehicle collision on Herbert Macaulay Way with 2 reported injuries and fuel leak risk.",
-      "status": "AWAITING_OPERATOR",
+      "priority": "Critical",
+      "priorityReason": "Multi-vehicle collision on Herbert Macaulay Way with 2 reported injuries and jammed door.",
+      "status": "New",
       "callerName": "Tunde A. (Demo)",
       "callerPhone": "+234-800-010-1048",
       "summary": "Two-vehicle collision near Sabo Yaba junction; 2 occupants injured and unable to exit vehicle safely.",
-      "description": "Caller reports a saloon car and minibus collided at the Sabo junction traffic light. Two passengers injured; traffic backing up.",
+      "description": "Caller reports a saloon car and minibus collided at the Sabo junction traffic light. Two passengers injured; fuel odour noted.",
       "peopleAffected": 2,
       "immediateDanger": true,
       "dangerDetails": "Oncoming traffic hazard and minor fuel odour near vehicle.",
+      "clinicalDetails": {
+        "chiefComplaint": "Suspected blunt trauma and lacerations from collision",
+        "consciousness": "Conscious but distressed",
+        "breathing": "Rapid breathing",
+        "bleedingOrInjury": "Active bleeding from facial/arm lacerations",
+        "clinicalNotes": "Needs ALS trauma & extrication assessment on arrival."
+      },
       "missingInfoFlags": [
         "Operator verification of exact junction lane"
       ],
@@ -22,14 +30,14 @@
         {
           "id": "t-1048-1",
           "speaker": "AI",
-          "text": "This is Responda automated intake. Please tell me what happened and where you are located.",
-          "timestamp": "2026-11-23T17:27:57.654Z"
+          "text": "This is Responda automated medical intake. Please tell me what happened and where you are located.",
+          "timestamp": "2026-11-26T00:54:01.680Z"
         },
         {
           "id": "t-1048-2",
           "speaker": "CALLER",
           "text": "There is a bad car crash right by Sabo junction in Yaba. A danfo bus hit a sedan.",
-          "timestamp": "2026-11-23T17:28:09.654Z",
+          "timestamp": "2026-11-26T00:54:13.680Z",
           "extractedTags": [
             "Road accident",
             "Sabo junction, Yaba"
@@ -38,17 +46,17 @@
         {
           "id": "t-1048-3",
           "speaker": "AI",
-          "text": "Understood. Is anyone injured, trapped, or in immediate danger?",
-          "timestamp": "2026-11-23T17:28:27.654Z"
+          "text": "Understood. Is anyone injured, unconscious, or in immediate danger?",
+          "timestamp": "2026-11-26T00:54:31.680Z"
         },
         {
           "id": "t-1048-4",
           "speaker": "CALLER",
           "text": "Yes, two people in the car are injured and bleeding, one door is jammed. I smell fuel.",
-          "timestamp": "2026-11-23T17:28:51.654Z",
+          "timestamp": "2026-11-26T00:54:55.680Z",
           "extractedTags": [
             "2 injured",
-            "Door jammed",
+            "Bleeding",
             "Fuel odour"
           ]
         }
@@ -62,7 +70,8 @@
         "lat": 6.5095,
         "lng": 3.3711,
         "accuracyMeters": 22,
-        "capturedAt": "2026-11-23T17:28:03.654Z"
+        "capturedAt": "2026-11-26T00:54:07.680Z",
+        "carrierNote": "Carrier location integration not configured"
       },
       "timeline": [
         {
@@ -72,17 +81,17 @@
           "description": "Inbound simulated web intake initiated.",
           "actor": "Responda Intake Gateway",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:27:57.654Z",
+          "timestamp": "2026-11-26T00:54:01.680Z",
           "isSimulated": true
         },
         {
           "id": "ev-1048-2",
           "type": "AI_INTAKE_STARTED",
-          "title": "AI intake structured report",
-          "description": "Extracted Road accident · CRITICAL priority suggestion · Flagged for human takeover.",
+          "title": "AI intake structured medical report",
+          "description": "Extracted Road accident · Critical suggested · Flagged for human takeover.",
           "actor": "Responda AI Intake",
           "actorRole": "AI Assistant",
-          "timestamp": "2026-11-23T17:28:45.654Z",
+          "timestamp": "2026-11-26T00:54:49.680Z",
           "isSimulated": true
         },
         {
@@ -92,7 +101,7 @@
           "description": "Alert queued on Command Centre for human verification.",
           "actor": "Responda Router",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:28:57.654Z",
+          "timestamp": "2026-11-26T00:55:01.680Z",
           "isSimulated": true
         }
       ],
@@ -103,21 +112,28 @@
     },
     {
       "id": "INC-2026-1047",
-      "createdAt": "2026-11-23T17:16:57.654Z",
-      "updatedAt": "2026-11-23T17:26:57.654Z",
-      "acceptedAt": "2026-11-23T17:18:57.654Z",
-      "dispatchedAt": "2026-11-23T17:21:57.654Z",
-      "acknowledgedAt": "2026-11-23T17:22:57.654Z",
+      "createdAt": "2026-11-26T00:43:01.680Z",
+      "updatedAt": "2026-11-26T00:53:01.680Z",
+      "acceptedAt": "2026-11-26T00:45:01.680Z",
+      "dispatchedAt": "2026-11-26T00:48:01.680Z",
+      "acknowledgedAt": "2026-11-26T00:49:01.680Z",
       "category": "Medical",
-      "priority": "HIGH",
+      "priority": "Urgent",
       "priorityReason": "Acute respiratory distress reported for elderly resident.",
-      "status": "RESPONDING",
+      "status": "Dispatched",
       "callerName": "Chidinma K. (Demo)",
       "callerPhone": "+234-800-010-1047",
       "summary": "Adult experiencing severe shortness of breath inside residential estate off Bode Thomas, Surulere.",
       "description": "Caller reports 68-year-old family member struggling to breathe. Conscious and seated indoors.",
       "peopleAffected": 1,
       "immediateDanger": false,
+      "clinicalDetails": {
+        "chiefComplaint": "Shortness of breath / respiratory distress",
+        "consciousness": "Conscious and alert",
+        "breathing": "Laboured breathing",
+        "bleedingOrInjury": "None",
+        "clinicalNotes": "Oxygen support requested on arrival."
+      },
       "missingInfoFlags": [],
       "assignedOperator": "Amina Bello",
       "assignedUnitId": "UNIT-RRV-03",
@@ -126,13 +142,13 @@
           "id": "t-1047-1",
           "speaker": "CALLER",
           "text": "My father is having severe trouble breathing at 14 Adeniran Ogunsanya close, Surulere.",
-          "timestamp": "2026-11-23T17:16:57.654Z"
+          "timestamp": "2026-11-26T00:43:01.680Z"
         },
         {
           "id": "t-1047-2",
           "speaker": "OPERATOR",
-          "text": "Operator Amina speaking. I have taken over your call and verified your gate code with our Surulere Rapid unit.",
-          "timestamp": "2026-11-23T17:18:57.654Z"
+          "text": "Operations Staff Amina speaking. I have taken over your call and dispatched Surulere Rapid-3.",
+          "timestamp": "2026-11-26T00:45:01.680Z"
         }
       ],
       "location": {
@@ -145,29 +161,29 @@
         "lat": 6.4945,
         "lng": 3.3592,
         "accuracyMeters": 15,
-        "capturedAt": "2026-11-23T17:16:57.654Z",
+        "capturedAt": "2026-11-26T00:43:01.680Z",
         "verifiedBy": "Amina Bello",
-        "verifiedAt": "2026-11-23T17:19:57.654Z"
+        "verifiedAt": "2026-11-26T00:46:01.680Z"
       },
       "timeline": [
         {
           "id": "ev-1047-1",
           "type": "INCIDENT_RECEIVED",
           "title": "Emergency report received",
-          "description": "Inbound report logged via simulated call.",
+          "description": "Inbound medical report logged via simulated call.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:16:57.654Z",
+          "timestamp": "2026-11-26T00:43:01.680Z",
           "isSimulated": true
         },
         {
           "id": "ev-1047-2",
           "type": "OPERATOR_TAKEOVER",
-          "title": "Operator took over incident",
+          "title": "Operations Staff took over incident",
           "description": "Amina Bello assumed human control.",
           "actor": "Amina Bello",
-          "actorRole": "Call Operator",
-          "timestamp": "2026-11-23T17:18:57.654Z",
+          "actorRole": "Operations Staff",
+          "timestamp": "2026-11-26T00:45:01.680Z",
           "isSimulated": true
         },
         {
@@ -176,28 +192,28 @@
           "title": "Location verified by operator",
           "description": "Confirmed Gate B entry on Adeniran Ogunsanya Close.",
           "actor": "Amina Bello",
-          "actorRole": "Call Operator",
-          "timestamp": "2026-11-23T17:19:57.654Z",
+          "actorRole": "Operations Staff",
+          "timestamp": "2026-11-26T00:46:01.680Z",
           "isSimulated": true
         },
         {
           "id": "ev-1047-4",
           "type": "UNIT_ASSIGNED",
-          "title": "Dispatcher assigned UNIT-RRV-03",
-          "description": "Surulere Rapid-3 approved for dispatch by human dispatcher.",
+          "title": "Approved dispatch: Surulere Rapid-3 (UNIT-RRV-03)",
+          "description": "Human operator approved dispatch to 14 Adeniran Ogunsanya Close.",
           "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T17:21:57.654Z",
+          "actorRole": "Operations Staff",
+          "timestamp": "2026-11-26T00:48:01.680Z",
           "isSimulated": true
         },
         {
           "id": "ev-1047-5",
           "type": "UNIT_EN_ROUTE",
-          "title": "Unit en route (Simulated)",
+          "title": "Unit responding (Simulated)",
           "description": "Surulere Rapid-3 acknowledged and departed station.",
           "actor": "UNIT-RRV-03",
-          "actorRole": "Responder",
-          "timestamp": "2026-11-23T17:26:57.654Z",
+          "actorRole": "Medical Unit",
+          "timestamp": "2026-11-26T00:53:01.680Z",
           "isSimulated": true
         }
       ],
@@ -205,192 +221,36 @@
         {
           "id": "n-1047-1",
           "author": "Amina Bello",
-          "role": "Call Operator",
+          "role": "Operations Staff",
           "text": "Estate security alerted at Gate B to keep barrier clear.",
-          "timestamp": "2026-11-23T17:20:57.654Z"
+          "timestamp": "2026-11-26T00:47:01.680Z"
         }
       ],
-      "aiIntakeActive": false,
-      "isSimulated": true,
-      "callChannel": "WEB_TEXT"
-    },
-    {
-      "id": "INC-2026-1046",
-      "createdAt": "2026-11-23T17:08:57.654Z",
-      "updatedAt": "2026-11-23T17:12:57.654Z",
-      "acceptedAt": "2026-11-23T17:11:57.654Z",
-      "category": "Security",
-      "priority": "MEDIUM",
-      "priorityReason": "Perimeter intrusion alarm at commercial warehouse with no confirmed weapon sighting.",
-      "status": "VERIFIED",
-      "callerName": "Facility Guard Desk (Demo)",
-      "callerPhone": "+234-800-010-1046",
-      "summary": "Unauthorised perimeter breach alarm at commercial facility off Admiralty Way, Lekki Phase 1.",
-      "description": "Motion sensors triggered at rear loading bay. Night guard requested patrol inspection.",
-      "peopleAffected": 1,
-      "immediateDanger": false,
-      "missingInfoFlags": [],
-      "assignedOperator": "Seyi Ogunleye",
-      "transcript": [
-        {
-          "id": "t-1046-1",
-          "speaker": "CALLER",
-          "text": "Rear gate motion alarm triggered at our Admiralty Way depot in Lekki Phase 1.",
-          "timestamp": "2026-11-23T17:08:57.654Z"
-        }
-      ],
-      "location": {
-        "source": "OPERATOR_VERIFIED",
-        "verificationStatus": "VERIFIED",
-        "description": "Plot 24 Admiralty Way, Lekki Phase 1, Lagos",
-        "landmark": "Admiralty Circle",
-        "area": "Lekki",
-        "lat": 6.4479,
-        "lng": 3.4678,
-        "capturedAt": "2026-11-23T17:08:57.654Z",
-        "verifiedBy": "Seyi Ogunleye",
-        "verifiedAt": "2026-11-23T17:12:57.654Z"
-      },
-      "timeline": [
-        {
-          "id": "ev-1046-1",
-          "type": "INCIDENT_RECEIVED",
-          "title": "Security alert received",
-          "description": "Commercial client security desk initiated report.",
-          "actor": "Responda Intake",
-          "actorRole": "System",
-          "timestamp": "2026-11-23T17:08:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1046-2",
-          "type": "OPERATOR_TAKEOVER",
-          "title": "Operator took over incident",
-          "description": "Seyi Ogunleye verified client callback credentials.",
-          "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T17:11:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1046-3",
-          "type": "INCIDENT_VERIFIED",
-          "title": "Incident & location verified",
-          "description": "Ready for patrol unit assignment decision.",
-          "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T17:12:57.654Z",
-          "isSimulated": true
-        }
-      ],
-      "notes": [],
-      "aiIntakeActive": false,
-      "isSimulated": true,
-      "callChannel": "WEB_TEXT"
-    },
-    {
-      "id": "INC-2026-1045",
-      "createdAt": "2026-11-23T16:54:57.654Z",
-      "updatedAt": "2026-11-23T17:22:57.654Z",
-      "acceptedAt": "2026-11-23T16:56:57.654Z",
-      "dispatchedAt": "2026-11-23T17:00:57.654Z",
-      "acknowledgedAt": "2026-11-23T17:02:57.654Z",
-      "category": "Fire",
-      "priority": "CRITICAL",
-      "priorityReason": "Electrical transformer fire adjacent to commercial building in Iganmu.",
-      "status": "ON_SCENE",
-      "callerName": "Ibrahim M. (Demo)",
-      "callerPhone": "+234-800-010-1045",
-      "summary": "Transformer sparks and smoke near warehouse perimeter on Eric Moore / Iganmu axis.",
-      "description": "Visible smoke from step-down transformer outside commercial yard; staff evacuated to muster point.",
-      "peopleAffected": 4,
-      "immediateDanger": true,
-      "dangerDetails": "Live electrical hazard; perimeter cordoned.",
-      "missingInfoFlags": [],
-      "assignedOperator": "Seyi Ogunleye",
-      "assignedUnitId": "UNIT-FIR-06",
-      "transcript": [
-        {
-          "id": "t-1045-1",
-          "speaker": "CALLER",
-          "text": "Our transformer by Eric Moore / Iganmu road just caught fire with thick black smoke.",
-          "timestamp": "2026-11-23T16:54:57.654Z"
-        }
-      ],
-      "location": {
-        "source": "OPERATOR_VERIFIED",
-        "verificationStatus": "VERIFIED",
-        "description": "Eric Moore Road industrial corridor, Iganmu, Lagos",
-        "landmark": "National Theatre / Iganmu Bridge",
-        "area": "Surulere",
-        "lat": 6.4795,
-        "lng": 3.3665,
-        "capturedAt": "2026-11-23T16:54:57.654Z",
-        "verifiedBy": "Seyi Ogunleye",
-        "verifiedAt": "2026-11-23T16:57:57.654Z"
-      },
-      "timeline": [
-        {
-          "id": "ev-1045-1",
-          "type": "INCIDENT_RECEIVED",
-          "title": "Fire incident received",
-          "description": "Report captured via AI intake.",
-          "actor": "Responda Intake",
-          "actorRole": "System",
-          "timestamp": "2026-11-23T16:54:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1045-2",
-          "type": "OPERATOR_TAKEOVER",
-          "title": "Operator takeover",
-          "description": "Seyi Ogunleye verified evacuation status.",
-          "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T16:56:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1045-3",
-          "type": "UNIT_ASSIGNED",
-          "title": "Fire partner unit assigned",
-          "description": "Eko Fire Partner-6 dispatched.",
-          "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T17:00:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1045-4",
-          "type": "UNIT_ON_SCENE",
-          "title": "Unit on scene (Simulated)",
-          "description": "Fire crew isolating perimeter and suppressing blaze.",
-          "actor": "UNIT-FIR-06",
-          "actorRole": "Responder",
-          "timestamp": "2026-11-23T17:22:57.654Z",
-          "isSimulated": true
-        }
-      ],
-      "notes": [],
       "aiIntakeActive": false,
       "isSimulated": true,
       "callChannel": "WEB_TEXT"
     },
     {
       "id": "INC-2026-1044",
-      "createdAt": "2026-11-23T17:24:57.654Z",
-      "updatedAt": "2026-11-23T17:25:57.654Z",
-      "category": "Medical",
-      "priority": "HIGH",
-      "priorityReason": "Workplace fall injury reported near Allen Avenue; exact building floor missing.",
-      "status": "AWAITING_OPERATOR",
+      "createdAt": "2026-11-26T00:51:01.680Z",
+      "updatedAt": "2026-11-26T00:52:01.680Z",
+      "category": "Other medical emergency",
+      "priority": "Unassessed",
+      "priorityReason": "Caller dropped before confirming consciousness or breathing status; flagged for urgent operator assessment.",
+      "status": "New",
       "callerName": "Kemi O. (Demo)",
       "callerPhone": "+234-800-010-1044",
-      "summary": "Colleague fell down stairwell at office block on Allen Avenue, Ikeja; suspected leg fracture.",
-      "description": "Caller states injured person is conscious and in pain; exact suite number not yet confirmed.",
+      "summary": "Workplace injury reported near Allen Avenue, Ikeja — insufficient clinical details yet.",
+      "description": "Caller states someone fell on office stairs near Allen Avenue; consciousness, bleeding, and exact floor remain unconfirmed.",
       "peopleAffected": 1,
       "immediateDanger": false,
+      "clinicalDetails": {
+        "chiefComplaint": "Fall injury (details incomplete)",
+        "consciousness": "Unknown — needs callback",
+        "breathing": "Unknown"
+      },
       "missingInfoFlags": [
+        "Clinical severity assessment",
         "Exact building number / floor",
         "Callback confirmation"
       ],
@@ -398,8 +258,8 @@
         {
           "id": "t-1044-1",
           "speaker": "CALLER",
-          "text": "Someone fell on the stairs at our office near Allen Avenue Ikeja. His ankle looks broken.",
-          "timestamp": "2026-11-23T17:24:57.654Z"
+          "text": "Someone fell on the stairs at our office near Allen Avenue Ikeja, please help.",
+          "timestamp": "2026-11-26T00:51:01.680Z"
         }
       ],
       "location": {
@@ -410,27 +270,28 @@
         "area": "Ikeja",
         "lat": 6.6018,
         "lng": 3.3515,
-        "capturedAt": "2026-11-23T17:24:57.654Z"
+        "capturedAt": "2026-11-26T00:51:01.680Z",
+        "carrierNote": "Carrier location integration not configured"
       },
       "timeline": [
         {
           "id": "ev-1044-1",
           "type": "INCIDENT_RECEIVED",
-          "title": "Emergency report received",
-          "description": "Submitted via text intake.",
+          "title": "Medical emergency report received",
+          "description": "Submitted via intake with incomplete clinical details.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T17:24:57.654Z",
+          "timestamp": "2026-11-26T00:51:01.680Z",
           "isSimulated": true
         },
         {
           "id": "ev-1044-2",
           "type": "OPERATOR_NOTIFIED",
-          "title": "Awaiting operator review",
-          "description": "Missing exact suite number flagged for human follow-up.",
+          "title": "Flagged Unassessed — awaiting operator review",
+          "description": "Insufficient clinical information; human callback and priority assessment required.",
           "actor": "Responda AI Intake",
           "actorRole": "AI Assistant",
-          "timestamp": "2026-11-23T17:25:57.654Z",
+          "timestamp": "2026-11-26T00:52:01.680Z",
           "isSimulated": true
         }
       ],
@@ -440,120 +301,55 @@
       "callChannel": "WEB_TEXT"
     },
     {
-      "id": "INC-2026-1043",
-      "createdAt": "2026-11-23T15:10:57.654Z",
-      "updatedAt": "2026-11-23T16:05:57.654Z",
-      "acceptedAt": "2026-11-23T15:13:57.654Z",
-      "dispatchedAt": "2026-11-23T15:16:57.654Z",
-      "acknowledgedAt": "2026-11-23T15:18:57.654Z",
-      "resolvedAt": "2026-11-23T16:05:57.654Z",
-      "category": "Environmental hazard",
-      "priority": "MEDIUM",
-      "priorityReason": "Fallen tree obstructing residential access road in Ikoyi.",
-      "status": "RESOLVED",
-      "callerName": "Femi D. (Demo)",
-      "callerPhone": "+234-800-010-1043",
-      "summary": "Storm-felled tree cleared from Bourdillon Road lane by rescue crew.",
-      "description": "Roadway obstruction cleared and hazard cones removed.",
-      "peopleAffected": 0,
-      "immediateDanger": false,
-      "missingInfoFlags": [],
-      "assignedOperator": "Amina Bello",
-      "assignedUnitId": "UNIT-RES-05",
-      "transcript": [
-        {
-          "id": "t-1043-1",
-          "speaker": "CALLER",
-          "text": "A large branch fell across one lane on Bourdillon Road Ikoyi.",
-          "timestamp": "2026-11-23T15:10:57.654Z"
-        }
-      ],
-      "location": {
-        "source": "OPERATOR_VERIFIED",
-        "verificationStatus": "VERIFIED",
-        "description": "Bourdillon Road near Alexander Junction, Ikoyi",
-        "landmark": "Bourdillon Road",
-        "area": "Ikoyi",
-        "lat": 6.4549,
-        "lng": 3.4346,
-        "capturedAt": "2026-11-23T15:10:57.654Z",
-        "verifiedBy": "Amina Bello",
-        "verifiedAt": "2026-11-23T15:14:57.654Z"
-      },
-      "timeline": [
-        {
-          "id": "ev-1043-1",
-          "type": "INCIDENT_RECEIVED",
-          "title": "Hazard report received",
-          "description": "Logged via intake.",
-          "actor": "Responda Intake",
-          "actorRole": "System",
-          "timestamp": "2026-11-23T15:10:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1043-2",
-          "type": "OPERATOR_TAKEOVER",
-          "title": "Operator takeover",
-          "description": "Amina Bello verified location.",
-          "actor": "Amina Bello",
-          "actorRole": "Call Operator",
-          "timestamp": "2026-11-23T15:13:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1043-3",
-          "type": "UNIT_ASSIGNED",
-          "title": "Rescue team assigned",
-          "description": "Lekki Rescue-5 dispatched.",
-          "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T15:16:57.654Z",
-          "isSimulated": true
-        },
-        {
-          "id": "ev-1043-4",
-          "type": "UNIT_COMPLETED",
-          "title": "Incident resolved",
-          "description": "Roadway cleared and reopened.",
-          "actor": "UNIT-RES-05",
-          "actorRole": "Responder",
-          "timestamp": "2026-11-23T16:05:57.654Z",
-          "isSimulated": true
-        }
-      ],
-      "notes": [],
-      "aiIntakeActive": false,
-      "isSimulated": true,
-      "callChannel": "WEB_TEXT"
-    },
-    {
       "id": "INC-2026-1042",
-      "createdAt": "2026-11-23T14:00:57.654Z",
-      "updatedAt": "2026-11-23T14:45:57.654Z",
-      "acceptedAt": "2026-11-23T14:02:57.654Z",
-      "dispatchedAt": "2026-11-23T14:05:57.654Z",
-      "acknowledgedAt": "2026-11-23T14:06:57.654Z",
-      "resolvedAt": "2026-11-23T14:45:57.654Z",
-      "category": "Rescue",
-      "priority": "HIGH",
-      "priorityReason": "Stalled elevator with two occupants inside Victoria Island office building.",
-      "status": "CLOSED",
+      "createdAt": "2026-11-25T21:27:01.681Z",
+      "updatedAt": "2026-11-25T22:17:01.681Z",
+      "acceptedAt": "2026-11-25T21:29:01.681Z",
+      "dispatchedAt": "2026-11-25T21:32:01.681Z",
+      "acknowledgedAt": "2026-11-25T21:33:01.681Z",
+      "arrivedAtSceneAt": "2026-11-25T21:42:01.681Z",
+      "patientPickedUpAt": "2026-11-25T21:49:01.681Z",
+      "transportStartedAt": "2026-11-25T21:52:01.681Z",
+      "hospitalArrivedAt": "2026-11-25T22:07:01.681Z",
+      "resolvedAt": "2026-11-25T22:17:01.681Z",
+      "closedAt": "2026-11-25T22:17:01.681Z",
+      "outcome": "Patient stabilised and handed over to emergency reception at LUTH.",
+      "hospitalDestination": {
+        "id": "hosp-luth",
+        "name": "Lagos University Teaching Hospital (LUTH)",
+        "area": "Idi-Araba, Surulere / Yaba Axis",
+        "lat": 6.5177,
+        "lng": 3.3547,
+        "isSimulatedDemo": true,
+        "selectedBy": "Amina Bello",
+        "selectedAt": "2026-11-25T21:51:01.681Z"
+      },
+      "category": "Medical",
+      "priority": "Critical",
+      "priorityReason": "Acute chest pain with diaphoresis at Victoria Island office complex.",
+      "status": "Closed",
       "callerName": "Building Concierge (Demo)",
       "callerPhone": "+234-800-010-1042",
-      "summary": "Two occupants safely extracted from stalled passenger lift on Adeola Odeku, Victoria Island.",
-      "description": "Facility technicians and rescue crew completed manual release.",
-      "peopleAffected": 2,
+      "summary": "Executive experiencing acute chest pain on Adeola Odeku safely transported to LUTH.",
+      "description": "Ambulance crew administered oxygen and ECG monitoring on scene prior to hospital transfer.",
+      "peopleAffected": 1,
       "immediateDanger": false,
+      "clinicalDetails": {
+        "chiefComplaint": "Acute chest pain",
+        "consciousness": "Conscious",
+        "breathing": "Assisted with oxygen",
+        "bleedingOrInjury": "None",
+        "clinicalNotes": "Handed over stable at LUTH emergency bay."
+      },
       "missingInfoFlags": [],
       "assignedOperator": "Amina Bello",
-      "assignedUnitId": "UNIT-RES-05",
+      "assignedUnitId": "UNIT-AMB-04",
       "transcript": [
         {
           "id": "t-1042-1",
           "speaker": "CALLER",
-          "text": "Two visitors are stuck in lift 2 at our Adeola Odeku tower.",
-          "timestamp": "2026-11-23T14:00:57.654Z"
+          "text": "Our director is having severe chest pain at 42 Adeola Odeku Street, Victoria Island.",
+          "timestamp": "2026-11-25T21:27:01.681Z"
         }
       ],
       "location": {
@@ -564,29 +360,49 @@
         "area": "Victoria Island",
         "lat": 6.4281,
         "lng": 3.4219,
-        "capturedAt": "2026-11-23T14:00:57.654Z",
+        "capturedAt": "2026-11-25T21:27:01.681Z",
         "verifiedBy": "Amina Bello",
-        "verifiedAt": "2026-11-23T14:03:57.654Z"
+        "verifiedAt": "2026-11-25T21:30:01.681Z"
       },
       "timeline": [
         {
           "id": "ev-1042-1",
           "type": "INCIDENT_RECEIVED",
-          "title": "Rescue request received",
+          "title": "Medical emergency received",
           "description": "Logged via intake.",
           "actor": "Responda Intake",
           "actorRole": "System",
-          "timestamp": "2026-11-23T14:00:57.654Z",
+          "timestamp": "2026-11-25T21:27:01.681Z",
           "isSimulated": true
         },
         {
           "id": "ev-1042-2",
+          "type": "UNIT_ASSIGNED",
+          "title": "Ambulance dispatched",
+          "description": "VI Care-4 dispatched to 42 Adeola Odeku.",
+          "actor": "Amina Bello",
+          "actorRole": "Operations Staff",
+          "timestamp": "2026-11-25T21:32:01.681Z",
+          "isSimulated": true
+        },
+        {
+          "id": "ev-1042-3",
+          "type": "HOSPITAL_ARRIVED",
+          "title": "Arrived at LUTH Emergency Reception",
+          "description": "Patient handed over safely.",
+          "actor": "VI Care-4",
+          "actorRole": "Medical Unit",
+          "timestamp": "2026-11-25T22:07:01.681Z",
+          "isSimulated": true
+        },
+        {
+          "id": "ev-1042-4",
           "type": "UNIT_COMPLETED",
           "title": "Incident closed",
-          "description": "Occupants safely assisted; no injuries reported.",
+          "description": "Patient stabilised and handed over to emergency reception at LUTH.",
           "actor": "Seyi Ogunleye",
-          "actorRole": "Dispatcher",
-          "timestamp": "2026-11-23T14:45:57.654Z",
+          "actorRole": "Operations Staff",
+          "timestamp": "2026-11-25T22:17:01.681Z",
           "isSimulated": true
         }
       ],
@@ -600,115 +416,242 @@
     {
       "id": "UNIT-AMB-01",
       "callsign": "Ikeja Alpha-1",
-      "organisation": "Lagos Metro EMS (Demo)",
+      "organisation": "Lagos Metro EMS",
       "unitType": "Ambulance",
+      "registrationStatus": "Active",
+      "vehicleRegistration": "LAS-401-EM",
+      "operationalBase": "Allen Avenue Medical Station, Ikeja",
       "crewDescription": "2 Trauma Paramedics, 1 EVOC Driver",
+      "crewMembers": [
+        {
+          "id": "c-101",
+          "name": "Dr. Tunde Bakare",
+          "medicalRole": "Trauma Lead",
+          "qualification": "ALS Paramedic"
+        },
+        {
+          "id": "c-102",
+          "name": "Ngozi Eze",
+          "medicalRole": "Flight/Ground EMT",
+          "qualification": "BLS / Defibrillation"
+        }
+      ],
+      "medicalCapabilities": [
+        "Advanced Life Support (ALS)",
+        "Basic Life Support (BLS)",
+        "Patient transport",
+        "Oxygen support",
+        "Defibrillation"
+      ],
       "locationName": "Allen Avenue Roundabout",
       "area": "Ikeja",
       "lat": 6.6018,
       "lng": 3.3515,
-      "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:28:57.654Z",
+      "locationFreshness": "LIVE",
+      "locationSourceLabel": "Simulated GPS Telemetry",
+      "availability": "Available",
+      "lastLocationUpdate": "2026-11-26T00:55:01.680Z",
+      "activityLog": [
+        {
+          "id": "uact-1",
+          "timestamp": "2026-11-26T00:27:01.680Z",
+          "actor": "Dr. Folashade Adeyemi",
+          "actorRole": "Organisation Administrator",
+          "action": "Unit Shift Active",
+          "details": "Ikeja Alpha-1 checked in with full ALS trauma kit."
+        }
+      ],
       "isSimulated": true
     },
     {
       "id": "UNIT-AMB-02",
       "callsign": "Yaba Trauma-2",
-      "organisation": "Lagos Metro EMS (Demo)",
+      "organisation": "Lagos Metro EMS",
       "unitType": "Ambulance",
+      "registrationStatus": "Active",
+      "vehicleRegistration": "LAS-402-EM",
+      "operationalBase": "Sabo Medical Post, Yaba",
       "crewDescription": "1 Emergency Physician, 1 Paramedic, 1 Driver",
+      "crewMembers": [
+        {
+          "id": "c-201",
+          "name": "Dr. Ibrahim Musa",
+          "medicalRole": "Emergency Physician",
+          "qualification": "ALS / Cardiac"
+        },
+        {
+          "id": "c-202",
+          "name": "Funke Adewale",
+          "medicalRole": "Paramedic",
+          "qualification": "BLS / Oxygen"
+        }
+      ],
+      "medicalCapabilities": [
+        "Advanced Life Support (ALS)",
+        "Basic Life Support (BLS)",
+        "Patient transport",
+        "Oxygen support",
+        "Defibrillation"
+      ],
       "locationName": "Sabo / Commercial Avenue",
       "area": "Yaba",
       "lat": 6.5068,
       "lng": 3.3775,
-      "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:29:57.654Z",
+      "locationFreshness": "LIVE",
+      "locationSourceLabel": "Simulated GPS Telemetry",
+      "availability": "Available",
+      "lastLocationUpdate": "2026-11-26T00:56:01.680Z",
+      "activityLog": [],
       "isSimulated": true
     },
     {
       "id": "UNIT-RRV-03",
       "callsign": "Surulere Rapid-3",
-      "organisation": "SwiftCare Response (Demo)",
+      "organisation": "SwiftCare Medical Response",
       "unitType": "Rapid response vehicle",
+      "registrationStatus": "Active",
+      "vehicleRegistration": "LAS-209-RR",
+      "operationalBase": "Bode Thomas Medical Post, Surulere",
       "crewDescription": "2 Advanced EMTs",
+      "crewMembers": [
+        {
+          "id": "c-301",
+          "name": "Yusuf Balogun",
+          "medicalRole": "Senior EMT",
+          "qualification": "BLS / Oxygen"
+        },
+        {
+          "id": "c-302",
+          "name": "Grace Ojo",
+          "medicalRole": "EMT Responder",
+          "qualification": "Defibrillation"
+        }
+      ],
+      "medicalCapabilities": [
+        "Basic Life Support (BLS)",
+        "Oxygen support",
+        "Defibrillation"
+      ],
       "locationName": "Bode Thomas / Adeniran Ogunsanya",
       "area": "Surulere",
       "lat": 6.4972,
       "lng": 3.3568,
-      "availability": "EN_ROUTE",
+      "locationFreshness": "LIVE",
+      "locationSourceLabel": "Simulated GPS Telemetry",
+      "availability": "Responding",
       "currentAssignmentId": "INC-2026-1047",
-      "lastLocationUpdate": "2026-11-23T17:29:57.654Z",
+      "lastLocationUpdate": "2026-11-26T00:56:01.680Z",
+      "activityLog": [
+        {
+          "id": "uact-3",
+          "timestamp": "2026-11-26T00:48:01.680Z",
+          "actor": "Seyi Ogunleye",
+          "actorRole": "Operations Staff",
+          "action": "Dispatched to INC-2026-1047",
+          "details": "Assigned to Adeniran Ogunsanya respiratory emergency."
+        }
+      ],
       "isSimulated": true
     },
     {
-      "id": "UNIT-SEC-04",
-      "callsign": "VI Sentinel-4",
-      "organisation": "Eko Shield Security (Demo)",
-      "unitType": "Security patrol",
-      "crewDescription": "3 Armed Response Officers",
+      "id": "UNIT-AMB-04",
+      "callsign": "VI Care-4",
+      "organisation": "Eko Clinical EMS",
+      "unitType": "Ambulance",
+      "registrationStatus": "Active",
+      "vehicleRegistration": "LAS-404-EM",
+      "operationalBase": "Adeola Odeku Ambulance Bay, VI",
+      "crewDescription": "2 Paramedics, 1 Driver",
+      "crewMembers": [
+        {
+          "id": "c-401",
+          "name": "Bolanle Peters",
+          "medicalRole": "Lead Paramedic",
+          "qualification": "ALS Paramedic"
+        }
+      ],
+      "medicalCapabilities": [
+        "Advanced Life Support (ALS)",
+        "Basic Life Support (BLS)",
+        "Patient transport",
+        "Oxygen support",
+        "Defibrillation"
+      ],
       "locationName": "Adeola Odeku / Akin Adesola",
       "area": "Victoria Island",
       "lat": 6.4281,
       "lng": 3.4219,
-      "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:27:57.654Z",
-      "isSimulated": true
-    },
-    {
-      "id": "UNIT-RES-05",
-      "callsign": "Lekki Rescue-5",
-      "organisation": "Atlantic Rescue Partners (Demo)",
-      "unitType": "Rescue team",
-      "crewDescription": "4 Extrication & Hazmat Specialists",
-      "locationName": "Admiralty Way Toll Corridor",
-      "area": "Lekki",
-      "lat": 6.4474,
-      "lng": 3.4723,
-      "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:26:57.654Z",
-      "isSimulated": true
-    },
-    {
-      "id": "UNIT-FIR-06",
-      "callsign": "Eko Fire Partner-6",
-      "organisation": "Industrial Fire & Safety (Demo)",
-      "unitType": "Fire-response partner",
-      "crewDescription": "4 Fire Suppression Crew",
-      "locationName": "Iganmu / Costain Axis",
-      "area": "Surulere",
-      "lat": 6.4795,
-      "lng": 3.3665,
-      "availability": "ON_SCENE",
-      "currentAssignmentId": "INC-2026-1045",
-      "lastLocationUpdate": "2026-11-23T17:28:57.654Z",
+      "locationFreshness": "LAST_KNOWN",
+      "locationSourceLabel": "Last Reported Bay Telemetry",
+      "availability": "Available",
+      "lastLocationUpdate": "2026-11-26T00:51:01.680Z",
+      "activityLog": [],
       "isSimulated": true
     },
     {
       "id": "UNIT-AMB-07",
       "callsign": "Ikoyi Bravo-7",
-      "organisation": "Lagos Metro EMS (Demo)",
+      "organisation": "Lagos Metro EMS",
       "unitType": "Ambulance",
+      "registrationStatus": "Active",
+      "vehicleRegistration": "LAS-407-EM",
+      "operationalBase": "Bourdillon EMS Point, Ikoyi",
       "crewDescription": "2 Paramedics, 1 Driver",
+      "crewMembers": [
+        {
+          "id": "c-701",
+          "name": "Damilola Sanni",
+          "medicalRole": "Paramedic",
+          "qualification": "BLS / Transport"
+        }
+      ],
+      "medicalCapabilities": [
+        "Basic Life Support (BLS)",
+        "Patient transport",
+        "Oxygen support"
+      ],
       "locationName": "Bourdillon Road Junction",
       "area": "Ikoyi",
       "lat": 6.4549,
       "lng": 3.4346,
-      "availability": "AVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:25:57.654Z",
+      "locationFreshness": "LIVE",
+      "locationSourceLabel": "Simulated GPS Telemetry",
+      "availability": "Available",
+      "lastLocationUpdate": "2026-11-26T00:52:01.680Z",
+      "activityLog": [],
       "isSimulated": true
     },
     {
-      "id": "UNIT-SEC-08",
-      "callsign": "Ikeja Patrol-8",
-      "organisation": "Eko Shield Security (Demo)",
-      "unitType": "Security patrol",
-      "crewDescription": "2 Patrol Officers",
-      "locationName": "Alausa Secretariat Way",
-      "area": "Ikeja",
-      "lat": 6.6152,
-      "lng": 3.3589,
-      "availability": "UNAVAILABLE",
-      "lastLocationUpdate": "2026-11-23T17:12:57.654Z",
+      "id": "UNIT-RRV-08",
+      "callsign": "Lekki Med-8",
+      "organisation": "SwiftCare Medical Response",
+      "unitType": "Rapid response vehicle",
+      "registrationStatus": "Active",
+      "vehicleRegistration": "LAS-218-RR",
+      "operationalBase": "Admiralty Way Medical Post, Lekki",
+      "crewDescription": "2 EMTs (Stand-down maintenance)",
+      "crewMembers": [
+        {
+          "id": "c-801",
+          "name": "Kolawole Ade",
+          "medicalRole": "EMT",
+          "qualification": "BLS"
+        }
+      ],
+      "medicalCapabilities": [
+        "Basic Life Support (BLS)",
+        "Oxygen support"
+      ],
+      "locationName": "Admiralty Way Medical Post",
+      "area": "Lekki",
+      "lat": 6.4474,
+      "lng": 3.4723,
+      "locationFreshness": "MANUAL",
+      "locationSourceLabel": "Base Check-in",
+      "availability": "Unavailable",
+      "lastLocationUpdate": "2026-11-26T00:39:01.680Z",
+      "adminNotes": "Restocking oxygen cylinders.",
+      "activityLog": [],
       "isSimulated": true
     }
   ],
@@ -717,11 +660,11 @@
       "id": "notif-1",
       "channel": "SYSTEM_ALERT",
       "recipient": "Command Centre Queue",
-      "message": "INC-2026-1048 (Road accident · Yaba) flagged CRITICAL — awaiting human operator takeover.",
+      "message": "INC-2026-1048 (Road accident · Yaba) flagged Critical — awaiting operator takeover.",
       "incidentId": "INC-2026-1048",
       "status": "DELIVERED_DEMO",
       "providerResponse": "WebSocket broadcast queued (Demo)",
-      "timestamp": "2026-11-23T17:28:57.654Z",
+      "timestamp": "2026-11-26T00:55:01.681Z",
       "isSimulated": true
     },
     {
@@ -732,10 +675,69 @@
       "incidentId": "INC-2026-1047",
       "unitId": "UNIT-RRV-03",
       "status": "DELIVERED_DEMO",
-      "providerResponse": "Simulated dispatch alert log (no live external SMS sent)",
-      "timestamp": "2026-11-23T17:21:57.654Z",
+      "providerResponse": "Simulated dispatch alert log (no external carrier message sent)",
+      "timestamp": "2026-11-26T00:48:01.681Z",
       "isSimulated": true
     }
   ],
+  "staffAccounts": [
+    {
+      "id": "staff-ops-1",
+      "name": "Seyi Ogunleye",
+      "email": "seyi.ogunleye@responda.ng",
+      "role": "Operations Staff",
+      "accountStatus": "ACTIVE",
+      "badgeCode": "OPS-101",
+      "dateAdded": "2026-11-26T00:57:01.680Z",
+      "lastActive": "2026-11-26T00:57:01.680Z"
+    },
+    {
+      "id": "staff-ops-2",
+      "name": "Amina Bello",
+      "email": "amina.bello@responda.ng",
+      "role": "Operations Staff",
+      "accountStatus": "ACTIVE",
+      "badgeCode": "OPS-102",
+      "dateAdded": "2026-11-26T00:57:01.680Z",
+      "lastActive": "2026-11-26T00:57:01.680Z"
+    },
+    {
+      "id": "staff-ops-3",
+      "name": "Chinedu Okafor",
+      "email": "chinedu.okafor@responda.ng",
+      "role": "Operations Staff",
+      "accountStatus": "ACTIVE",
+      "badgeCode": "OPS-103",
+      "dateAdded": "2026-11-26T00:57:01.680Z"
+    },
+    {
+      "id": "staff-admin-1",
+      "name": "Dr. Folashade Adeyemi",
+      "email": "folashade.adeyemi@responda.ng",
+      "role": "Organisation Administrator",
+      "accountStatus": "ACTIVE",
+      "badgeCode": "ADM-001",
+      "dateAdded": "2026-11-26T00:57:01.680Z",
+      "lastActive": "2026-11-26T00:57:01.680Z"
+    },
+    {
+      "id": "staff-ops-4",
+      "name": "Kemi Lawal",
+      "email": "kemi.lawal@responda.ng",
+      "role": "Operations Staff",
+      "accountStatus": "INVITED",
+      "badgeCode": "OPS-104",
+      "dateAdded": "2026-11-26T00:57:01.680Z"
+    }
+  ],
+  "organisationSettings": {
+    "name": "Responda Medical Emergency Coordination (Lagos)",
+    "city": "Lagos, Nigeria",
+    "contactEmail": "dispatch@responda.ng",
+    "contactPhone": "+234-800-RESPONDA",
+    "defaultOperationalArea": "Lagos Mainland & Island Medical Corridor",
+    "requireLocationVerificationBeforeDispatch": true,
+    "clinicalTriageNotice": "Automated intake assists caller triage only. Human Operations Staff verify clinical priority, confirm Lagos location, and approve every ambulance dispatch."
+  },
   "sequenceCounter": 1049
 }
