@@ -2294,7 +2294,15 @@ async function startServer(): Promise<void> {
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('/{*splat}', (_req, res) => {
+    app.get('/{*splat}', (req, res, next) => {
+      if (req.path === '/api' || req.path.startsWith('/api/')) {
+        res.status(404).json({ error: 'API endpoint not found.' });
+        return;
+      }
+      if (req.path === '/ws' || req.path.startsWith('/ws/')) {
+        next();
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

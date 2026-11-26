@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
-    "start": "node server.ts",
+    "start": "NODE_ENV=production node server.ts",
     "preview": "vite preview",
     "test": "tsx --test src/utils/guidedWorkflow.test.ts src/utils/incidentLogic.test.ts src/utils/intakeParser.test.ts src/utils/simulationEngine.test.ts src/utils/migrationAndAuth.test.ts",
     "clean": "node -e \"import('node:fs').then(fs=>['dist','server.js'].forEach(p=>fs.rmSync(p,{recursive:true,force:true})))\"",

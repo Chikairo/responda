@@ -172,7 +172,7 @@ export function attachWebSocketServers(server: http.Server): void {
   });
 
   server.on('upgrade', (request, socket, head) => {
-    const reqUrl = new URL(request.url || '/', `http://${request.headers.host}`);
+    const reqUrl = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
     if (reqUrl.pathname === '/ws/events') {
       eventsWss.handleUpgrade(request, socket, head, (ws) => {
         eventsWss.emit('connection', ws, request);
