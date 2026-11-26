@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -7,13 +7,11 @@ import {
   HelpCircle,
   LayoutDashboard,
   Menu,
-  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   PhoneCall,
   PlugZap,
   ShieldCheck,
-  Sun,
   Truck,
   Users,
   Wifi,
@@ -70,6 +68,7 @@ import { OrganisationSettingsView } from './components/OrganisationSettingsView'
 import { ResponseUnitsView } from './components/ResponseUnitsView';
 import { SettingsIntegrationsView } from './components/SettingsIntegrationsView';
 import { SimulationControlPanel } from './components/SimulationControlPanel';
+import { SelectMenu } from './components/SelectMenu';
 import { StaffManagementView } from './components/StaffManagementView';
 import { RespondaLogo } from './components/StatusBadges';
 import { UnitManagementView } from './components/UnitManagementView';
@@ -105,7 +104,6 @@ export default function App() {
   const [section, setSection] = useState<AppSection>('command-centre');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<IncidentWorkspaceTabId>('workflow');
-  const [intakeMode, setIntakeMode] = useState(false);
 
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>('INC-2026-1048');
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
@@ -128,26 +126,56 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [clock, setClock] = useState(() => new Date());
-  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-      ? 'dark'
-      : 'light'
-  );
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      document.documentElement.classList.toggle('dark', next === 'dark');
-      try {
-        localStorage.setItem('responda-theme', next);
-      } catch {
-        // ignore storage errors
-      }
-      return next;
-    });
+  // Automatically synchronize light/dark theme with system preferences
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const applySystemTheme = (isDark: boolean) => {
+      const next = isDark ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      document.documentElement.classList.toggle('dark', isDark);
+    };
+    applySystemTheme(media.matches);
+    const handleChange = (e: MediaQueryListEvent) => applySystemTheme(e.matches);
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
   }, []);
+
+  // Dismiss Notification Centre popover on outside pointerdown or Escape
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handlePointerDown = (e: MouseEvent | PointerEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [notifOpen]);
+
+  // Dismiss mobile navigation drawer on Escape
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileMenuOpen]);
 
   const pushToast = useCallback(
     (text: string, tone: 'info' | 'success' | 'error' = 'info') => {
@@ -211,6 +239,21 @@ export default function App() {
 
   const simStateRef = useRef(simState);
   simStateRef.current = simState;
+
+  const applySimState = useCallback(
+    (
+      updater:
+        | SimulationRuntimeState
+        | ((prev: SimulationRuntimeState) => SimulationRuntimeState)
+    ) => {
+      const next =
+        typeof updater === 'function' ? updater(simStateRef.current) : updater;
+      simStateRef.current = next;
+      setSimState(next);
+    },
+    []
+  );
+
   const incidentsRef = useRef(incidents);
   incidentsRef.current = incidents;
   const unitsRef = useRef(units);
@@ -375,12 +418,6 @@ export default function App() {
       cancelled = true;
     };
   }, [issueAndActivateDemoSession]);
-
-  // Live Clock
-  useEffect(() => {
-    const t = window.setInterval(() => setClock(new Date()), 30000);
-    return () => window.clearInterval(t);
-  }, []);
 
   // Real-time WebSocket Event Sync
   const wsReconnectTimer = useRef<number | null>(null);
@@ -768,6 +805,7 @@ export default function App() {
       turnCount: number;
       includeCoords: boolean;
       markLocationResolved: boolean;
+      completeIntake?: boolean;
     }): Promise<IncidentRecord | null> => {
       const res = await authFetch('/api/simulation/incident', {
         method: 'POST',
@@ -997,23 +1035,26 @@ export default function App() {
             turnCount: scenario.dialogue.length,
             includeCoords: true,
             markLocationResolved: false,
+            completeIntake: true,
           });
           setSection('incident-management');
           setWorkspaceOpen(true);
-          setWorkspaceTab('location');
-          setSimState((prev) => ({
+          setWorkspaceTab('workflow');
+          applySimState((prev) => ({
             ...prev,
             audioPlaying: false,
             speakingSpeaker: null,
             stage: 3,
+            revealedTurnCount: scenario.dialogue.length,
             locationResolvedInSim: true,
-            statusMessage: SIMULATION_STAGES[2].nextExpectedAction,
+            statusMessage:
+              'AI intake Q&A complete — incident moved to Milestone 2: Assessment & Verification.',
           }));
           return;
         }
 
         const turn = scenario.dialogue[turnIdx];
-        const nextStage: SimulationStageNumber = turnIdx >= 3 ? 3 : 2;
+        const nextStage: SimulationStageNumber = turnIdx >= 4 ? 3 : 2;
         await syncSimIncident({
           scenarioId,
           turnCount: turnIdx + 1,
@@ -1023,8 +1064,8 @@ export default function App() {
 
         setSection('incident-management');
         setWorkspaceOpen(true);
-        setWorkspaceTab(nextStage === 3 ? 'location' : 'medical-details');
-        setSimState((prev) => ({
+        setWorkspaceTab('workflow');
+        applySimState((prev) => ({
           ...prev,
           stage: nextStage,
           revealedTurnCount: turnIdx + 1,
@@ -1039,14 +1080,14 @@ export default function App() {
           text: turn.text,
           enabled: simStateRef.current.audioEnabled,
           onStart: () => {
-            setSimState((prev) => ({
+            applySimState((prev) => ({
               ...prev,
               audioPlaying: true,
               speakingSpeaker: turn.speaker,
             }));
           },
           onEnd: () => {
-            setSimState((prev) => ({
+            applySimState((prev) => ({
               ...prev,
               audioPlaying: false,
               speakingSpeaker: null,
@@ -1062,7 +1103,7 @@ export default function App() {
 
       void runTurn(startIndex);
     },
-    [scheduleSimTimeout, syncSimIncident]
+    [applySimState, scheduleSimTimeout, syncSimIncident]
   );
 
   const startSimulation = useCallback(
@@ -1103,7 +1144,6 @@ export default function App() {
         setActiveRoute(null);
         setSelectedUnitId(null);
         setSelectedIncidentId(scenario.incidentId);
-        setIntakeMode(false);
         setSection('incident-management');
         setWorkspaceOpen(true);
         setWorkspaceTab('workflow');
@@ -1112,7 +1152,7 @@ export default function App() {
         trackingArrivalHandledRef.current = false;
         trackingMilestonesSentRef.current.clear();
 
-        setSimState({
+        applySimState({
           active: true,
           paused: false,
           scenarioId: targetId,
@@ -1142,15 +1182,38 @@ export default function App() {
           completed: false,
           activeRoute: null,
           hospitalRoute: null,
-          statusMessage: SIMULATION_STAGES[0].nextExpectedAction,
+          statusMessage: 'Incoming emergency call connected — starting AI intake Q&A...',
         });
 
         pushToast(scenario.incomingCallNotification, 'info');
+
+        // Automatically answer call and begin sequential 6-turn Q&A playback
+        scheduleSimTimeout(() => {
+          const live = simStateRef.current;
+          if (!live.active || live.paused || live.stage !== 1) return;
+          applySimState((prev) => ({
+            ...prev,
+            stage: 2,
+            callStatus: 'CONNECTED_AI',
+            statusMessage: SIMULATION_STAGES[1].nextExpectedAction,
+          }));
+          playDialogueSequence(targetId, 1);
+        }, 900);
       } finally {
         setSimBusy(false);
       }
     },
-    [authFetch, clearSimExecution, pushToast, selectedScenario, syncSimIncident, userRole]
+    [
+      applySimState,
+      authFetch,
+      clearSimExecution,
+      playDialogueSequence,
+      pushToast,
+      scheduleSimTimeout,
+      selectedScenario,
+      syncSimIncident,
+      userRole,
+    ]
   );
 
   const advanceSimulationStage = useCallback(async () => {
@@ -1164,37 +1227,66 @@ export default function App() {
       if (cur.stage === 1) {
         setSection('incident-management');
         setWorkspaceOpen(true);
-        setWorkspaceTab('medical-details');
-        setSimState((prev) => ({
+        setWorkspaceTab('workflow');
+        applySimState((prev) => ({
           ...prev,
           stage: 2,
           callStatus: 'CONNECTED_AI',
           statusMessage: SIMULATION_STAGES[1].nextExpectedAction,
         }));
         if (!cur.paused) {
-          playDialogueSequence(cur.scenarioId, 0);
+          playDialogueSequence(cur.scenarioId, Math.max(1, cur.revealedTurnCount));
         }
         return;
       }
 
       if (cur.stage === 2) {
+        if (cur.paused && cur.revealedTurnCount < scenario.dialogue.length) {
+          const nextTurn = cur.revealedTurnCount + 1;
+          const finishedIntake = nextTurn >= scenario.dialogue.length;
+          await syncSimIncident({
+            scenarioId: cur.scenarioId,
+            turnCount: nextTurn,
+            includeCoords: nextTurn >= 5,
+            markLocationResolved: false,
+            completeIntake: finishedIntake,
+          });
+          setSection('incident-management');
+          setWorkspaceOpen(true);
+          setWorkspaceTab('workflow');
+          applySimState((prev) => ({
+            ...prev,
+            stage: finishedIntake ? 3 : 2,
+            audioPlaying: false,
+            speakingSpeaker: null,
+            revealedTurnCount: nextTurn,
+            locationResolvedInSim: finishedIntake || prev.locationResolvedInSim,
+            statusMessage: finishedIntake
+              ? 'AI intake Q&A complete — incident moved to Milestone 2: Assessment & Verification.'
+              : `AI Medical Intake turn ${nextTurn}/${scenario.dialogue.length}`,
+          }));
+          return;
+        }
+
         await syncSimIncident({
           scenarioId: cur.scenarioId,
           turnCount: scenario.dialogue.length,
           includeCoords: true,
           markLocationResolved: false,
+          completeIntake: true,
         });
         setSection('incident-management');
         setWorkspaceOpen(true);
-        setWorkspaceTab('location');
-        setSimState((prev) => ({
+        setWorkspaceTab('workflow');
+        applySimState((prev) => ({
           ...prev,
           stage: 3,
           audioPlaying: false,
           speakingSpeaker: null,
           revealedTurnCount: scenario.dialogue.length,
           locationResolvedInSim: true,
-          statusMessage: SIMULATION_STAGES[2].nextExpectedAction,
+          statusMessage:
+            'AI intake Q&A complete — incident moved to Milestone 2: Assessment & Verification.',
         }));
         return;
       }
@@ -1205,11 +1297,12 @@ export default function App() {
           turnCount: scenario.dialogue.length,
           includeCoords: true,
           markLocationResolved: true,
+          completeIntake: true,
         });
         setSection('command-centre');
         setWorkspaceOpen(false);
         setSelectedIncidentId(scenario.incidentId);
-        setSimState((prev) => ({
+        applySimState((prev) => ({
           ...prev,
           stage: 4,
           statusMessage: SIMULATION_STAGES[3].nextExpectedAction,
@@ -1230,7 +1323,7 @@ export default function App() {
         setSection('incident-management');
         setWorkspaceOpen(true);
         setWorkspaceTab('location');
-        setSimState((prev) => ({
+        applySimState((prev) => ({
           ...prev,
           stage: 5,
           operatorTakenOver: true,
@@ -1254,7 +1347,7 @@ export default function App() {
         if (bestUnit) setSelectedUnitId(bestUnit.id);
         setSection('response-units');
         setWorkspaceOpen(false);
-        setSimState((prev) => ({
+        applySimState((prev) => ({
           ...prev,
           stage: 6,
           selectedUnitId: bestUnit?.id || scenario.recommendedUnitId,
@@ -1287,7 +1380,7 @@ export default function App() {
                 scenario.resolvedCoords.lng
               );
           setActiveRoute(calcRoute);
-          setSimState((prev) => ({
+          applySimState((prev) => ({
             ...prev,
             stage: 7,
             selectedUnitId: unit.id,
@@ -1295,7 +1388,7 @@ export default function App() {
             statusMessage: SIMULATION_STAGES[6].nextExpectedAction,
           }));
         } else {
-          setSimState((prev) => ({
+          applySimState((prev) => ({
             ...prev,
             stage: 7,
             statusMessage: SIMULATION_STAGES[6].nextExpectedAction,
@@ -1330,7 +1423,7 @@ export default function App() {
         setSection('incident-management');
         setWorkspaceOpen(true);
         setWorkspaceTab('response');
-        setSimState((prev) => ({
+        applySimState((prev) => ({
           ...prev,
           stage: 8,
           dispatchApproved: true,
@@ -1377,6 +1470,7 @@ export default function App() {
     }
   }, [
     activeRoute,
+    applySimState,
     authFetch,
     clearSimExecution,
     completeTrackingArrival,
@@ -1390,44 +1484,109 @@ export default function App() {
     syncSimIncident,
   ]);
 
-  const handleToggleSimPause = useCallback(() => {
-    setSimState((prev) => {
-      const nextPaused = !prev.paused;
-      if (nextPaused) {
-        clearSimExecution();
-        pauseSpeech();
-      } else {
-        resumeSpeech();
-        if ((prev.stage === 2 || prev.stage === 3) && prev.active) {
-          scheduleSimTimeout(() => {
-            playDialogueSequence(prev.scenarioId, Math.max(0, prev.revealedTurnCount));
-          }, 150);
-        } else if (prev.stage === 8 && prev.active && prev.selectedUnitId && !prev.arrivedOnScene) {
-          const routeToUse =
-            prev.activeRoute ||
-            buildSimulatedCorridorRoute(
-              6.5068,
-              3.3775,
-              SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lat,
-              SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lng
-            );
-          scheduleSimTimeout(() => {
-            void runSimulationTracking(prev.scenarioId, prev.selectedUnitId!, routeToUse, {
-              resumeExisting: true,
-            });
-          }, 100);
-        }
+  const handlePrevSimulationStage = useCallback(async () => {
+    const cur = simStateRef.current;
+    if (!cur.active || cur.completed || cur.stage <= 1) return;
+    const scenario = SIMULATION_SCENARIOS[cur.scenarioId];
+    clearSimExecution();
+    setSimBusy(true);
+    try {
+      if ((cur.stage === 2 || cur.stage === 3) && cur.revealedTurnCount > 1) {
+        const prevTurn = cur.revealedTurnCount - 1;
+        await syncSimIncident({
+          scenarioId: cur.scenarioId,
+          turnCount: prevTurn,
+          includeCoords: prevTurn >= 5,
+          markLocationResolved: false,
+        });
+        setSection('incident-management');
+        setWorkspaceOpen(true);
+        setWorkspaceTab('workflow');
+        applySimState((prev) => ({
+          ...prev,
+          paused: true,
+          stage: prevTurn >= 5 ? 3 : 2,
+          audioPlaying: false,
+          speakingSpeaker: null,
+          revealedTurnCount: prevTurn,
+          statusMessage: `Paused at intake turn ${prevTurn}/${scenario.dialogue.length}.`,
+        }));
+        return;
       }
-      return {
+
+      const prevStage = Math.max(1, cur.stage - 1) as SimulationStageNumber;
+      const meta = SIMULATION_STAGES[prevStage - 1];
+      setSection(meta.targetSection);
+      if (meta.targetSection === 'incident-management') {
+        setWorkspaceOpen(true);
+        setWorkspaceTab(
+          prevStage <= 3 ? 'workflow' : meta.targetWorkspaceTab || 'workflow'
+        );
+      } else {
+        setWorkspaceOpen(false);
+      }
+      applySimState((prev) => ({
         ...prev,
-        paused: nextPaused,
-        audioPlaying: nextPaused ? false : prev.audioPlaying,
-      };
-    });
-  }, [clearSimExecution, playDialogueSequence, runSimulationTracking, scheduleSimTimeout]);
+        paused: true,
+        stage: prevStage,
+        audioPlaying: false,
+        speakingSpeaker: null,
+        statusMessage: `Stepped back to Stage ${prevStage}: ${meta.title}`,
+      }));
+    } finally {
+      setSimBusy(false);
+    }
+  }, [applySimState, clearSimExecution, syncSimIncident]);
+
+  const handleToggleSimPause = useCallback(() => {
+    const prev = simStateRef.current;
+    const nextPaused = !prev.paused;
+    if (nextPaused) {
+      clearSimExecution();
+      pauseSpeech();
+    } else {
+      resumeSpeech();
+      if (prev.stage === 1 && prev.active) {
+        scheduleSimTimeout(() => {
+          const live = simStateRef.current;
+          if (!live.active || live.paused || live.stage !== 1) return;
+          applySimState((p) => ({
+            ...p,
+            stage: 2,
+            callStatus: 'CONNECTED_AI',
+            statusMessage: SIMULATION_STAGES[1].nextExpectedAction,
+          }));
+          playDialogueSequence(live.scenarioId, Math.max(1, live.revealedTurnCount));
+        }, 200);
+      } else if ((prev.stage === 2 || prev.stage === 3) && prev.active) {
+        scheduleSimTimeout(() => {
+          playDialogueSequence(prev.scenarioId, Math.max(0, prev.revealedTurnCount));
+        }, 150);
+      } else if (prev.stage === 8 && prev.active && prev.selectedUnitId && !prev.arrivedOnScene) {
+        const routeToUse =
+          prev.activeRoute ||
+          buildSimulatedCorridorRoute(
+            6.5068,
+            3.3775,
+            SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lat,
+            SIMULATION_SCENARIOS[prev.scenarioId].resolvedCoords.lng
+          );
+        scheduleSimTimeout(() => {
+          void runSimulationTracking(prev.scenarioId, prev.selectedUnitId!, routeToUse, {
+            resumeExisting: true,
+          });
+        }, 100);
+      }
+    }
+    applySimState((p) => ({
+      ...p,
+      paused: nextPaused,
+      audioPlaying: nextPaused ? false : p.audioPlaying,
+    }));
+  }, [applySimState, clearSimExecution, playDialogueSequence, runSimulationTracking, scheduleSimTimeout]);
 
   const handleToggleSimAudio = useCallback(() => {
-    setSimState((prev) => {
+    applySimState((prev) => {
       const nextAudio = !prev.audioEnabled;
       if (!nextAudio) stopAllSpeech();
       return {
@@ -1436,11 +1595,11 @@ export default function App() {
         audioPlaying: nextAudio ? prev.audioPlaying : false,
       };
     });
-  }, []);
+  }, [applySimState]);
 
   const handleEndSimulation = useCallback(() => {
     clearSimExecution();
-    setSimState((prev) => ({
+    applySimState((prev) => ({
       ...prev,
       active: false,
       paused: false,
@@ -1449,9 +1608,8 @@ export default function App() {
       speakingSpeaker: null,
     }));
     pushToast('Live simulation ended cleanly.', 'info');
-  }, [clearSimExecution, pushToast]);
+  }, [applySimState, clearSimExecution, pushToast]);
 
-  const geminiConfigured = integrations.find((i) => i.id === 'gemini')?.configured ?? false;
   const carrierConfigured =
     integrations.find((i) => i.id === 'carrier_location')?.configured ?? false;
 
@@ -1521,7 +1679,6 @@ export default function App() {
     setSection(target);
     if (target !== 'incident-management') {
       setWorkspaceOpen(false);
-      setIntakeMode(false);
     }
     setMobileMenuOpen(false);
   };
@@ -1532,13 +1689,12 @@ export default function App() {
       const nextAcc = await issueAndActivateDemoSession(accountId);
       if (nextAcc.role === 'Organisation Administrator') {
         clearSimExecution();
-        setSimState((prev) => ({ ...prev, active: false, callStatus: 'IDLE' }));
+        applySimState((prev) => ({ ...prev, active: false, callStatus: 'IDLE' }));
         setSection('admin-overview');
       } else {
         setSection('command-centre');
       }
       setWorkspaceOpen(false);
-      setIntakeMode(false);
       pushToast(`Signed in (Demo Session) as ${nextAcc.name} — ${nextAcc.role}.`, 'info');
     } catch (err) {
       pushToast(
@@ -1551,24 +1707,24 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-[#0B1220] dark:text-[#F8FAFC]">
+    <div className="h-screen h-dvh overflow-hidden flex flex-col bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       {/* Medical Prototype Disclaimer Strip */}
-      <div className="bg-amber-50 border-b border-amber-200 text-amber-900 dark:bg-[#111C2E] dark:border-[#26364B] dark:text-amber-200/90 px-4 py-1.5 text-[11px] flex items-center justify-center gap-2 text-center">
-        <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+      <div className="shrink-0 bg-[var(--status-urgent-bg)] border-b border-[var(--status-urgent-border)] text-[var(--status-urgent-text)] px-4 py-1.5 text-[11px] flex items-center justify-center gap-2 text-center">
+        <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
         <span>
           Responda medical coordination prototype. Not connected to public emergency services. Do not use for real emergencies.
         </span>
       </div>
 
-      <div className="flex-1 flex min-h-0">
-        {/* Desktop Collapsible Sidebar (Strict 4 Ops Items or 5 Admin Items) */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Desktop Collapsible Sidebar (Persistent; never auto-closed on outside click) */}
         <aside
-          className={`hidden lg:flex lg:flex-col bg-white border-r border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] shrink-0 transition-all duration-200 ${
+          className={`hidden lg:flex lg:flex-col h-full overflow-y-auto bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] shrink-0 transition-all duration-200 ${
             sidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-64'
           }`}
         >
           <div
-            className={`p-3.5 border-b border-slate-200 dark:border-[#26364B] flex items-center ${
+            className={`p-3.5 border-b border-[var(--border-subtle)] flex items-center ${
               sidebarCollapsed ? 'justify-center' : 'justify-between gap-2'
             }`}
           >
@@ -1577,7 +1733,7 @@ export default function App() {
               type="button"
               onClick={() => setSidebarCollapsed((c) => !c)}
               aria-label={sidebarCollapsed ? 'Expand navigation sidebar' : 'Collapse navigation sidebar'}
-              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] text-slate-700 dark:text-slate-200"
+              className="p-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-[var(--text-primary)] transition-colors"
             >
               {sidebarCollapsed ? (
                 <PanelLeftOpen className="w-4 h-4" />
@@ -1588,7 +1744,7 @@ export default function App() {
           </div>
 
           {!sidebarCollapsed && (
-            <div className="px-3.5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <div className="px-3.5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
               {userRole === 'Organisation Administrator'
                 ? 'Organisation Admin'
                 : 'Operations Staff'}
@@ -1606,10 +1762,10 @@ export default function App() {
                   onClick={() => navigateTo(item.id)}
                   className={`w-full flex items-center ${
                     sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-3'
-                  } gap-2 py-2.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap ${
+                  } gap-2 py-2.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     active
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#172438] dark:hover:text-white'
+                      ? 'bg-[var(--action-blue)] text-[var(--text-on-solid)]'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   <span className="flex items-center gap-2.5">
@@ -1618,10 +1774,10 @@ export default function App() {
                   </span>
                   {!sidebarCollapsed && item.badge !== undefined && (
                     <span
-                      className={`font-mono text-[11px] px-1.5 py-0.5 rounded ${
+                      className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded ${
                         active
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-slate-100 text-slate-700 dark:bg-[#172438] dark:text-slate-300'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)]'
                       }`}
                     >
                       {item.badge}
@@ -1633,47 +1789,47 @@ export default function App() {
           </nav>
 
           {!sidebarCollapsed && (
-            <div className="p-3 space-y-2.5 border-t border-slate-200 dark:border-[#26364B]">
-              <div className="rounded-xl bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/30 p-3 text-xs space-y-1">
-                <div className="flex items-center gap-1.5 font-semibold text-red-700 dark:text-red-300">
+            <div className="p-3 space-y-2.5 border-t border-[var(--border-subtle)]">
+              <div className="rounded-xl bg-[var(--status-critical-bg)] border border-[var(--status-critical-border)] p-3 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-[var(--status-critical-text)]">
                   <PhoneCall className="w-3.5 h-3.5" />
                   <span>Medical Command Prototype</span>
                 </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                <p className="text-[11px] text-[var(--text-secondary)] leading-snug">
                   Human verification and approval required for every dispatch decision.
                 </p>
               </div>
 
-              <div className="rounded-xl bg-slate-50 border border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] px-3 py-2.5 flex items-center justify-between text-xs">
-                <span className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+              <div className="rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2.5 flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2 text-[var(--text-secondary)]">
                   {wsConnected ? (
-                    <Wifi className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <Wifi className="w-3.5 h-3.5 text-[var(--status-verified-text)]" />
                   ) : (
-                    <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <WifiOff className="w-3.5 h-3.5 text-[var(--status-urgent-text)]" />
                   )}
                   <span>{wsConnected ? 'Live Sync Active' : 'Reconnecting'}</span>
                 </span>
-                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">WS</span>
+                <span className="font-mono text-[10px] text-[var(--text-muted)]">WS</span>
               </div>
             </div>
           )}
         </aside>
 
-        {/* Mobile Drawer Sidebar */}
+        {/* Mobile Drawer Sidebar (Fixed & Scroll-Isolated) */}
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-[900] lg:hidden flex">
+          <div className="lg:hidden">
             <div
-              className="fixed inset-0 bg-slate-900/50 dark:bg-black/60"
+              className="fixed inset-0 z-30 bg-[var(--bg-overlay)]"
               onClick={() => setMobileMenuOpen(false)}
             />
-            <aside className="relative w-64 max-w-[80vw] bg-white border-r border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] flex flex-col z-10">
-              <div className="p-4 border-b border-slate-200 dark:border-[#26364B] flex items-center justify-between">
-                <RespondaLogo />
+            <aside className="fixed inset-y-0 left-0 z-40 h-dvh w-64 max-w-[80vw] bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] flex flex-col overflow-y-auto shadow-[var(--shadow-floating)]">
+              <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                <RespondaLogo showSubtitle={false} wordmark="Responda" />
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
                   aria-label="Close navigation menu"
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400"
+                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1684,10 +1840,10 @@ export default function App() {
                     key={item.id}
                     type="button"
                     onClick={() => navigateTo(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap ${
                       section === item.id
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#172438]'
+                        ? 'bg-[var(--action-blue)] text-[var(--text-on-solid)]'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)]'
                     }`}
                   >
                     <span className="flex items-center gap-2.5">
@@ -1702,59 +1858,29 @@ export default function App() {
         )}
 
         {/* Right Main Content Column */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           {/* Top Navigation Bar */}
-          <header className="bg-white border-b border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] px-3 sm:px-4 lg:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <header className="shrink-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-3 sm:px-4 lg:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2.5 min-w-0">
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
                 aria-label="Open navigation menu"
-                className="lg:hidden p-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 dark:bg-[#172438] dark:border-[#26364B] dark:text-slate-200 shrink-0"
+                className="lg:hidden p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] shrink-0"
               >
                 <Menu className="w-4 h-4" />
               </button>
-              <div className="lg:hidden shrink-0">
-                <RespondaLogo compact />
-              </div>
-              <div className="hidden sm:block truncate">
-                <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
-                  {organisationSettings.name}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                  {clock.toLocaleDateString('en-NG', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}{' '}
-                  · {clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
+              <div className="shrink-0">
+                <RespondaLogo showSubtitle={false} wordmark="Responda" />
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={toggleTheme}
-                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-slate-200"
-              >
-                {theme === 'dark' ? (
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                ) : (
-                  <Moon className="w-3.5 h-3.5 text-slate-700" />
-                )}
-                <span className="hidden sm:inline">
-                  {theme === 'dark' ? 'Light' : 'Dark'}
-                </span>
-              </button>
-
+            <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
               {userRole === 'Operations Staff' && (
                 <button
                   type="button"
                   onClick={() => setGuideOpen(true)}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-blue-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-blue-300"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] whitespace-nowrap shrink-0 transition-colors"
                 >
                   <HelpCircle className="w-3.5 h-3.5" />
                   <span>Guide</span>
@@ -1762,84 +1888,86 @@ export default function App() {
               )}
 
               {/* Server-Issued Demo Profile Switcher */}
-              <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] px-2.5 py-1">
-                <span className="hidden md:inline text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2 py-1">
+                <span className="hidden lg:inline text-[11px] text-[var(--text-secondary)] whitespace-nowrap">
                   Demo Profile (Prototype Auth):
                 </span>
-                <label htmlFor="demo-account-selector" className="sr-only">
-                  Switch active demo staff profile
-                </label>
-                <select
-                  id="demo-account-selector"
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wide whitespace-nowrap shrink-0 ${
+                    userRole === 'Organisation Administrator'
+                      ? 'bg-[var(--status-urgent-bg)] text-[var(--status-urgent-text)] border border-[var(--status-urgent-border)]'
+                      : 'bg-[var(--brand-teal-bg)] text-[var(--brand-teal)] border border-[var(--brand-teal-border)]'
+                  }`}
+                >
+                  {userRole === 'Organisation Administrator' ? 'Admin' : 'Ops'}
+                </span>
+                <SelectMenu<string>
+                  ariaLabel="Switch active demo staff profile"
                   disabled={switchingAccount || staffAccounts.length === 0}
                   value={currentAccount?.id || ''}
-                  onChange={(e) => void handleSwitchDemoAccount(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-blue-700 dark:text-blue-300 focus:outline-none max-w-[165px] sm:max-w-none truncate"
-                >
-                  {staffAccounts.map((acc) => (
-                    <option
-                      key={acc.id}
-                      value={acc.id}
-                      disabled={acc.accountStatus !== 'ACTIVE'}
-                      className="bg-white text-slate-900 dark:bg-[#111C2E] dark:text-slate-100"
-                    >
-                      {acc.name} · {acc.role}
-                      {acc.accountStatus !== 'ACTIVE' ? ` (${acc.accountStatus})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => void handleSwitchDemoAccount(id)}
+                  menuAlign="right"
+                  options={staffAccounts.map((acc) => ({
+                    value: acc.id,
+                    label: `${acc.name} · ${acc.role}`,
+                    sublabel: acc.accountStatus !== 'ACTIVE' ? acc.accountStatus : acc.badgeCode,
+                    disabled: acc.accountStatus !== 'ACTIVE',
+                  }))}
+                  buttonClassName="border-transparent bg-transparent py-0.5 px-1.5 font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] max-w-[155px] sm:max-w-[240px]"
+                />
               </div>
 
               {/* Notification Centre */}
-              <div className="relative">
+              <div ref={notifRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setNotifOpen((o) => !o)}
                   aria-label="Toggle notification centre"
-                  className="relative p-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 dark:bg-[#172438] dark:hover:bg-[#1E293B] dark:border-[#26364B] dark:text-slate-200"
+                  aria-expanded={notifOpen}
+                  className="relative p-2 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-[var(--text-primary)] transition-colors"
                 >
                   <Bell className="w-4 h-4" />
                   {notifications.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-[10px] font-mono font-bold text-white flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--status-critical-accent)] text-[10px] font-mono tabular-nums font-bold text-[var(--text-on-solid)] flex items-center justify-center">
                       {Math.min(9, notifications.length)}
                     </span>
                   )}
                 </button>
 
                 {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] shadow-2xl z-[800] p-3 space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#26364B] pb-2">
-                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                  <div className="absolute right-0 mt-2 w-80 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-strong)] shadow-[var(--shadow-floating)] z-[800] p-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2">
+                      <span className="text-xs font-bold text-[var(--text-primary)]">
                         Notification Centre
                       </span>
                       <button
                         type="button"
                         onClick={() => setNotifOpen(false)}
-                        className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400"
+                        className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                       >
                         Close
                       </button>
                     </div>
                     <div className="max-h-64 overflow-y-auto space-y-2">
                       {notifications.length === 0 ? (
-                        <div className="text-xs text-slate-500 py-4 text-center">
+                        <div className="text-xs text-[var(--text-muted)] py-4 text-center">
                           No notifications recorded.
                         </div>
                       ) : (
                         notifications.slice(0, 8).map((n) => (
                           <div
                             key={n.id}
-                            className="rounded-lg bg-slate-50 border border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] p-2.5 text-[11px] space-y-1"
+                            className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-2.5 text-[11px] space-y-1"
                           >
-                            <div className="flex items-center justify-between text-slate-500">
-                              <span className="font-mono text-blue-700 dark:text-blue-400">
+                            <div className="flex items-center justify-between text-[var(--text-secondary)]">
+                              <span className="font-mono text-[var(--brand-teal)]">
                                 {n.channel}
                               </span>
-                              <span className="font-mono">
+                              <span className="font-mono tabular-nums">
                                 {new Date(n.timestamp).toLocaleTimeString()}
                               </span>
                             </div>
-                            <p className="text-slate-700 dark:text-slate-200">{n.message}</p>
+                            <p className="text-[var(--text-primary)]">{n.message}</p>
                           </div>
                         ))
                       )}
@@ -1850,19 +1978,21 @@ export default function App() {
             </div>
           </header>
 
-          {/* Main Operational / Administrative Viewport */}
-          <main className="flex-1 flex flex-col min-h-0 max-w-[1640px] w-full mx-auto p-4 lg:p-6 pb-20 lg:pb-8 space-y-4">
-            {userRole === 'Operations Staff' && (
-              <SimulationControlPanel
-                simState={simState}
-                busy={simBusy}
-                onPauseResume={handleToggleSimPause}
-                onNextStep={() => void advanceSimulationStage()}
-                onRestart={() => void startSimulation(simState.scenarioId)}
-                onEnd={handleEndSimulation}
-                onToggleAudio={handleToggleSimAudio}
-              />
-            )}
+          {/* Main Operational / Administrative Viewport (Only inner container scrolls) */}
+          <main className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-[1640px] w-full mx-auto p-4 lg:p-6 pb-24 lg:pb-8 space-y-4">
+              {userRole === 'Operations Staff' && (
+                <SimulationControlPanel
+                  simState={simState}
+                  busy={simBusy}
+                  onPauseResume={handleToggleSimPause}
+                  onPrevStep={() => void handlePrevSimulationStage()}
+                  onNextStep={() => void advanceSimulationStage()}
+                  onRestart={() => void startSimulation(simState.scenarioId)}
+                  onEnd={handleEndSimulation}
+                  onToggleAudio={handleToggleSimAudio}
+                />
+              )}
 
             {loading ? (
               <div className="space-y-4">
@@ -1870,20 +2000,20 @@ export default function App() {
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div
                       key={i}
-                      className="h-24 rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] animate-pulse"
+                      className="h-24 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] animate-pulse"
                     />
                   ))}
                 </div>
-                <div className="h-[440px] rounded-xl bg-white border border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] animate-pulse" />
+                <div className="h-[440px] rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] animate-pulse" />
               </div>
             ) : loadError ? (
-              <div className="rounded-xl bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/35 p-6 text-center space-y-3">
-                <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400 mx-auto" />
-                <div className="text-sm font-bold text-red-800 dark:text-red-200">{loadError}</div>
+              <div className="rounded-xl bg-[var(--status-critical-bg)] border border-[var(--status-critical-border)] p-6 text-center space-y-3">
+                <AlertTriangle className="w-8 h-8 text-[var(--status-critical-text)] mx-auto" />
+                <div className="text-sm font-bold text-[var(--status-critical-text)]">{loadError}</div>
                 <button
                   type="button"
                   onClick={() => void fetchBootstrap()}
-                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-semibold text-white"
+                  className="px-4 py-2 rounded-lg bg-[var(--status-critical-accent)] hover:opacity-90 text-xs font-semibold text-[var(--text-on-solid)]"
                 >
                   Retry Connection
                 </button>
@@ -1950,7 +2080,6 @@ export default function App() {
                 userRole={userRole}
                 operatorName={operatorName}
                 authFetch={authFetch}
-                geminiConfigured={geminiConfigured}
                 carrierConfigured={carrierConfigured}
                 requireLocationVerificationBeforeDispatch={
                   organisationSettings.requireLocationVerificationBeforeDispatch
@@ -1958,7 +2087,6 @@ export default function App() {
                 selectedIncidentId={selectedIncidentId}
                 workspaceOpen={workspaceOpen}
                 initialTab={workspaceTab}
-                intakeMode={intakeMode}
                 simState={simState}
                 preselectedUnitId={
                   simState.active && simState.incidentId === selectedIncidentId
@@ -1967,22 +2095,13 @@ export default function App() {
                 }
                 draftsByIncidentId={draftsByIncidentId}
                 onUpdateDraft={handleUpdateDraft}
-                onSetIntakeMode={setIntakeMode}
                 onSelectIncident={(id) => setSelectedIncidentId(id)}
                 onOpenWorkspace={(id, tab = 'workflow') => {
                   setSelectedIncidentId(id);
                   setWorkspaceTab(tab);
-                  setIntakeMode(false);
                   setWorkspaceOpen(true);
                 }}
                 onCloseWorkspace={() => setWorkspaceOpen(false)}
-                onIncidentCreated={(inc) => {
-                  setIncidents((prev) =>
-                    prev.some((i) => i.id === inc.id) ? prev : [inc, ...prev]
-                  );
-                  setSelectedIncidentId(inc.id);
-                  pushToast(`${inc.id} created and queued.`, 'success');
-                }}
                 onTakeOver={handleTakeOver}
                 onUpdateMedicalDetails={handleUpdateMedicalDetails}
                 onVerifyLocation={handleVerifyLocation}
@@ -2066,20 +2185,15 @@ export default function App() {
                 onOpenWorkspace={(id) => {
                   setSelectedIncidentId(id);
                   setWorkspaceTab('workflow');
-                  setIntakeMode(false);
                   setWorkspaceOpen(true);
                   setSection('incident-management');
                 }}
                 onTakeOver={handleTakeOver}
-                onGoToIntake={() => {
-                  setIntakeMode(true);
-                  setWorkspaceOpen(false);
-                  setSection('incident-management');
-                }}
                 onOpenHistory={() => navigateTo('incident-history')}
                 onOpenGuide={() => setGuideOpen(true)}
               />
             )}
+            </div>
           </main>
         </div>
       </div>
@@ -2087,7 +2201,7 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Mobile navigation"
-        className={`lg:hidden fixed bottom-0 inset-x-0 z-[900] bg-white border-t border-slate-200 dark:bg-[#111C2E] dark:border-[#26364B] grid ${
+        className={`lg:hidden fixed bottom-0 inset-x-0 z-[900] bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] grid ${
           navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'
         }`}
       >
@@ -2100,8 +2214,8 @@ export default function App() {
               onClick={() => navigateTo(item.id)}
               className={`flex flex-col items-center justify-center py-2.5 text-[10px] font-medium ${
                 active
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-slate-500 dark:text-slate-400'
+                  ? 'text-[var(--action-blue)] dark:text-[#60A5FA]'
+                  : 'text-[var(--text-secondary)]'
               }`}
             >
               {item.icon}
@@ -2127,12 +2241,12 @@ export default function App() {
           <div
             key={t.id}
             role="status"
-            className={`rounded-xl px-4 py-3 text-xs font-medium shadow-xl border ${
+            className={`rounded-xl px-4 py-3 text-xs font-medium shadow-[var(--shadow-floating)] border ${
               t.tone === 'error'
-                ? 'bg-red-50 border-red-200 text-red-900 dark:bg-red-950/95 dark:border-red-500/50 dark:text-red-100'
+                ? 'bg-[var(--status-critical-bg)] border-[var(--status-critical-border)] text-[var(--status-critical-text)]'
                 : t.tone === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/95 dark:border-emerald-500/50 dark:text-emerald-100'
-                : 'bg-white border-slate-200 text-slate-900 dark:bg-[#172438]/95 dark:border-[#26364B] dark:text-slate-100'
+                ? 'bg-[var(--status-verified-bg)] border-[var(--status-verified-border)] text-[var(--status-verified-text)]'
+                : 'bg-[var(--bg-surface-elevated)] border-[var(--border-strong)] text-[var(--text-primary)]'
             }`}
           >
             {t.text}

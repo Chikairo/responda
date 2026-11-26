@@ -13,6 +13,7 @@ import {
   buildSimulationFinalSummary,
   calculateHaversineKm,
   createSimulationFleetUnits,
+  getProgressiveSimulationSnapshot,
   getTrackingMilestoneForElapsed,
   interpolatePointAlongRoute,
   rankUnitsForIncident,
@@ -215,4 +216,43 @@ test('buildLocationIntelligenceMethods returns A–D methods and keeps Method D 
   const summary = buildSimulationFinalSummary(verified, createSimulationFleetUnits()[0], null);
   assert.match(summary.headline, /INC-DEMO-2026-001/);
   assert.match(summary.routingNote, /Simulated demo route corridor/);
+});
+
+test('getProgressiveSimulationSnapshot progressively extracts patient count, injuries, hazards, and landmark across turns', () => {
+  const yaba = SIMULATION_SCENARIOS['yaba-accident'];
+  const turn1 = getProgressiveSimulationSnapshot(yaba, 1);
+  assert.equal(turn1.category, 'Road accident');
+  assert.equal(turn1.priority, 'Unassessed');
+  assert.equal(turn1.peopleAffected, undefined);
+  assert.equal(turn1.landmark, undefined);
+
+  const turn3 = getProgressiveSimulationSnapshot(yaba, 3);
+  assert.equal(turn3.priority, 'Critical');
+  assert.equal(turn3.peopleAffected, 2);
+  assert.equal(turn3.immediateDanger, true);
+  assert.ok(turn3.dangerDetails);
+  assert.ok(turn3.clinicalDetails.bleedingOrInjury);
+  assert.equal(turn3.landmark, undefined);
+
+  const turn5 = getProgressiveSimulationSnapshot(yaba, 5);
+  assert.equal(turn5.landmark, yaba.landmark);
+  assert.equal(turn5.callerName, yaba.callerName);
+
+  const turn6 = getProgressiveSimulationSnapshot(yaba, 6);
+  assert.equal(turn6.landmark, yaba.landmark);
+  assert.equal(turn6.peopleAffected, 2);
+
+  const ikeja = SIMULATION_SCENARIOS['ikeja-medical'];
+  const ikejaTurn1 = getProgressiveSimulationSnapshot(ikeja, 1);
+  assert.equal(ikejaTurn1.priority, 'Unassessed');
+  assert.equal(ikejaTurn1.peopleAffected, undefined);
+  assert.equal(ikejaTurn1.landmark, undefined);
+
+  const ikejaTurn3 = getProgressiveSimulationSnapshot(ikeja, 3);
+  assert.equal(ikejaTurn3.priority, 'Critical');
+  assert.equal(ikejaTurn3.peopleAffected, 1);
+  assert.equal(ikejaTurn3.callerName, ikeja.callerName);
+
+  const ikejaTurn6 = getProgressiveSimulationSnapshot(ikeja, 6);
+  assert.equal(ikejaTurn6.landmark, ikeja.landmark);
 });

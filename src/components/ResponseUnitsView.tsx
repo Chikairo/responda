@@ -17,6 +17,7 @@ import { canUpdateUnitStatus, formatRelativeTime } from '../utils/incidentLogic'
 import { rankUnitsForIncident } from '../utils/simulationEngine';
 import { ConfirmActionModal } from './ConfirmActionModal';
 import { LagosMap } from './LagosMap';
+import { SelectMenu } from './SelectMenu';
 import {
   LegacyBadge,
   LocationFreshnessBadge,
@@ -91,49 +92,52 @@ export function ResponseUnitsView({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
-            <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <h1 className="font-display text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
+            <Truck className="w-5 h-5 text-[var(--action-blue)] dark:text-[#60A5FA]" />
             <span>Medical Response Units</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {availableCount} active medical units available · {activeDispatchCount} currently deployed. Operational status overrides require a recorded reason.
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            <span className="font-mono tabular-nums">{availableCount}</span> active medical units available ·{' '}
+            <span className="font-mono tabular-nums">{activeDispatchCount}</span> currently deployed. Operational status overrides require a recorded reason.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+          <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] cursor-pointer">
             <input
               type="checkbox"
               checked={showInactive}
               onChange={(e) => setShowInactive(e.target.checked)}
+              className="accent-[var(--action-blue)]"
             />
             <span>Show Inactive / Legacy</span>
           </label>
 
-          <select
-            aria-label="Filter units by availability"
+          <SelectMenu<'ALL' | UnitAvailability>
+            ariaLabel="Filter units by availability"
             value={availabilityFilter}
-            onChange={(e) => setAvailabilityFilter(e.target.value as 'ALL' | UnitAvailability)}
-            className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
-          >
-            <option value="ALL">All Availability States</option>
-            <option value="Available">Available</option>
-            <option value="Responding">Responding</option>
-            <option value="At Scene">At Scene</option>
-            <option value="Transporting">Transporting</option>
-            <option value="Unavailable">Unavailable</option>
-          </select>
+            onChange={setAvailabilityFilter}
+            options={[
+              { value: 'ALL', label: 'All Availability States' },
+              { value: 'Available', label: 'Available' },
+              { value: 'Responding', label: 'Responding' },
+              { value: 'At Scene', label: 'At Scene' },
+              { value: 'Transporting', label: 'Transporting' },
+              { value: 'Unavailable', label: 'Unavailable' },
+            ]}
+            buttonClassName="min-w-[170px]"
+          />
 
-          <div className="inline-flex rounded-lg bg-slate-100 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-0.5">
+          <div className="inline-flex rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-0.5">
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 viewMode === 'list'
-                  ? 'bg-white dark:bg-[#111C2E] text-blue-700 dark:text-blue-300 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400'
+                  ? 'bg-[var(--bg-surface)] text-[var(--action-blue)] dark:text-[#60A5FA] shadow-xs'
+                  : 'text-[var(--text-secondary)]'
               }`}
             >
               <List className="w-3.5 h-3.5" />
@@ -142,10 +146,10 @@ export function ResponseUnitsView({
             <button
               type="button"
               onClick={() => setViewMode('map')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 viewMode === 'map'
-                  ? 'bg-white dark:bg-[#111C2E] text-blue-700 dark:text-blue-300 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400'
+                  ? 'bg-[var(--bg-surface)] text-[var(--action-blue)] dark:text-[#60A5FA] shadow-xs'
+                  : 'text-[var(--text-secondary)]'
               }`}
             >
               <MapPin className="w-3.5 h-3.5" />
@@ -157,12 +161,12 @@ export function ResponseUnitsView({
 
       {/* Focused Incident Context Banner */}
       {focusedIncident && focusedIncident.status !== 'Closed' && !focusedIncident.assignedUnitId && (
-        <div className="rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/35 p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div>
-            <strong className="text-blue-900 dark:text-blue-200">
+        <div className="rounded-xl bg-[var(--action-blue-bg)] border border-[var(--action-blue-border)] p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="text-[var(--text-primary)]">
+            <strong className="font-mono tabular-nums">
               Comparing medical fleet for {focusedIncident.id}:
             </strong>{' '}
-            <span className="text-blue-800 dark:text-blue-300">
+            <span className="text-[var(--text-secondary)]">
               {focusedIncident.category} ({focusedIncident.priority}) —{' '}
               {focusedIncident.location.correctedDescription || focusedIncident.location.description}
             </span>
@@ -170,7 +174,7 @@ export function ResponseUnitsView({
           <button
             type="button"
             onClick={() => onOpenIncident(focusedIncident.id)}
-            className="text-xs font-semibold text-blue-700 dark:text-blue-300 hover:underline"
+            className="text-xs font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] hover:underline whitespace-nowrap shrink-0"
           >
             Return to Incident Workspace →
           </button>
@@ -178,7 +182,7 @@ export function ResponseUnitsView({
       )}
 
       {viewMode === 'map' ? (
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none">
+        <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4">
           <LagosMap
             incidents={focusedIncident ? [focusedIncident] : incidents.filter((i) => i.status !== 'Closed' && !i.legacyOutOfScope)}
             units={visibleUnits}
@@ -199,30 +203,30 @@ export function ResponseUnitsView({
             return (
               <div
                 key={unit.id}
-                className={`rounded-xl bg-white dark:bg-[#111C2E] border p-4 space-y-3 shadow-2xs dark:shadow-none ${
+                className={`rounded-xl bg-[var(--bg-surface)] border shadow-[var(--shadow-card)] p-4 space-y-3 ${
                   rankInfo?.recommended
-                    ? 'border-blue-400 dark:border-blue-500/60'
+                    ? 'border-[var(--action-blue-border)]'
                     : isInactive
-                    ? 'border-slate-300 opacity-80 dark:border-[#26364B]'
-                    : 'border-slate-200 dark:border-[#26364B]'
+                    ? 'border-[var(--border-subtle)] opacity-80'
+                    : 'border-[var(--border-subtle)]'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                      <span className="font-display text-sm font-bold text-[var(--text-primary)]">
                         {unit.callsign}
                       </span>
                       <UnitRegistrationBadge status={unit.registrationStatus} />
                       <UnitAvailabilityBadge availability={unit.availability} />
                       {unit.legacyOutOfScope && <LegacyBadge />}
                       {rankInfo?.recommended && (
-                        <span className="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
+                        <span className="px-2 py-0.5 rounded bg-[var(--action-blue)] text-[var(--text-on-solid)] text-[10px] font-bold whitespace-nowrap shrink-0">
                           RECOMMENDED
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                    <div className="text-[11px] text-[var(--text-secondary)] mt-0.5 font-mono tabular-nums">
                       {unit.unitType} · {unit.vehicleRegistration} · {unit.operationalBase} ({unit.area})
                     </div>
                   </div>
@@ -230,7 +234,7 @@ export function ResponseUnitsView({
                   <div className="text-right text-[11px] space-y-1">
                     <LocationFreshnessBadge freshness={unit.locationFreshness} />
                     {rankInfo?.distanceKm !== null && rankInfo?.distanceKm !== undefined && (
-                      <div className="font-mono font-semibold text-blue-700 dark:text-blue-300">
+                      <div className="font-mono tabular-nums font-semibold text-[var(--brand-teal)]">
                         {rankInfo.distanceKm} km away
                       </div>
                     )}
@@ -238,43 +242,37 @@ export function ResponseUnitsView({
                 </div>
 
                 {/* Capabilities */}
-                <div className="flex flex-wrap gap-1.5">
-                  {unit.medicalCapabilities.map((cap) => (
-                    <span
-                      key={cap}
-                      className="px-2 py-0.5 rounded-md bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] text-[11px] text-slate-700 dark:text-slate-300"
-                    >
-                      {cap}
-                    </span>
-                  ))}
+                <div className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  <span className="font-semibold text-[var(--text-primary)]">Capabilities: </span>
+                  {unit.medicalCapabilities.join(' · ')}
                 </div>
 
                 {/* Crew & Coordinates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] rounded-lg p-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] rounded-lg p-2.5">
                   <div className="flex items-start gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
-                    <span className="text-slate-700 dark:text-slate-200">
+                    <Users className="w-3.5 h-3.5 text-[var(--text-muted)] mt-0.5 shrink-0" />
+                    <span className="text-[var(--text-primary)]">
                       {unit.crewDescription}
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 sm:text-right font-mono">
+                  <div className="text-[11px] text-[var(--text-secondary)] sm:text-right font-mono tabular-nums">
                     {unit.locationName} · updated {formatRelativeTime(unit.lastLocationUpdate)}
                   </div>
                 </div>
 
                 {/* Active Assignment & Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border-subtle)]">
                   {assignedInc ? (
                     <button
                       type="button"
                       onClick={() => onOpenIncident(assignedInc.id)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] hover:underline whitespace-nowrap shrink-0"
                     >
-                      <span>Assigned to {assignedInc.id}</span>
+                      <span className="font-mono tabular-nums">Assigned to {assignedInc.id}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   ) : (
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="text-[11px] text-[var(--text-muted)]">
                       {isInactive ? 'Inactive registration — cannot dispatch' : 'No active incident assignment'}
                     </span>
                   )}
@@ -288,7 +286,7 @@ export function ResponseUnitsView({
                         <button
                           type="button"
                           onClick={() => onSelectUnitForIncident(unit.id, focusedIncident.id)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--action-emerald)] hover:bg-[var(--action-emerald-hover)] text-[var(--text-on-solid)] text-xs font-semibold whitespace-nowrap shrink-0"
                         >
                           <ShieldCheck className="w-3.5 h-3.5" />
                           <span>Select for Dispatch</span>
@@ -296,26 +294,27 @@ export function ResponseUnitsView({
                       )}
 
                     {!isInactive && canUpdateUnitStatus(userRole) && (
-                      <select
-                        aria-label={`Override operational status for ${unit.callsign}`}
+                      <SelectMenu<'' | UnitAvailability | 'CANCELLED'>
+                        ariaLabel={`Override operational status for ${unit.callsign}`}
                         value=""
-                        onChange={(e) => {
-                          const target = e.target.value as UnitAvailability | 'CANCELLED';
+                        placeholder="Override Status..."
+                        menuAlign="right"
+                        onChange={(target) => {
                           if (!target) return;
                           setPendingOverride({ unit, targetStatus: target });
                         }}
-                        className="rounded-lg bg-slate-100 dark:bg-[#172438] border border-slate-200 dark:border-[#26364B] px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200"
-                      >
-                        <option value="">Override Status...</option>
-                        <option value="Available">Available</option>
-                        <option value="Responding">Responding</option>
-                        <option value="At Scene">At Scene</option>
-                        <option value="Transporting">Transporting</option>
-                        <option value="Unavailable">Unavailable</option>
-                        {unit.currentAssignmentId && (
-                          <option value="CANCELLED">Cancel Assignment</option>
-                        )}
-                      </select>
+                        options={[
+                          { value: 'Available', label: 'Available' },
+                          { value: 'Responding', label: 'Responding' },
+                          { value: 'At Scene', label: 'At Scene' },
+                          { value: 'Transporting', label: 'Transporting' },
+                          { value: 'Unavailable', label: 'Unavailable' },
+                          ...(unit.currentAssignmentId
+                            ? [{ value: 'CANCELLED' as const, label: 'Cancel Assignment' }]
+                            : []),
+                        ]}
+                        buttonClassName="bg-[var(--bg-surface-elevated)] font-semibold min-w-[155px]"
+                      />
                     )}
                   </div>
                 </div>

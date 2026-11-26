@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Info,
@@ -15,6 +15,7 @@ import type {
   StaffAccountStatus,
   UserRole,
 } from '../types/responda';
+import { SelectMenu } from './SelectMenu';
 
 interface StaffManagementViewProps {
   staffAccounts: StaffAccount[];
@@ -41,6 +42,17 @@ export function StaffManagementView({
   const [submitting, setSubmitting] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) {
+        setInviteOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [inviteOpen, submitting]);
 
   const filteredStaff = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -121,13 +133,13 @@ export function StaffManagementView({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <h1 className="font-display text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
+            <Users className="w-5 h-5 text-[var(--action-blue)] dark:text-[#60A5FA]" />
             <span>Staff Management</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
             Manage Operations Staff and Organisation Administrator accounts. At least one active Organisation Administrator is always required.
           </p>
         </div>
@@ -138,7 +150,7 @@ export function StaffManagementView({
             setErrorBanner(null);
             setInviteOpen(true);
           }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white whitespace-nowrap"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Invite Staff Member</span>
@@ -148,7 +160,7 @@ export function StaffManagementView({
       {errorBanner && (
         <div
           role="alert"
-          className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 px-4 py-3 text-xs text-red-800 dark:text-red-200 flex items-center gap-2"
+          className="rounded-xl bg-[var(--status-critical-bg)] border border-[var(--status-critical-border)] px-4 py-3 text-xs text-[var(--status-critical-text)] flex items-center gap-2"
         >
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorBanner}</span>
@@ -156,42 +168,44 @@ export function StaffManagementView({
       )}
 
       {inviteNotice && (
-        <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 px-4 py-3 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+        <div className="rounded-xl bg-[var(--status-urgent-bg)] border border-[var(--status-urgent-border)] px-4 py-3 text-xs text-[var(--status-urgent-text)] flex items-center gap-2">
           <Info className="w-4 h-4 shrink-0" />
           <span>{inviteNotice}</span>
         </div>
       )}
 
       {/* Search & Filter */}
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 flex flex-col sm:flex-row gap-2.5 shadow-2xs dark:shadow-none">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 flex flex-col sm:flex-row gap-2.5">
         <div className="relative flex-1">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-2.5" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search staff name, email, or badge..."
-            className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+            className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] pl-8 pr-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
           />
         </div>
-        <select
-          aria-label="Filter staff by status"
+        <SelectMenu<'ALL' | StaffAccountStatus>
+          ariaLabel="Filter staff by status"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as 'ALL' | StaffAccountStatus)}
-          className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
-        >
-          <option value="ALL">All Account Statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="INVITED">Invited</option>
-          <option value="INACTIVE">Inactive</option>
-        </select>
+          onChange={setStatusFilter}
+          menuAlign="right"
+          options={[
+            { value: 'ALL', label: 'All Account Statuses' },
+            { value: 'ACTIVE', label: 'Active' },
+            { value: 'INVITED', label: 'Invited' },
+            { value: 'INACTIVE', label: 'Inactive' },
+          ]}
+          buttonClassName="sm:w-52"
+        />
       </div>
 
       {/* Staff Table */}
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] overflow-hidden shadow-2xs dark:shadow-none">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-[#0B1220] border-b border-slate-200 dark:border-[#26364B] text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <thead className="bg-[var(--bg-surface-subtle)] border-b border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)]">
               <tr>
                 <th className="px-4 py-3">Staff Member</th>
                 <th className="px-4 py-3">Badge</th>
@@ -200,25 +214,28 @@ export function StaffManagementView({
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-[#26364B]">
+            <tbody className="divide-y divide-[var(--border-subtle)]">
               {filteredStaff.map((acc) => {
                 const isSelf = acc.id === currentAccountId;
                 return (
-                  <tr key={acc.id} className="hover:bg-slate-50/70 dark:hover:bg-[#172438]/40">
+                  <tr
+                    key={acc.id}
+                    className="hover:bg-[var(--bg-surface-elevated)]/60 transition-colors"
+                  >
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <div className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
                         <span>{acc.name}</span>
                         {isSelf && (
-                          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30 text-[10px]">
-                            Current Session
+                          <span className="text-[11px] font-medium text-[var(--action-blue)] dark:text-[#60A5FA]">
+                            · Current Session
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="text-[11px] text-[var(--text-muted)]">
                         {acc.email}
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300">
+                    <td className="px-4 py-3 font-mono tabular-nums text-[var(--text-secondary)]">
                       {acc.badgeCode}
                     </td>
                     <td className="px-4 py-3">
@@ -231,7 +248,7 @@ export function StaffManagementView({
                             role: e.target.value as UserRole,
                           })
                         }
-                        className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-1 text-xs font-medium text-slate-800 dark:text-slate-200"
+                        className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)]"
                       >
                         <option value="Operations Staff">Operations Staff</option>
                         <option value="Organisation Administrator">
@@ -241,12 +258,12 @@ export function StaffManagementView({
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border whitespace-nowrap shrink-0 ${
                           acc.accountStatus === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/35'
+                            ? 'bg-[var(--status-verified-bg)] text-[var(--status-verified-text)] border-[var(--status-verified-border)]'
                             : acc.accountStatus === 'INVITED'
-                            ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/35'
-                            : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-600/20 dark:text-slate-400 dark:border-slate-600/35'
+                            ? 'bg-[var(--status-urgent-bg)] text-[var(--status-urgent-text)] border-[var(--status-urgent-border)]'
+                            : 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)] border-[var(--status-neutral-border)]'
                         }`}
                       >
                         {acc.accountStatus}
@@ -260,7 +277,7 @@ export function StaffManagementView({
                           onClick={() =>
                             void handleUpdateStaff(acc.id, { accountStatus: 'ACTIVE' })
                           }
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--action-emerald)] hover:bg-[var(--action-emerald-hover)] text-[var(--text-on-solid)] text-[11px] font-semibold whitespace-nowrap shrink-0"
                         >
                           <UserCheck className="w-3 h-3" />
                           <span>Activate</span>
@@ -272,7 +289,7 @@ export function StaffManagementView({
                           onClick={() =>
                             void handleUpdateStaff(acc.id, { accountStatus: 'INACTIVE' })
                           }
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-red-50 hover:text-red-700 hover:border-red-200 dark:bg-[#172438] dark:hover:bg-red-500/15 dark:hover:text-red-300 border border-slate-200 dark:border-[#26364B] text-slate-700 dark:text-slate-200 text-[11px] font-semibold"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--bg-surface-elevated)] hover:bg-[var(--status-critical-bg)] hover:text-[var(--status-critical-text)] hover:border-[var(--status-critical-border)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-[11px] font-semibold whitespace-nowrap shrink-0"
                         >
                           <UserX className="w-3 h-3" />
                           <span>Deactivate</span>
@@ -292,13 +309,18 @@ export function StaffManagementView({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/50 dark:bg-black/70 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) {
+              setInviteOpen(false);
+            }
+          }}
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-[var(--bg-overlay)] p-4"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-[#26364B] bg-slate-50 dark:bg-[#0B1220]">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-floating)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)]">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-50">
+                <ShieldCheck className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
+                <h2 className="font-display text-sm font-bold text-[var(--text-primary)]">
                   Invite Team Member
                 </h2>
               </div>
@@ -306,19 +328,19 @@ export function StaffManagementView({
                 type="button"
                 onClick={() => setInviteOpen(false)}
                 aria-label="Close invite modal"
-                className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400"
+                className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleInvite} className="p-5 space-y-3 text-xs">
-              <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 p-2.5 text-[11px] text-amber-900 dark:text-amber-200">
+              <div className="rounded-lg bg-[var(--status-urgent-bg)] border border-[var(--status-urgent-border)] p-2.5 text-[11px] text-[var(--status-urgent-text)]">
                 No external email is sent in this prototype — creating an invite registers an INVITED staff record that you can share or activate locally.
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Full Name
                 </label>
                 <input
@@ -327,12 +349,12 @@ export function StaffManagementView({
                   value={inviteName}
                   onChange={(e) => setInviteName(e.target.value)}
                   placeholder="e.g., Dr. Kemi Adesina"
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Work Email
                 </label>
                 <input
@@ -341,19 +363,19 @@ export function StaffManagementView({
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="name@responda.demo"
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                     Assigned Role
                   </label>
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-2 text-slate-900 dark:text-slate-100"
+                    className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2.5 py-2 text-[var(--text-primary)]"
                   >
                     <option value="Operations Staff">Operations Staff</option>
                     <option value="Organisation Administrator">
@@ -362,7 +384,7 @@ export function StaffManagementView({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                     Badge Code (Optional)
                   </label>
                   <input
@@ -370,23 +392,23 @@ export function StaffManagementView({
                     value={inviteBadge}
                     onChange={(e) => setInviteBadge(e.target.value)}
                     placeholder="OPS-105"
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 font-mono text-slate-900 dark:text-slate-100"
+                    className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 font-mono tabular-nums text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#26364B]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
                 <button
                   type="button"
                   onClick={() => setInviteOpen(false)}
-                  className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-[#26364B] text-slate-700 dark:text-slate-300 font-semibold"
+                  className="px-3.5 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-semibold whitespace-nowrap shrink-0"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold"
+                  className="px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-[var(--text-on-solid)] font-semibold whitespace-nowrap shrink-0"
                 >
                   {submitting ? 'Creating...' : 'Create Staff Invite'}
                 </button>

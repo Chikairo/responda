@@ -760,6 +760,125 @@ export function buildLocationIntelligenceMethods(
   ];
 }
 
+export interface ProgressiveSimulationSnapshot {
+  category: MedicalEmergencyCategory;
+  priority: IncidentPriority;
+  priorityReason: string;
+  peopleAffected?: number;
+  immediateDanger: boolean;
+  dangerDetails?: string;
+  clinicalDetails: ClinicalDetails;
+  callerName?: string;
+  landmark?: string;
+  locationDescription: string;
+  summary: string;
+  description: string;
+}
+
+export function getProgressiveSimulationSnapshot(
+  scenario: SimulationScenarioConfig,
+  turnCount: number
+): ProgressiveSimulationSnapshot {
+  const clampedTurn = Math.max(0, Math.min(turnCount, scenario.dialogue.length));
+
+  if (scenario.id === 'yaba-accident') {
+    const hasTurn1 = clampedTurn >= 1;
+    const hasTurn3 = clampedTurn >= 3;
+    const hasTurn5 = clampedTurn >= 5;
+
+    return {
+      category: scenario.category,
+      priority: hasTurn3 ? scenario.priority : 'Unassessed',
+      priorityReason: hasTurn3
+        ? scenario.priorityReason
+        : 'AI intake active — awaiting injury, consciousness, and hazard confirmation.',
+      peopleAffected: hasTurn3 ? scenario.peopleAffected : undefined,
+      immediateDanger: hasTurn3 ? scenario.immediateDanger : false,
+      dangerDetails: hasTurn3 ? scenario.dangerDetails : undefined,
+      clinicalDetails: {
+        chiefComplaint: hasTurn1
+          ? 'Commercial bus vs. saloon car road collision in Yaba'
+          : undefined,
+        consciousness: hasTurn3
+          ? scenario.clinicalDetails.consciousness
+          : undefined,
+        breathing: hasTurn3
+          ? scenario.clinicalDetails.breathing
+          : undefined,
+        bleedingOrInjury: hasTurn3
+          ? scenario.clinicalDetails.bleedingOrInjury
+          : undefined,
+        clinicalNotes: hasTurn3
+          ? scenario.clinicalDetails.clinicalNotes
+          : 'Gathering clinical triage details from caller...',
+      },
+      callerName: hasTurn5 ? scenario.callerName : undefined,
+      landmark: hasTurn5 ? scenario.landmark : undefined,
+      locationDescription: hasTurn5
+        ? scenario.vagueLocationDescription
+        : 'Yaba area (caller reporting road accident; landmark pending)',
+      summary: hasTurn5
+        ? scenario.summary
+        : hasTurn3
+        ? 'Two-vehicle collision in Yaba; two injured occupants with bleeding and fuel odour.'
+        : 'Incoming report of commercial bus and car collision in Yaba.',
+      description: hasTurn5
+        ? scenario.description
+        : hasTurn3
+        ? 'Caller reports two people injured and bleeding inside a car with a jammed door and petrol odour in Yaba. Landmark confirmation in progress.'
+        : 'Caller reports a commercial bus collided with a car in Yaba. AI intake gathering clinical severity and landmark details.',
+    };
+  }
+
+  // ikeja-medical
+  const hasTurn1 = clampedTurn >= 1;
+  const hasTurn3 = clampedTurn >= 3;
+  const hasTurn5 = clampedTurn >= 5;
+
+  return {
+    category: scenario.category,
+    priority: hasTurn3 ? scenario.priority : 'Unassessed',
+    priorityReason: hasTurn3
+      ? scenario.priorityReason
+      : 'AI intake active — awaiting consciousness, patient count, and chest distress details.',
+    peopleAffected: hasTurn3 ? scenario.peopleAffected : undefined,
+    immediateDanger: hasTurn3 ? scenario.immediateDanger : false,
+    dangerDetails: hasTurn3 ? scenario.dangerDetails : undefined,
+    clinicalDetails: {
+      chiefComplaint: hasTurn1
+        ? hasTurn3
+          ? scenario.clinicalDetails.chiefComplaint
+          : 'Sudden collapse with breathing difficulty in Ikeja'
+        : undefined,
+      consciousness: hasTurn3
+        ? scenario.clinicalDetails.consciousness
+        : undefined,
+      breathing: hasTurn1 ? scenario.clinicalDetails.breathing : undefined,
+      bleedingOrInjury: hasTurn3
+        ? scenario.clinicalDetails.bleedingOrInjury
+        : undefined,
+      clinicalNotes: hasTurn3
+        ? scenario.clinicalDetails.clinicalNotes
+        : 'Gathering clinical triage details from caller...',
+    },
+    callerName: hasTurn3 ? scenario.callerName : undefined,
+    landmark: hasTurn5 ? scenario.landmark : undefined,
+    locationDescription: hasTurn5
+      ? scenario.vagueLocationDescription
+      : 'Ikeja area (exact street or landmark pending)',
+    summary: hasTurn5
+      ? scenario.summary
+      : hasTurn3
+      ? 'Adult collapsed in Ikeja with chest tightness and laboured breathing.'
+      : 'Incoming report of person collapsed with breathing difficulty in Ikeja.',
+    description: hasTurn5
+      ? scenario.description
+      : hasTurn3
+      ? 'Caller Chukwudi reports one conscious but weak adult holding chest and struggling to breathe in Ikeja. Landmark confirmation in progress.'
+      : 'Caller reports a colleague collapsed outside an office in Ikeja with breathing distress.',
+  };
+}
+
 export function buildScenarioTranscript(
   scenario: SimulationScenarioConfig,
   turnCount: number,

@@ -359,24 +359,24 @@ export function AiIntakeWorkspace({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-3">
           {embedded && onCloseEmbedded && (
             <button
               type="button"
               onClick={onCloseEmbedded}
-              className="mt-0.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-200"
+              className="mt-0.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] whitespace-nowrap shrink-0"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Incidents</span>
             </button>
           )}
           <div>
-            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
-              <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <h2 className="font-display text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Bot className="w-4 h-4 text-[var(--brand-teal)]" />
               <span>Medical Emergency Intake &amp; AI Triage</span>
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
               Captures structured clinical symptoms, Lagos location clues, and transcripts without fabricating GPS or autonomous dispatch.
             </p>
           </div>
@@ -387,7 +387,7 @@ export function AiIntakeWorkspace({
             aria-label="Intake assistant mode"
             value={mode}
             onChange={(e) => setMode(e.target.value as 'auto' | 'simulated' | 'gemini')}
-            className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200"
+            className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)]"
           >
             <option value="simulated">Simulated Demo Intake</option>
             <option value="auto" disabled={!geminiConfigured}>
@@ -399,16 +399,16 @@ export function AiIntakeWorkspace({
             type="button"
             disabled={telephonyTesting}
             onClick={handleSimulateVoiceCall}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] whitespace-nowrap shrink-0"
           >
-            <PhoneCall className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <PhoneCall className="w-3.5 h-3.5 text-[var(--status-verified-text)]" />
             <span>{telephonyTesting ? 'Creating Call...' : 'Simulate Voice Call'}</span>
           </button>
         </div>
       </div>
 
       {errorMsg && (
-        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/35 px-4 py-3 text-xs text-red-800 dark:text-red-200 flex items-center gap-2">
+        <div className="rounded-xl bg-[var(--status-critical-bg)] border border-[var(--status-critical-border)] px-4 py-3 text-xs text-[var(--status-critical-text)] flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -416,10 +416,10 @@ export function AiIntakeWorkspace({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Left: AI Conversation & Voice Dictation */}
-        <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#26364B]">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
-              <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        <div className="lg:col-span-6 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
+            <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-primary)]">
+              <Sparkles className="w-4 h-4 text-[var(--brand-teal)]" />
               <span>Intake Conversation</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -429,7 +429,7 @@ export function AiIntakeWorkspace({
                   type="button"
                   onClick={() => void sendMessage(p.text)}
                   disabled={sending}
-                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-[#0B1220] dark:hover:bg-[#172438] border border-slate-200 dark:border-[#26364B] text-[11px] font-medium text-slate-700 dark:text-slate-300"
+                  className="px-2 py-1 rounded-md bg-[var(--bg-surface-subtle)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] whitespace-nowrap shrink-0"
                 >
                   {p.label}
                 </button>
@@ -443,54 +443,53 @@ export function AiIntakeWorkspace({
                 key={m.id}
                 className={`rounded-xl p-3 text-xs space-y-1 border ${
                   m.speaker === 'CALLER'
-                    ? 'bg-blue-50/70 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30 ml-6'
-                    : 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B] mr-6'
+                    ? 'bg-[var(--action-blue-bg)] border-[var(--action-blue-border)] ml-6'
+                    : 'bg-[var(--brand-teal-bg)] border-[var(--brand-teal-border)] mr-6'
                 }`}
               >
-                <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                  <span className="inline-flex items-center gap-1">
+                <div className="flex items-center justify-between text-[10px] font-semibold">
+                  <span
+                    className={`inline-flex items-center gap-1 ${
+                      m.speaker === 'CALLER'
+                        ? 'text-[var(--action-blue)] dark:text-[#60A5FA]'
+                        : 'text-[var(--brand-teal)]'
+                    }`}
+                  >
                     {m.speaker === 'CALLER' ? (
-                      <User className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                      <User className="w-3 h-3" />
                     ) : (
-                      <Bot className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <Bot className="w-3 h-3" />
                     )}
                     {m.speaker === 'CALLER' ? 'Caller' : 'Responda AI Intake'}
                   </span>
-                  <span className="font-mono">
+                  <span className="font-mono tabular-nums text-[var(--text-muted)]">
                     {new Date(m.timestamp).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
                   </span>
                 </div>
-                <p className="text-slate-800 dark:text-slate-100 leading-relaxed">{m.text}</p>
+                <p className="text-[var(--text-primary)] leading-relaxed">{m.text}</p>
                 {m.extractedTags && m.extractedTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {m.extractedTags.map((tag, idx) => (
-                      <span
-                        key={idx}
-                        className="px-1.5 py-0.5 rounded bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] font-mono text-[10px] text-slate-600 dark:text-slate-300"
-                      >
-                        {tag}
-                      </span>
-                    ))}
+                  <div className="pt-1 font-mono tabular-nums text-[11px] text-[var(--brand-teal)]">
+                    AI Extracted: {m.extractedTags.join(' · ')}
                   </div>
                 )}
               </div>
             ))}
           </div>
 
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
+          <div className="flex items-center gap-2 pt-2 border-t border-[var(--border-subtle)]">
             {speechAvailable && (
               <button
                 type="button"
                 onClick={toggleVoiceDictation}
                 title="Dictate caller message using browser microphone"
                 aria-label={listening ? 'Stop voice dictation' : 'Start voice dictation'}
-                className={`p-2 rounded-lg border transition-colors ${
+                className={`p-2 rounded-lg border transition-colors shrink-0 ${
                   listening
-                    ? 'bg-red-600 border-red-600 text-white'
-                    : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-300'
+                    ? 'bg-[var(--status-critical-accent)] border-[var(--status-critical-accent)] text-[var(--text-on-solid)]'
+                    : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -508,22 +507,22 @@ export function AiIntakeWorkspace({
               }}
               placeholder="Enter caller statement (symptoms, injuries, Lagos landmark)..."
               aria-label="Caller statement input"
-              className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+              className="flex-1 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             />
             <button
               type="button"
               disabled={sending || !inputText.trim()}
               onClick={() => void sendMessage()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] transition-colors whitespace-nowrap shrink-0"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{sending ? 'Processing...' : 'Send'}</span>
             </button>
           </div>
 
-          <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 text-[11px] text-[var(--text-secondary)] space-y-1">
+            <div className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-[var(--status-urgent-text)]" />
               <span>Telephony &amp; Location Honesty</span>
             </div>
             <p>
@@ -533,31 +532,31 @@ export function AiIntakeWorkspace({
         </div>
 
         {/* Right: Structured Medical Extraction & Create Form */}
-        <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3.5 shadow-2xs dark:shadow-none">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
-            <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+        <div className="lg:col-span-6 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3.5">
+          <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+            <h3 className="font-display text-sm font-bold text-[var(--text-primary)]">
               Structured Medical Incident Fields
             </h3>
             {activeIncident && (
               <button
                 type="button"
                 onClick={() => onOpenIncident(activeIncident.id)}
-                className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+                className="text-xs font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] hover:underline whitespace-nowrap shrink-0"
               >
-                Open {activeIncident.id} →
+                Open <span className="font-mono tabular-nums">{activeIncident.id}</span> →
               </button>
             )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Medical Category
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as MedicalEmergencyCategory)}
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-2 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2.5 py-2 text-[var(--text-primary)]"
               >
                 {MEDICAL_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -568,13 +567,13 @@ export function AiIntakeWorkspace({
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Suggested Priority
               </label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as IncidentPriority)}
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-2.5 py-2 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2.5 py-2 text-[var(--text-primary)]"
               >
                 <option value="Unassessed">Unassessed (Insufficient assessment)</option>
                 <option value="Critical">Critical</option>
@@ -584,7 +583,7 @@ export function AiIntakeWorkspace({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Incident Summary
               </label>
               <input
@@ -592,12 +591,12 @@ export function AiIntakeWorkspace({
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 placeholder="Concise medical summary..."
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Caller Name
               </label>
               <input
@@ -605,12 +604,12 @@ export function AiIntakeWorkspace({
                 value={callerName}
                 onChange={(e) => setCallerName(e.target.value)}
                 placeholder="Optional"
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Caller Phone
               </label>
               <input
@@ -618,12 +617,12 @@ export function AiIntakeWorkspace({
                 value={callerPhone}
                 onChange={(e) => setCallerPhone(e.target.value)}
                 placeholder="+234..."
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 font-mono tabular-nums text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Lagos Area / District
               </label>
               <input
@@ -631,12 +630,12 @@ export function AiIntakeWorkspace({
                 value={area}
                 onChange={(e) => setArea(e.target.value)}
                 placeholder="e.g., Yaba, Ikeja, Surulere"
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Nearest Landmark
               </label>
               <input
@@ -644,12 +643,12 @@ export function AiIntakeWorkspace({
                 value={landmark}
                 onChange={(e) => setLandmark(e.target.value)}
                 placeholder="e.g., UNILAG Main Gate"
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Caller-Described Location
               </label>
               <input
@@ -657,12 +656,12 @@ export function AiIntakeWorkspace({
                 value={locationDescription}
                 onChange={(e) => setLocationDescription(e.target.value)}
                 placeholder="Street name, junction, or caller description..."
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Chief Complaint
               </label>
               <input
@@ -672,12 +671,12 @@ export function AiIntakeWorkspace({
                   setClinicalDetails((c) => ({ ...c, chiefComplaint: e.target.value }))
                 }
                 placeholder="e.g., Chest pain, trauma"
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Patients Affected
               </label>
               <input
@@ -686,12 +685,12 @@ export function AiIntakeWorkspace({
                 value={peopleAffected}
                 onChange={(e) => setPeopleAffected(e.target.value)}
                 placeholder="Unknown"
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 font-mono tabular-nums text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Consciousness
               </label>
               <input
@@ -701,12 +700,12 @@ export function AiIntakeWorkspace({
                   setClinicalDetails((c) => ({ ...c, consciousness: e.target.value }))
                 }
                 placeholder="Alert, drowsy, unresponsive..."
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                 Breathing Status
               </label>
               <input
@@ -716,19 +715,19 @@ export function AiIntakeWorkspace({
                   setClinicalDetails((c) => ({ ...c, breathing: e.target.value }))
                 }
                 placeholder="Normal, laboured, absent..."
-                className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100"
+                className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
               />
             </div>
 
-            <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5">
-              <div className="text-[11px] text-slate-600 dark:text-slate-300">
-                <strong className="text-slate-800 dark:text-slate-100">Device GPS:</strong>{' '}
-                {gpsStatus}
+            <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-2.5">
+              <div className="text-[11px] text-[var(--text-secondary)]">
+                <strong className="text-[var(--text-primary)]">Device GPS:</strong>{' '}
+                <span className="font-mono tabular-nums">{gpsStatus}</span>
               </div>
               <button
                 type="button"
                 onClick={handleRequestGps}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white dark:bg-[#172438] border border-slate-200 dark:border-[#26364B] text-[11px] font-semibold text-blue-700 dark:text-blue-300"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] whitespace-nowrap shrink-0"
               >
                 <LocateFixed className="w-3.5 h-3.5" />
                 <span>Capture Browser GPS</span>
@@ -736,15 +735,15 @@ export function AiIntakeWorkspace({
             </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-200 dark:border-[#26364B] flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">
-              Creates a <strong>New</strong> incident (unverified) for Operations Staff review.
+          <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] text-[var(--text-muted)]">
+              Creates a <strong className="text-[var(--text-primary)]">New</strong> incident (unverified) for Operations Staff review.
             </span>
             <button
               type="button"
               disabled={creating}
               onClick={handleCreateIncident}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] transition-colors whitespace-nowrap shrink-0"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{creating ? 'Creating Incident...' : 'Create Medical Incident'}</span>

@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertOctagon,
   AlertTriangle,
   ArrowLeft,
   Building2,
   CheckCircle2,
-  Clock,
   FileText,
   History,
   LocateFixed,
@@ -20,7 +18,6 @@ import {
   Stethoscope,
   Truck,
   UserCheck,
-  Users,
   X,
 } from 'lucide-react';
 import type {
@@ -350,8 +347,11 @@ export function IncidentWorkspace({
     Boolean(candidateUnitId && !incident.assignedUnitId)
   );
 
-  const isTakenOver = Boolean(incident.assignedOperator) || !incident.aiIntakeActive;
-  const needsTakeover = !isLocked && incident.status === 'New' && !incident.assignedOperator;
+  const isTakenOver = Boolean(incident.assignedOperator);
+  const needsTakeover =
+    !isLocked &&
+    !incident.assignedOperator &&
+    (incident.status === 'New' || incident.status === 'Under Review');
   const dispatchBlockedByPolicy =
     requireLocationVerificationBeforeDispatch && incident.location.verificationStatus !== 'VERIFIED';
 
@@ -431,15 +431,16 @@ export function IncidentWorkspace({
     <div className="flex flex-col lg:flex-row gap-4 items-start">
       {/* Collapsible Left Incident Queue Drawer */}
       {queueOpen && (
-        <aside className="w-full lg:w-64 shrink-0 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-3 space-y-2 shadow-2xs dark:shadow-none">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
-            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
-              {readOnly ? 'Archived Cases' : 'Active Medical Queue'} ({queueList.length})
+        <aside className="w-full lg:w-64 shrink-0 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-3 space-y-2">
+          <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+            <span className="text-xs font-bold text-[var(--text-primary)]">
+              {readOnly ? 'Archived Cases' : 'Active Medical Queue'} (
+              <span className="font-mono tabular-nums">{queueList.length}</span>)
             </span>
             <button
               type="button"
               onClick={() => setQueueOpen(false)}
-              className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400"
+              className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               aria-label="Close incident queue drawer"
             >
               <X className="w-3.5 h-3.5" />
@@ -453,15 +454,17 @@ export function IncidentWorkspace({
                 onClick={() => onSelectIncident(item.id)}
                 className={`w-full text-left rounded-lg border p-2.5 text-xs transition-colors ${
                   item.id === incident.id
-                    ? 'bg-blue-50 border-blue-400 dark:bg-blue-500/15 dark:border-blue-500/60'
-                    : 'bg-slate-50 border-slate-200 hover:border-slate-300 dark:bg-[#0B1220] dark:border-[#26364B]'
+                    ? 'bg-[var(--action-blue-bg)] border-[var(--action-blue-border)]'
+                    : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                 }`}
               >
-                <div className="flex items-center justify-between gap-1 font-mono text-[11px] font-bold text-slate-900 dark:text-slate-100">
+                <div className="flex items-center justify-between gap-1 font-mono tabular-nums text-[11px] font-bold text-[var(--text-primary)]">
                   <span>{item.id}</span>
-                  <span className="text-[10px] font-normal text-slate-500">{item.priority}</span>
+                  <span className="text-[10px] font-normal text-[var(--text-muted)]">
+                    {item.priority}
+                  </span>
                 </div>
-                <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate mt-0.5">
+                <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
                   {item.category} · {item.location.area || 'Lagos'}
                 </div>
               </button>
@@ -473,14 +476,14 @@ export function IncidentWorkspace({
       {/* Main Workspace Column */}
       <div className="flex-1 min-w-0 w-full space-y-4">
         {/* Persistent Header */}
-        <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none">
+        <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4">
           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={onBack}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-800 dark:text-slate-200"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] whitespace-nowrap shrink-0"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Back</span>
@@ -488,16 +491,16 @@ export function IncidentWorkspace({
                 <button
                   type="button"
                   onClick={() => setQueueOpen((q) => !q)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-medium text-slate-700 dark:text-slate-200"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] whitespace-nowrap shrink-0"
                 >
                   <PanelLeft className="w-3.5 h-3.5" />
                   <span>{queueOpen ? 'Hide Queue' : 'Queue'}</span>
                 </button>
 
-                <span className="font-mono text-base font-bold text-slate-900 dark:text-slate-50">
+                <span className="font-mono tabular-nums text-base font-bold text-[var(--text-primary)]">
                   {incident.id}
                 </span>
-                <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                <span className="text-sm font-semibold text-[var(--text-primary)]">
                   {incident.category}
                 </span>
                 <PriorityBadge priority={incident.priority} />
@@ -505,27 +508,33 @@ export function IncidentWorkspace({
                 <VerificationBadge status={incident.location.verificationStatus} />
                 {incident.legacyOutOfScope && <LegacyBadge />}
                 {isLocked && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600 text-[11px] font-semibold">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)] border border-[var(--status-neutral-border)] text-[11px] font-semibold whitespace-nowrap shrink-0">
                     <Lock className="w-3 h-3" />
                     <span>Read-Only Archive</span>
                   </span>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
-                <span>Received {formatRelativeTime(incident.createdAt)}</span>
+              <div className="flex flex-wrap items-center gap-2.5 text-xs text-[var(--text-muted)]">
+                <span className="font-mono tabular-nums">
+                  Received {formatRelativeTime(incident.createdAt)}
+                </span>
                 <span>·</span>
                 <span>
                   Caller:{' '}
-                  <strong className="text-slate-800 dark:text-slate-200">
+                  <strong className="text-[var(--text-primary)]">
                     {incident.callerName || 'Anonymous'}
-                    {incident.callerPhone ? ` (${incident.callerPhone})` : ''}
+                    {incident.callerPhone ? (
+                      <span className="font-mono tabular-nums">{` (${incident.callerPhone})`}</span>
+                    ) : (
+                      ''
+                    )}
                   </strong>
                 </span>
                 <span>·</span>
                 <span>
                   Operator:{' '}
-                  <strong className="text-slate-800 dark:text-slate-200">
+                  <strong className="text-[var(--text-primary)]">
                     {incident.assignedOperator || 'Unassigned'}
                   </strong>
                 </span>
@@ -542,7 +551,7 @@ export function IncidentWorkspace({
                     await onTakeOver(incident.id);
                     setBusy(false);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[var(--status-urgent-accent)] hover:opacity-90 text-[#0B1519] text-xs font-bold whitespace-nowrap shrink-0"
                 >
                   <UserCheck className="w-4 h-4" />
                   <span>Take Over Incident</span>
@@ -552,10 +561,12 @@ export function IncidentWorkspace({
               <button
                 type="button"
                 onClick={() => setAuditOpen((a) => !a)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-200"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] whitespace-nowrap shrink-0"
               >
                 <PanelRight className="w-3.5 h-3.5" />
-                <span>Audit Log ({incident.timeline.length})</span>
+                <span>
+                  Audit Log (<span className="font-mono tabular-nums">{incident.timeline.length}</span>)
+                </span>
               </button>
             </div>
           </div>
@@ -564,7 +575,7 @@ export function IncidentWorkspace({
           <div
             role="tablist"
             aria-label="Incident workspace tabs"
-            className="flex flex-wrap items-center gap-1.5 mt-4 pt-3 border-t border-slate-200 dark:border-[#26364B]"
+            className="flex flex-wrap items-center gap-1.5 mt-4 pt-3 border-t border-[var(--border-subtle)]"
           >
             {tabs.map((tab) => (
               <button
@@ -573,10 +584,10 @@ export function IncidentWorkspace({
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   activeTab === tab.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-[#0B1220] dark:text-slate-300 dark:hover:bg-[#172438] dark:border-[#26364B]'
+                    ? 'bg-[var(--action-blue)] text-[var(--text-on-solid)]'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
                 }`}
               >
                 {tab.label}
@@ -589,55 +600,67 @@ export function IncidentWorkspace({
         {/* 5-Milestone Guided Workflow Bar */}
         <section
           aria-label="5-milestone emergency workflow"
-          className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none"
+          className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3"
         >
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-            {workflow.milestones.map((m) => (
-              <div
-                key={m.id}
-                className={`rounded-lg border px-2.5 py-2 text-[11px] font-semibold flex items-center gap-2 min-w-0 ${
-                  m.status === 'done'
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-500/15 dark:border-emerald-500/35 dark:text-emerald-300'
-                    : m.status === 'current'
-                    ? 'bg-blue-50 border-blue-400 text-blue-900 dark:bg-blue-600/25 dark:border-blue-400 dark:text-blue-100'
-                    : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-[#0B1220] dark:border-[#26364B] dark:text-slate-400'
-                }`}
-              >
-                <span
-                  className={`w-4 h-4 rounded-full text-[10px] font-mono flex items-center justify-center shrink-0 ${
+            {workflow.milestones.map((m) => {
+              const targetTab: IncidentWorkspaceTabId =
+                m.id === 'report_intake' || m.id === 'closure'
+                  ? 'workflow'
+                  : m.id === 'assessment_verification'
+                  ? incident.priority === 'Unassessed'
+                    ? 'medical-details'
+                    : 'location'
+                  : 'response';
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setActiveTab(targetTab)}
+                  className={`rounded-lg border px-2.5 py-2 text-[11px] font-semibold flex items-center gap-2 min-w-0 text-left cursor-pointer transition-colors hover:border-[var(--border-strong)] ${
                     m.status === 'done'
-                      ? 'bg-emerald-600 text-white font-bold'
+                      ? 'bg-[var(--status-verified-bg)] border-[var(--status-verified-border)] text-[var(--status-verified-text)]'
                       : m.status === 'current'
-                      ? 'bg-blue-600 text-white font-bold'
-                      : 'bg-slate-200 text-slate-600 dark:bg-[#172438] dark:text-slate-400'
+                      ? 'bg-[var(--action-blue-bg)] border-[var(--action-blue-border)] text-[var(--text-primary)]'
+                      : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]'
                   }`}
                 >
-                  {m.number}
-                </span>
-                <span className="truncate">{m.shortLabel}</span>
-              </div>
-            ))}
+                  <span
+                    className={`w-4 h-4 rounded-full text-[10px] font-mono tabular-nums flex items-center justify-center shrink-0 ${
+                      m.status === 'done'
+                        ? 'bg-[var(--action-emerald)] text-[var(--text-on-solid)] font-bold'
+                        : m.status === 'current'
+                        ? 'bg-[var(--action-blue)] text-[var(--text-on-solid)] font-bold'
+                        : 'bg-[var(--bg-surface-elevated)] text-[var(--text-muted)]'
+                    }`}
+                  >
+                    {m.number}
+                  </span>
+                  <span className="truncate">{m.shortLabel}</span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="rounded-xl bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 text-xs">
               <div>
-                <div className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                <div className="text-[11px] font-semibold text-[var(--action-blue)] dark:text-[#60A5FA]">
                   Current Stage
                 </div>
-                <p className="text-slate-700 dark:text-slate-200 mt-0.5">{workflow.whatIsHappening}</p>
+                <p className="text-[var(--text-primary)] mt-0.5">{workflow.whatIsHappening}</p>
               </div>
               <div>
-                <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                <div className="text-[11px] font-semibold text-[var(--status-urgent-text)]">
                   Needs Attention
                 </div>
-                <p className="text-slate-700 dark:text-slate-200 mt-0.5">{workflow.needsAttention}</p>
+                <p className="text-[var(--text-primary)] mt-0.5">{workflow.needsAttention}</p>
               </div>
               <div>
-                <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                <div className="text-[11px] font-semibold text-[var(--status-verified-text)]">
                   Recommended Next Step
                 </div>
-                <p className="text-slate-600 dark:text-slate-300 mt-0.5">
+                <p className="text-[var(--text-secondary)] mt-0.5">
                   {workflow.nextActionDescription}
                 </p>
               </div>
@@ -648,7 +671,7 @@ export function IncidentWorkspace({
                 type="button"
                 disabled={busy}
                 onClick={handleGuidedAction}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white whitespace-nowrap shrink-0"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
               >
                 <span>{workflow.nextActionLabel}</span>
               </button>
@@ -659,20 +682,36 @@ export function IncidentWorkspace({
         {/* TAB 1: WORKFLOW, TRANSCRIPT & NOTES */}
         {activeTab === 'workflow' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <div className="lg:col-span-7 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
-                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <div className="lg:col-span-7 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+                <h2 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <MessageSquare
+                    className={`w-4 h-4 ${
+                      isTakenOver ? 'text-[var(--action-blue)] dark:text-[#60A5FA]' : 'text-[var(--brand-teal)]'
+                    }`}
+                  />
                   <span>Live Call Transcript &amp; Operator Reply</span>
                 </h2>
-                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                  {isTakenOver ? 'HUMAN CONTROL' : 'AI INTAKE ACTIVE'}
+                <span
+                  className={`text-[11px] font-mono font-semibold ${
+                    isTakenOver
+                      ? 'text-[var(--status-verified-text)]'
+                      : !incident.aiIntakeActive
+                      ? 'text-[var(--action-blue)] dark:text-[#60A5FA]'
+                      : 'text-[var(--brand-teal)]'
+                  }`}
+                >
+                  {isTakenOver
+                    ? 'HUMAN CONTROL'
+                    : !incident.aiIntakeActive
+                    ? 'INTAKE COMPLETE · AWAITING TAKEOVER'
+                    : 'AI INTAKE ACTIVE'}
                 </span>
               </div>
 
               <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
                 {incident.transcript.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">
+                  <p className="text-xs text-[var(--text-muted)] py-4 text-center">
                     No transcript messages recorded.
                   </p>
                 ) : (
@@ -681,15 +720,25 @@ export function IncidentWorkspace({
                       key={m.id}
                       className={`rounded-lg border p-2.5 text-xs space-y-1 ${
                         m.speaker === 'CALLER'
-                          ? 'bg-blue-50/70 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30'
+                          ? 'bg-[var(--action-blue-bg)] border-[var(--action-blue-border)]'
                           : m.speaker === 'OPERATOR'
-                          ? 'bg-emerald-50/70 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/30'
-                          : 'bg-slate-50 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B]'
+                          ? 'bg-[var(--status-verified-bg)] border-[var(--status-verified-border)]'
+                          : 'bg-[var(--brand-teal-bg)] border-[var(--brand-teal-border)]'
                       }`}
                     >
-                      <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                        <span>{m.speaker}</span>
-                        <span className="font-mono">
+                      <div className="flex items-center justify-between text-[10px] font-semibold">
+                        <span
+                          className={
+                            m.speaker === 'CALLER'
+                              ? 'text-[var(--action-blue)] dark:text-[#60A5FA]'
+                              : m.speaker === 'OPERATOR'
+                              ? 'text-[var(--status-verified-text)]'
+                              : 'text-[var(--brand-teal)]'
+                          }
+                        >
+                          {m.speaker}
+                        </span>
+                        <span className="font-mono tabular-nums text-[var(--text-muted)]">
                           {new Date(m.timestamp).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -697,16 +746,16 @@ export function IncidentWorkspace({
                           })}
                         </span>
                       </div>
-                      <p className="text-slate-800 dark:text-slate-100">{m.text}</p>
+                      <p className="text-[var(--text-primary)]">{m.text}</p>
                     </div>
                   ))
                 )}
               </div>
 
               {!isLocked && canTakeOver(userRole) && (
-                <div className="pt-2 border-t border-slate-200 dark:border-[#26364B] space-y-2">
+                <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
                   {!isTakenOver ? (
-                    <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2">
+                    <div className="rounded-lg bg-[var(--status-urgent-bg)] border border-[var(--status-urgent-border)] px-3 py-2 text-xs text-[var(--status-urgent-text)] flex items-center justify-between gap-2">
                       <span>Take over this incident before sending direct operator messages.</span>
                       <button
                         type="button"
@@ -716,7 +765,7 @@ export function IncidentWorkspace({
                           await onTakeOver(incident.id);
                           setBusy(false);
                         }}
-                        className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] whitespace-nowrap"
+                        className="px-2.5 py-1 rounded bg-[var(--status-urgent-accent)] hover:opacity-90 text-[#0B1519] font-bold text-[11px] whitespace-nowrap shrink-0"
                       >
                         Take Over
                       </button>
@@ -728,7 +777,7 @@ export function IncidentWorkspace({
                         value={operatorReply}
                         onChange={(e) => setDraft({ operatorReply: e.target.value })}
                         placeholder="Record operator message into call transcript..."
-                        className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+                        className="flex-1 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                       />
                       <button
                         type="button"
@@ -739,7 +788,7 @@ export function IncidentWorkspace({
                           setDraft({ operatorReply: '' });
                           setBusy(false);
                         }}
-                        className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                       >
                         <Send className="w-3.5 h-3.5" />
                         <span>Send</span>
@@ -751,11 +800,102 @@ export function IncidentWorkspace({
             </div>
 
             <div className="lg:col-span-5 space-y-4">
+              {/* Progressive AI Structured Intake Extraction */}
+              <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
+                  <h3 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <Stethoscope className="w-4 h-4 text-[var(--brand-teal)]" />
+                    <span>AI Structured Intake Extraction</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded bg-[var(--brand-teal-bg)] border border-[var(--brand-teal-border)] text-[var(--brand-teal)] text-[10px] font-mono font-semibold">
+                    {incident.aiIntakeActive ? 'LIVE EXTRACTION' : 'AUTO-STRUCTURED'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {[
+                    {
+                      label: 'Incident Category',
+                      value: incident.category,
+                      tag: 'AI',
+                    },
+                    {
+                      label: 'Patient Count',
+                      value:
+                        typeof incident.peopleAffected === 'number'
+                          ? `${incident.peopleAffected} patient${incident.peopleAffected === 1 ? '' : 's'}`
+                          : null,
+                      tag: 'AI',
+                    },
+                    {
+                      label: 'Consciousness',
+                      value: incident.clinicalDetails?.consciousness || null,
+                      tag: 'AUTO-STRUCTURED',
+                    },
+                    {
+                      label: 'Reported Injuries',
+                      value:
+                        incident.clinicalDetails?.bleedingOrInjury ||
+                        incident.clinicalDetails?.chiefComplaint ||
+                        null,
+                      tag: 'AI',
+                    },
+                    {
+                      label: 'Hazards',
+                      value: incident.immediateDanger
+                        ? incident.dangerDetails || 'Immediate scene hazard reported'
+                        : incident.clinicalDetails?.consciousness
+                        ? 'No active scene hazard reported'
+                        : null,
+                      tag: 'AUTO-STRUCTURED',
+                    },
+                    {
+                      label: 'Caller-Described Landmark',
+                      value:
+                        incident.location.landmark ||
+                        (incident.location.area &&
+                        incident.location.description !==
+                          `${incident.location.area} area (caller reporting road accident; landmark pending)` &&
+                        incident.location.description !==
+                          `${incident.location.area} area (exact street or landmark pending)`
+                          ? incident.location.description
+                          : null),
+                      tag: 'AI',
+                    },
+                  ].map((field) => (
+                    <div
+                      key={field.label}
+                      className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-2.5 space-y-1"
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[10px] font-semibold text-[var(--text-secondary)]">
+                          {field.label}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[9px] font-mono font-semibold text-[var(--brand-teal)]">
+                          {field.tag}
+                        </span>
+                      </div>
+                      <p
+                        className={`text-xs leading-snug ${
+                          field.value
+                            ? 'font-medium text-[var(--text-primary)]'
+                            : 'italic text-[var(--text-muted)]'
+                        }`}
+                      >
+                        {field.value || 'Pending caller answer...'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Operator Notes */}
-              <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-                <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  <span>Operational Notes ({incident.notes.length})</span>
+              <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+                <h3 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
+                  <span>
+                    Operational Notes (<span className="font-mono tabular-nums">{incident.notes.length}</span>)
+                  </span>
                 </h3>
 
                 {!isLocked && canAddNote(userRole) && (
@@ -765,7 +905,7 @@ export function IncidentWorkspace({
                       value={noteText}
                       onChange={(e) => setDraft({ noteText: e.target.value })}
                       placeholder="Add clinical or dispatch note..."
-                      className="flex-1 rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                      className="flex-1 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                     />
                     <button
                       type="button"
@@ -776,7 +916,7 @@ export function IncidentWorkspace({
                         setDraft({ noteText: '' });
                         setBusy(false);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                     >
                       Save Note
                     </button>
@@ -785,22 +925,24 @@ export function IncidentWorkspace({
 
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {incident.notes.length === 0 ? (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="text-xs text-[var(--text-muted)]">
                       No operational notes recorded yet.
                     </p>
                   ) : (
                     incident.notes.map((n) => (
                       <div
                         key={n.id}
-                        className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5 text-xs space-y-1"
+                        className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-2.5 text-xs space-y-1"
                       >
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                          <span className="font-semibold text-[var(--text-secondary)]">
                             {n.author} ({n.role})
                           </span>
-                          <span className="font-mono">{formatRelativeTime(n.timestamp)}</span>
+                          <span className="font-mono tabular-nums">
+                            {formatRelativeTime(n.timestamp)}
+                          </span>
                         </div>
-                        <p className="text-slate-800 dark:text-slate-200">{n.text}</p>
+                        <p className="text-[var(--text-primary)]">{n.text}</p>
                       </div>
                     ))
                   )}
@@ -809,15 +951,15 @@ export function IncidentWorkspace({
 
               {/* Manual Incident Status Update (Hidden / Locked when Closed) */}
               {!isLocked && canUpdateIncidentStatus(userRole) && (
-                <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-2.5 shadow-2xs dark:shadow-none">
-                  <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-2.5">
+                  <h3 className="font-display text-sm font-bold text-[var(--text-primary)]">
                     Update Incident Status
                   </h3>
                   <select
                     aria-label="Target incident status"
                     value={statusTarget}
                     onChange={(e) => setStatusTarget(e.target.value as IncidentStatus)}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                    className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-xs text-[var(--text-primary)]"
                   >
                     {INCIDENT_STATUS_ORDER.map((s) => (
                       <option key={s} value={s}>
@@ -830,7 +972,7 @@ export function IncidentWorkspace({
                     value={statusReason}
                     onChange={(e) => setStatusReason(e.target.value)}
                     placeholder="Mandatory reason for status update"
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                    className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                   />
                   <button
                     type="button"
@@ -849,7 +991,7 @@ export function IncidentWorkspace({
                       setStatusReason('');
                       setBusy(false);
                     }}
-                    className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                   >
                     Record Status Change
                   </button>
@@ -857,11 +999,11 @@ export function IncidentWorkspace({
               )}
 
               {incident.outcome && (
-                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/35 p-4 text-xs space-y-1">
-                  <div className="font-bold text-emerald-800 dark:text-emerald-300">
+                <div className="rounded-xl bg-[var(--status-verified-bg)] border border-[var(--status-verified-border)] p-4 text-xs space-y-1">
+                  <div className="font-bold text-[var(--status-verified-text)]">
                     Recorded Closure Outcome
                   </div>
-                  <p className="text-emerald-900 dark:text-emerald-100">{incident.outcome}</p>
+                  <p className="text-[var(--text-primary)]">{incident.outcome}</p>
                 </div>
               )}
             </div>
@@ -870,19 +1012,19 @@ export function IncidentWorkspace({
 
         {/* TAB 2: MEDICAL DETAILS */}
         {activeTab === 'medical-details' && (
-          <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-5 space-y-4 shadow-2xs dark:shadow-none">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#26364B]">
+          <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <Stethoscope className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <h2 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
                   <span>Clinical Assessment &amp; Medical Details</span>
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-[var(--text-secondary)]">
                   Unsaved edits stay preserved if you switch between open incidents.
                 </p>
               </div>
               {editPriority === 'Unassessed' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 border border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/40 dark:text-amber-200 text-xs font-semibold">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--status-unassessed-bg)] border border-[var(--status-unassessed-border)] text-[var(--status-unassessed-text)] text-xs font-semibold whitespace-nowrap shrink-0">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   <span>Priority is Unassessed — assign Clinical Priority</span>
                 </span>
@@ -891,7 +1033,7 @@ export function IncidentWorkspace({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Medical Category
                 </label>
                 <select
@@ -900,7 +1042,7 @@ export function IncidentWorkspace({
                   onChange={(e) =>
                     setDraft({ category: e.target.value as MedicalEmergencyCategory })
                   }
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 >
                   {MEDICAL_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -911,14 +1053,14 @@ export function IncidentWorkspace({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Clinical Priority
                 </label>
                 <select
                   disabled={isLocked || !canVerifyIncident(userRole)}
                   value={editPriority}
                   onChange={(e) => setDraft({ priority: e.target.value as IncidentPriority })}
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 >
                   <option value="Critical">Critical</option>
                   <option value="Urgent">Urgent</option>
@@ -928,7 +1070,7 @@ export function IncidentWorkspace({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Patients Affected
                 </label>
                 <input
@@ -938,12 +1080,12 @@ export function IncidentWorkspace({
                   value={editPeopleAffected}
                   onChange={(e) => setDraft({ peopleAffected: e.target.value })}
                   placeholder="Unknown"
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 font-mono tabular-nums text-[var(--text-primary)] placeholder:text-[var(--text-muted)] disabled:opacity-60"
                 />
               </div>
 
               <div className="sm:col-span-2 lg:col-span-3">
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Verified Summary
                 </label>
                 <input
@@ -951,12 +1093,12 @@ export function IncidentWorkspace({
                   disabled={isLocked || !canVerifyIncident(userRole)}
                   value={editSummary}
                   onChange={(e) => setDraft({ summary: e.target.value })}
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div className="sm:col-span-2 lg:col-span-3">
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Priority Justification
                 </label>
                 <input
@@ -964,12 +1106,12 @@ export function IncidentWorkspace({
                   disabled={isLocked || !canVerifyIncident(userRole)}
                   value={editPriorityReason}
                   onChange={(e) => setDraft({ priorityReason: e.target.value })}
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Chief Complaint
                 </label>
                 <input
@@ -981,12 +1123,12 @@ export function IncidentWorkspace({
                       clinicalDetails: { ...editClinical, chiefComplaint: e.target.value },
                     })
                   }
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Consciousness
                 </label>
                 <input
@@ -998,12 +1140,12 @@ export function IncidentWorkspace({
                       clinicalDetails: { ...editClinical, consciousness: e.target.value },
                     })
                   }
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Breathing
                 </label>
                 <input
@@ -1015,12 +1157,12 @@ export function IncidentWorkspace({
                       clinicalDetails: { ...editClinical, breathing: e.target.value },
                     })
                   }
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Bleeding / Injury Details
                 </label>
                 <input
@@ -1032,12 +1174,12 @@ export function IncidentWorkspace({
                       clinicalDetails: { ...editClinical, bleedingOrInjury: e.target.value },
                     })
                   }
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                   Clinical Triage Notes
                 </label>
                 <input
@@ -1049,18 +1191,18 @@ export function IncidentWorkspace({
                       clinicalDetails: { ...editClinical, clinicalNotes: e.target.value },
                     })
                   }
-                  className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                  className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                 />
               </div>
 
               <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-4 pt-1">
-                <label className="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                <label className="inline-flex items-center gap-2 text-xs text-[var(--text-primary)] cursor-pointer">
                   <input
                     type="checkbox"
                     disabled={isLocked || !canVerifyIncident(userRole)}
                     checked={editImmediateDanger}
                     onChange={(e) => setDraft({ immediateDanger: e.target.checked })}
-                    className="rounded border-slate-300"
+                    className="rounded accent-[var(--action-blue)]"
                   />
                   <span>Immediate life / scene hazard present</span>
                 </label>
@@ -1071,14 +1213,14 @@ export function IncidentWorkspace({
                     value={editDangerDetails}
                     onChange={(e) => setDraft({ dangerDetails: e.target.value })}
                     placeholder="Specify immediate hazard details..."
-                    className="flex-1 min-w-[220px] rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                    className="flex-1 min-w-[220px] rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                   />
                 )}
               </div>
             </div>
 
             {!isLocked && canVerifyIncident(userRole) && (
-              <div className="pt-3 border-t border-slate-200 dark:border-[#26364B] flex justify-end">
+              <div className="pt-3 border-t border-[var(--border-subtle)] flex justify-end">
                 <button
                   type="button"
                   disabled={busy}
@@ -1101,7 +1243,7 @@ export function IncidentWorkspace({
                     });
                     setBusy(false);
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Save Medical Assessment</span>
@@ -1114,10 +1256,10 @@ export function IncidentWorkspace({
         {/* TAB 3: LOCATION VERIFICATION */}
         {activeTab === 'location' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#26364B]">
-                <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <div className="lg:col-span-6 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
+                <h2 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
                   <span>Location Verification</span>
                 </h2>
                 <div className="flex items-center gap-1.5">
@@ -1128,7 +1270,7 @@ export function IncidentWorkspace({
 
               <div className="space-y-2.5 text-xs">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                     Verified / Corrected Street Description
                   </label>
                   <input
@@ -1136,13 +1278,13 @@ export function IncidentWorkspace({
                     disabled={isLocked || !canVerifyIncident(userRole)}
                     value={correctedDesc}
                     onChange={(e) => setDraft({ correctedDesc: e.target.value })}
-                    className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                    className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)] disabled:opacity-60"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                       Nearest Landmark
                     </label>
                     <input
@@ -1150,11 +1292,11 @@ export function IncidentWorkspace({
                       disabled={isLocked || !canVerifyIncident(userRole)}
                       value={landmark}
                       onChange={(e) => setDraft({ landmark: e.target.value })}
-                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                      className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] disabled:opacity-60"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                       Lagos Area
                     </label>
                     <input
@@ -1162,14 +1304,14 @@ export function IncidentWorkspace({
                       disabled={isLocked || !canVerifyIncident(userRole)}
                       value={area}
                       onChange={(e) => setDraft({ area: e.target.value })}
-                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                      className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] disabled:opacity-60"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                       Latitude (Lagos)
                     </label>
                     <input
@@ -1180,11 +1322,11 @@ export function IncidentWorkspace({
                       onChange={(e) =>
                         setDraft({ pinLat: e.target.value ? Number(e.target.value) : undefined })
                       }
-                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                      className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 font-mono tabular-nums text-[var(--text-primary)] disabled:opacity-60"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
                       Longitude (Lagos)
                     </label>
                     <input
@@ -1195,7 +1337,7 @@ export function IncidentWorkspace({
                       onChange={(e) =>
                         setDraft({ pinLng: e.target.value ? Number(e.target.value) : undefined })
                       }
-                      className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                      className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-3 py-1.5 font-mono tabular-nums text-[var(--text-primary)] disabled:opacity-60"
                     />
                   </div>
                 </div>
@@ -1213,7 +1355,7 @@ export function IncidentWorkspace({
                           });
                         });
                       }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] dark:hover:bg-[#1E293B] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] whitespace-nowrap shrink-0"
                     >
                       <LocateFixed className="w-3.5 h-3.5" />
                       <span>Use Browser GPS</span>
@@ -1234,7 +1376,7 @@ export function IncidentWorkspace({
                         });
                         setBusy(false);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#172438] border border-slate-200 dark:border-[#26364B] text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] whitespace-nowrap shrink-0"
                     >
                       Save Draft
                     </button>
@@ -1254,7 +1396,7 @@ export function IncidentWorkspace({
                         });
                         setBusy(false);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--action-emerald)] hover:bg-[var(--action-emerald-hover)] text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Confirm &amp; Verify Location</span>
@@ -1264,30 +1406,30 @@ export function IncidentWorkspace({
               </div>
 
               {/* 4 Honest Location Intelligence Methods */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200 dark:border-[#26364B]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-[var(--border-subtle)]">
                 {locationMethods.map((m) => (
                   <div
                     key={m.key}
-                    className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5 text-[11px] space-y-0.5"
+                    className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-2.5 text-[11px] space-y-0.5"
                   >
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">{m.label}</div>
+                    <div className="font-semibold text-[var(--text-primary)]">{m.label}</div>
                     <div
                       className={`font-medium ${
                         m.available
-                          ? 'text-emerald-700 dark:text-emerald-400'
-                          : 'text-amber-700 dark:text-amber-300'
+                          ? 'text-[var(--status-verified-text)]'
+                          : 'text-[var(--status-urgent-text)]'
                       }`}
                     >
                       {m.statusText}
                     </div>
-                    <p className="text-slate-500 dark:text-slate-400 leading-snug">{m.detail}</p>
+                    <p className="text-[var(--text-secondary)] leading-snug">{m.detail}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="lg:col-span-6 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none space-y-2">
-              <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+            <div className="lg:col-span-6 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-2">
+              <div className="text-xs font-bold text-[var(--text-primary)]">
                 Lagos Scene Map Pin Preview
               </div>
               <LagosMap
@@ -1316,16 +1458,16 @@ export function IncidentWorkspace({
           <div className="space-y-4">
             {/* Milestone 4 Scene & Transport Sequential Lifecycle Card */}
             {(assignedUnit || incident.dispatchedAt || incident.status === 'Patient Transport') && (
-              <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-cyan-300 dark:border-cyan-500/40 p-4 space-y-4 shadow-2xs dark:shadow-none">
+              <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--brand-teal-border)] shadow-[var(--shadow-card)] p-4 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <Navigation className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                    <h2 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                      <Navigation className="w-4 h-4 text-[var(--brand-teal)]" />
                       <span>
                         {assignedUnit ? `${assignedUnit.callsign} — ` : ''}Response &amp; Patient Transport
                       </span>
                     </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="text-xs text-[var(--text-secondary)]">
                       Sequential medical response milestones (each action records once to audit history).
                     </p>
                   </div>
@@ -1333,9 +1475,9 @@ export function IncidentWorkspace({
                 </div>
 
                 {isSimIncident && simState?.stage === 8 && !simState.arrivedOnScene && (
-                  <div className="rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/35 px-3 py-2 text-xs text-blue-900 dark:text-blue-200 flex items-center justify-between">
+                  <div className="rounded-lg bg-[var(--brand-teal-bg)] border border-[var(--brand-teal-border)] px-3 py-2 text-xs text-[var(--text-primary)] flex items-center justify-between gap-2">
                     <span>{simState.trackingStatusText || 'Unit en route to incident scene...'}</span>
-                    <span className="font-mono font-bold">
+                    <span className="font-mono tabular-nums font-bold text-[var(--brand-teal)] shrink-0">
                       {simState.trackingProgressPct}% · {simState.trackingRemainingSec}s
                     </span>
                   </div>
@@ -1344,12 +1486,12 @@ export function IncidentWorkspace({
                 {/* 5 Explicit Milestone Steps */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs">
                   {/* 1. Arrived at Scene */}
-                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                  <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div className="font-semibold text-[var(--text-primary)]">
                       1. Scene Arrival
                     </div>
                     {incident.arrivedAtSceneAt ? (
-                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      <div className="text-[11px] text-[var(--status-verified-text)] font-medium font-mono tabular-nums">
                         Confirmed {formatRelativeTime(incident.arrivedAtSceneAt)}
                       </div>
                     ) : !isLocked ? (
@@ -1361,22 +1503,22 @@ export function IncidentWorkspace({
                           await onTransportEvent(incident.id, { event: 'ARRIVED_ON_SCENE' });
                           setBusy(false);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-semibold"
+                        className="w-full px-2.5 py-1.5 rounded bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-[var(--text-on-solid)] text-[11px] font-semibold whitespace-nowrap shrink-0"
                       >
                         Mark Arrived at Scene
                       </button>
                     ) : (
-                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">Not recorded</span>
                     )}
                   </div>
 
                   {/* 2. Patient Picked Up */}
-                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                  <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div className="font-semibold text-[var(--text-primary)]">
                       2. Patient Pickup
                     </div>
                     {incident.patientPickedUpAt ? (
-                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      <div className="text-[11px] text-[var(--status-verified-text)] font-medium font-mono tabular-nums">
                         Picked up {formatRelativeTime(incident.patientPickedUpAt)}
                       </div>
                     ) : !isLocked ? (
@@ -1388,38 +1530,38 @@ export function IncidentWorkspace({
                           await onTransportEvent(incident.id, { event: 'PATIENT_PICKED_UP' });
                           setBusy(false);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[11px] font-semibold"
+                        className="w-full px-2.5 py-1.5 rounded bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-[var(--text-on-solid)] text-[11px] font-semibold whitespace-nowrap shrink-0"
                       >
                         Mark Patient Picked Up
                       </button>
                     ) : (
-                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">Not recorded</span>
                     )}
                   </div>
 
                   {/* 3. Hospital Confirmed */}
-                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-1.5">
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                  <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 space-y-1.5">
+                    <div className="font-semibold text-[var(--text-primary)]">
                       3. Receiving Hospital
                     </div>
                     {incident.hospitalDestination ? (
-                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      <div className="text-[11px] text-[var(--status-verified-text)] font-medium">
                         {incident.hospitalDestination.name}
                       </div>
                     ) : (
-                      <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                      <div className="text-[11px] text-[var(--status-urgent-text)]">
                         Select hospital below
                       </div>
                     )}
                   </div>
 
                   {/* 4. Start Transport */}
-                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                  <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div className="font-semibold text-[var(--text-primary)]">
                       4. Transport Started
                     </div>
                     {incident.transportStartedAt ? (
-                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      <div className="text-[11px] text-[var(--status-verified-text)] font-medium font-mono tabular-nums">
                         En route {formatRelativeTime(incident.transportStartedAt)}
                       </div>
                     ) : !isLocked ? (
@@ -1431,23 +1573,23 @@ export function IncidentWorkspace({
                           await onTransportEvent(incident.id, { event: 'TRANSPORT_STARTED' });
                           setBusy(false);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-[11px] font-semibold"
+                        className="w-full px-2.5 py-1.5 rounded bg-[var(--brand-teal)] hover:opacity-90 disabled:opacity-50 text-[#0B1519] text-[11px] font-bold whitespace-nowrap shrink-0"
                       >
                         Start Patient Transport
                       </button>
                     ) : (
-                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">Not recorded</span>
                     )}
                   </div>
 
                   {/* 5. Hospital Arrival & Close */}
-                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2">
-                    <div className="font-semibold text-slate-800 dark:text-slate-100">
+                  <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div className="font-semibold text-[var(--text-primary)]">
                       5. Hospital Arrival
                     </div>
                     {incident.hospitalArrivedAt ? (
                       <div className="space-y-1.5">
-                        <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        <div className="text-[11px] text-[var(--status-verified-text)] font-medium font-mono tabular-nums">
                           Arrived {formatRelativeTime(incident.hospitalArrivedAt)}
                         </div>
                         {!isLocked && (
@@ -1461,7 +1603,7 @@ export function IncidentWorkspace({
                                 }.`,
                               })
                             }
-                            className="w-full px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold"
+                            className="w-full px-2.5 py-1.5 rounded bg-[var(--action-emerald)] hover:bg-[var(--action-emerald-hover)] text-[var(--text-on-solid)] text-[11px] font-semibold whitespace-nowrap shrink-0"
                           >
                             Close Incident
                           </button>
@@ -1476,29 +1618,30 @@ export function IncidentWorkspace({
                           await onTransportEvent(incident.id, { event: 'HOSPITAL_ARRIVED' });
                           setBusy(false);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-semibold"
+                        className="w-full px-2.5 py-1.5 rounded bg-[var(--action-emerald)] hover:bg-[var(--action-emerald-hover)] disabled:opacity-50 text-[var(--text-on-solid)] text-[11px] font-semibold whitespace-nowrap shrink-0"
                       >
                         Confirm Hospital Arrival
                       </button>
                     ) : (
-                      <span className="text-[11px] text-slate-400">Not recorded</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">Not recorded</span>
                     )}
                   </div>
                 </div>
 
                 {/* Operator Hospital Destination Selector (Never hardcoded by scenario) */}
                 {!isLocked && !incident.transportStartedAt && (
-                  <div className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-3 space-y-2.5 text-xs">
+                  <div className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-3 space-y-2.5 text-xs">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                        <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
                         <span>Operator Hospital Destination Selection</span>
                       </span>
-                      <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                      <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] cursor-pointer">
                         <input
                           type="checkbox"
                           checked={customHospitalMode}
                           onChange={(e) => setCustomHospitalMode(e.target.checked)}
+                          className="accent-[var(--action-blue)]"
                         />
                         <span>Enter custom receiving facility</span>
                       </label>
@@ -1510,7 +1653,7 @@ export function IncidentWorkspace({
                           aria-label="Select Lagos receiving hospital"
                           value={selectedHospitalId}
                           onChange={(e) => setSelectedHospitalId(e.target.value)}
-                          className="flex-1 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-2 text-slate-900 dark:text-slate-100"
+                          className="flex-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-[var(--text-primary)]"
                         >
                           {LAGOS_HOSPITAL_DESTINATIONS.map((h) => (
                             <option key={h.id} value={h.id}>
@@ -1522,7 +1665,7 @@ export function IncidentWorkspace({
                           type="button"
                           disabled={busy}
                           onClick={handleConfirmHospitalSubmit}
-                          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white whitespace-nowrap"
+                          className="px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                         >
                           Confirm Hospital Destination
                         </button>
@@ -1534,7 +1677,7 @@ export function IncidentWorkspace({
                           value={customHospName}
                           onChange={(e) => setCustomHospName(e.target.value)}
                           placeholder="Hospital name"
-                          className="sm:col-span-2 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5"
+                          className="sm:col-span-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
                         />
                         <input
                           type="number"
@@ -1542,7 +1685,7 @@ export function IncidentWorkspace({
                           value={customHospLat}
                           onChange={(e) => setCustomHospLat(e.target.value)}
                           placeholder="Lat"
-                          className="rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono"
+                          className="rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 font-mono tabular-nums text-[var(--text-primary)]"
                         />
                         <input
                           type="number"
@@ -1550,20 +1693,20 @@ export function IncidentWorkspace({
                           value={customHospLng}
                           onChange={(e) => setCustomHospLng(e.target.value)}
                           placeholder="Lng"
-                          className="rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 font-mono"
+                          className="rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 font-mono tabular-nums text-[var(--text-primary)]"
                         />
                         <input
                           type="text"
                           value={customHospArea}
                           onChange={(e) => setCustomHospArea(e.target.value)}
                           placeholder="Area"
-                          className="sm:col-span-2 rounded-lg bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] px-3 py-1.5"
+                          className="sm:col-span-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-primary)]"
                         />
                         <button
                           type="button"
                           disabled={busy || !customHospName.trim()}
                           onClick={handleConfirmHospitalSubmit}
-                          className="sm:col-span-2 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white"
+                          className="sm:col-span-2 px-4 py-1.5 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                         >
                           Confirm Custom Hospital
                         </button>
@@ -1575,19 +1718,19 @@ export function IncidentWorkspace({
             )}
 
             {/* Unit Selection & Human-Approved Dispatch Section */}
-            <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#26364B]">
+            <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
                 <div>
-                  <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <h2 className="font-display text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
                     <span>Active Medical Response Units Comparison</span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-[var(--text-secondary)]">
                     Only Active registered medical vehicles appear here. Human operator confirmation is mandatory for dispatch.
                   </p>
                 </div>
                 {route && route.available && !route.isSimulatedFallback && (
-                  <span className="font-mono text-xs text-blue-700 dark:text-blue-300">
+                  <span className="font-mono tabular-nums text-xs text-[var(--action-blue)] dark:text-[#60A5FA]">
                     ORS Route: {formatDistanceKm(route.distanceMeters)} ·{' '}
                     {formatDurationMinutes(route.durationSeconds)}
                   </span>
@@ -1595,14 +1738,14 @@ export function IncidentWorkspace({
               </div>
 
               {dispatchBlockedByPolicy && !incident.assignedUnitId && !isLocked && (
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/35 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2">
+                <div className="rounded-lg bg-[var(--status-urgent-bg)] border border-[var(--status-urgent-border)] px-3 py-2 text-xs text-[var(--status-urgent-text)] flex items-center justify-between gap-2">
                   <span>
                     Organisation policy requires verifying the Lagos location before dispatching any medical unit.
                   </span>
                   <button
                     type="button"
                     onClick={() => setActiveTab('location')}
-                    className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-bold text-[11px] whitespace-nowrap"
+                    className="px-2.5 py-1 rounded bg-[var(--status-urgent-accent)] text-[#0B1519] font-bold text-[11px] whitespace-nowrap shrink-0"
                   >
                     Verify Location
                   </button>
@@ -1624,49 +1767,45 @@ export function IncidentWorkspace({
                       onClick={() => setCandidateUnitId(unit.id)}
                       className={`rounded-xl border p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer transition-colors ${
                         isAssigned
-                          ? 'bg-emerald-50/60 border-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/40'
+                          ? 'bg-[var(--status-verified-bg)] border-[var(--status-verified-border)]'
                           : candidateUnitId === unit.id
-                          ? 'bg-blue-50/70 border-blue-400 dark:bg-blue-500/10 dark:border-blue-500/50'
-                          : 'bg-slate-50/70 border-slate-200 dark:bg-[#0B1220] dark:border-[#26364B]'
+                          ? 'bg-[var(--action-blue-bg)] border-[var(--action-blue-border)]'
+                          : 'bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                       }`}
                     >
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                          <span className="font-bold text-xs text-[var(--text-primary)]">
                             {unit.callsign}
                           </span>
-                          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="font-mono tabular-nums text-[11px] text-[var(--text-muted)]">
                             {unit.unitType} · {unit.vehicleRegistration}
                           </span>
                           <UnitAvailabilityBadge availability={unit.availability} />
                           <LocationFreshnessBadge freshness={unit.locationFreshness} />
                           {recommended && (
-                            <span className="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold">
+                            <span className="px-2 py-0.5 rounded bg-[var(--action-blue)] text-[var(--text-on-solid)] text-[10px] font-bold whitespace-nowrap shrink-0">
                               RECOMMENDED
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                        <div className="text-[11px] text-[var(--text-secondary)]">
                           {unit.operationalBase} ({unit.area}) · Crew: {unit.crewDescription}
                         </div>
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {unit.medicalCapabilities.map((cap) => (
-                            <span
-                              key={cap}
-                              className="px-1.5 py-0.5 rounded bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] text-[10px] text-slate-700 dark:text-slate-300"
-                            >
-                              {cap}
-                            </span>
-                          ))}
+                        <div className="text-[11px] text-[var(--text-secondary)]">
+                          <span className="font-semibold text-[var(--text-primary)]">
+                            Capabilities:{' '}
+                          </span>
+                          {unit.medicalCapabilities.join(' · ')}
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0">
                         <div className="text-right text-[11px]">
-                          <div className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                          <div className="font-mono tabular-nums font-semibold text-[var(--text-primary)]">
                             {distanceKm !== null ? `${distanceKm} km` : 'Distance N/A'}
                           </div>
-                          <div className="text-slate-500 dark:text-slate-400">{reason}</div>
+                          <div className="text-[var(--text-muted)]">{reason}</div>
                         </div>
 
                         {canSelectDispatch && (
@@ -1678,7 +1817,7 @@ export function IncidentWorkspace({
                               setCandidateUnitId(unit.id);
                               setConfirmUnit(unit);
                             }}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-semibold text-white whitespace-nowrap"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-semibold text-[var(--text-on-solid)] whitespace-nowrap shrink-0"
                           >
                             <ShieldCheck className="w-3.5 h-3.5" />
                             <span>Approve Dispatch</span>
@@ -1696,16 +1835,18 @@ export function IncidentWorkspace({
 
       {/* Expandable Right Audit Timeline Drawer */}
       {auditOpen && (
-        <aside className="w-full lg:w-80 shrink-0 rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-[#26364B]">
-            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <History className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Audit Timeline ({incident.timeline.length})</span>
+        <aside className="w-full lg:w-80 shrink-0 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+            <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+              <History className="w-4 h-4 text-[var(--action-blue)] dark:text-[#60A5FA]" />
+              <span>
+                Audit Timeline (<span className="font-mono tabular-nums">{incident.timeline.length}</span>)
+              </span>
             </span>
             <button
               type="button"
               onClick={() => setAuditOpen(false)}
-              className="p-1 rounded text-slate-500 hover:text-slate-900 dark:text-slate-400"
+              className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               aria-label="Close audit timeline drawer"
             >
               <X className="w-3.5 h-3.5" />
@@ -1716,21 +1857,21 @@ export function IncidentWorkspace({
             {[...incident.timeline].reverse().map((ev) => (
               <div
                 key={ev.id}
-                className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] p-2.5 text-[11px] space-y-1"
+                className="rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-2.5 text-[11px] space-y-1"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  <span className="font-semibold text-[var(--text-primary)]">
                     {ev.title}
                   </span>
-                  <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                  <span className="font-mono tabular-nums text-[10px] text-[var(--text-muted)] shrink-0">
                     {new Date(ev.timestamp).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
                   </span>
                 </div>
-                <p className="text-slate-600 dark:text-slate-300 leading-snug">{ev.description}</p>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                <p className="text-[var(--text-secondary)] leading-snug">{ev.description}</p>
+                <div className="text-[10px] text-[var(--text-muted)]">
                   {ev.actor} · {ev.actorRole}
                 </div>
               </div>

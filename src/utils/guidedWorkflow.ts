@@ -337,7 +337,7 @@ export function computeCommandBriefing(
   return {
     whatIsHappening,
     needsAttention: 'No open medical incidents require immediate action.',
-    nextStepText: 'Start a new emergency intake in Incident Management or run the 9-stage demo simulation.',
+    nextStepText: 'Monitor incoming emergency calls or run the 9-stage demo simulation.',
     focusIncident: null,
     focusAction: 'OPEN',
     focusActionLabel: 'Open Incident Management',

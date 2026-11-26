@@ -57,6 +57,7 @@ import { createSeedData, store } from './server/store.ts';
 import {
   buildScenarioTranscript,
   createSimulationFleetUnits,
+  getProgressiveSimulationSnapshot,
   SIMULATION_SCENARIOS,
 } from './src/utils/simulationEngine.ts';
 
@@ -1469,11 +1470,13 @@ async function startServer(): Promise<void> {
       turnCount = 6,
       includeCoords = true,
       markLocationResolved = true,
+      completeIntake = false,
     } = req.body as {
       scenarioId?: SimulationScenarioId;
       turnCount?: number;
       includeCoords?: boolean;
       markLocationResolved?: boolean;
+      completeIntake?: boolean;
     };
     const scenario =
       SIMULATION_SCENARIOS[scenarioId] || SIMULATION_SCENARIOS['yaba-accident'];
@@ -1484,91 +1487,162 @@ async function startServer(): Promise<void> {
     const outcome = await store.mutate((db) => {
       const existingIdx = db.incidents.findIndex((i) => i.id === scenario.incidentId);
       const transcript = buildScenarioTranscript(scenario, turnCount, now);
+      const snapshot = getProgressiveSimulationSnapshot(scenario, turnCount);
       const lastTurn =
         scenario.dialogue[Math.max(0, Math.min(turnCount, scenario.dialogue.length) - 1)];
+      const existing = existingIdx >= 0 ? db.incidents[existingIdx] : null;
+      const shouldAdvanceToAssessment =
+        Boolean(completeIntake) && (!existing || existing.status === 'New');
+      const nextStatus: IncidentStatus = existing
+        ? shouldAdvanceToAssessment
+          ? 'Under Review'
+          : existing.status
+        : shouldAdvanceToAssessment
+        ? 'Under Review'
+        : 'New';
+      const nextAiIntakeActive = existing
+        ? completeIntake
+          ? false
+          : existing.aiIntakeActive
+        : !completeIntake;
 
-      const record: IncidentRecord =
-        existingIdx >= 0
-          ? {
-              ...db.incidents[existingIdx],
-              transcript,
-              missingInfoFlags: lastTurn
-                ? lastTurn.remainingMissingFlags
-                : scenario.dialogue[scenario.dialogue.length - 1].remainingMissingFlags,
-              updatedAt: now,
-              location: {
-                ...db.incidents[existingIdx].location,
-                source: includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION',
-                lat: includeCoords ? scenario.resolvedCoords.lat : undefined,
-                lng: includeCoords ? scenario.resolvedCoords.lng : undefined,
-                accuracyMeters:
-                  includeCoords && markLocationResolved
-                    ? scenario.resolvedCoords.accuracyMeters
-                    : undefined,
+      const completionTimeline =
+        completeIntake &&
+        (!existing || !existing.timeline.some((e) => e.id === `ev-sim-intake-done-${scenario.incidentId}`))
+          ? [
+              {
+                id: `ev-sim-intake-done-${scenario.incidentId}`,
+                type: 'AI_INTAKE_STARTED' as const,
+                title: 'AI intake Q&A completed — queued for Assessment & Verification',
+                description:
+                  'Structured caller triage, clinical symptoms, hazards, and Lagos landmark extracted. Incident automatically moved to Milestone 2: Assessment & Verification.',
+                actor: 'Responda AI Intake',
+                actorRole: 'AI Assistant',
+                timestamp: now,
+                isSimulated: true,
               },
-            }
-          : {
-              id: scenario.incidentId,
-              createdAt: now,
-              updatedAt: now,
-              category: scenario.category,
-              priority: turnCount < 3 ? 'Unassessed' : scenario.priority,
-              priorityReason: scenario.priorityReason,
-              status: 'New',
-              callerName: scenario.callerName,
-              callerPhone: scenario.callerPhone,
-              summary: scenario.summary,
-              description: scenario.description,
-              peopleAffected: scenario.peopleAffected,
-              immediateDanger: scenario.immediateDanger,
-              dangerDetails: scenario.dangerDetails,
-              clinicalDetails: scenario.clinicalDetails,
-              missingInfoFlags: lastTurn
-                ? lastTurn.remainingMissingFlags
-                : ['Operator verification of exact location'],
-              transcript,
-              location: {
-                source: includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION',
-                verificationStatus: 'UNVERIFIED',
-                description: scenario.vagueLocationDescription,
-                landmark: scenario.landmark,
-                area: scenario.area,
-                lat: includeCoords ? scenario.resolvedCoords.lat : undefined,
-                lng: includeCoords ? scenario.resolvedCoords.lng : undefined,
-                accuracyMeters:
-                  includeCoords && markLocationResolved
-                    ? scenario.resolvedCoords.accuracyMeters
-                    : undefined,
-                carrierNote: 'Carrier location integration not configured',
-                capturedAt: now,
+            ]
+          : [];
+
+      const record: IncidentRecord = existing
+        ? {
+            ...existing,
+            category: snapshot.category,
+            priority: existing.assignedOperator ? existing.priority : snapshot.priority,
+            priorityReason: existing.assignedOperator
+              ? existing.priorityReason
+              : snapshot.priorityReason,
+            status: nextStatus,
+            callerName: snapshot.callerName ?? existing.callerName,
+            summary: snapshot.summary,
+            description: snapshot.description,
+            peopleAffected: snapshot.peopleAffected ?? existing.peopleAffected,
+            immediateDanger: snapshot.immediateDanger,
+            dangerDetails: snapshot.dangerDetails ?? existing.dangerDetails,
+            clinicalDetails: snapshot.clinicalDetails,
+            transcript,
+            missingInfoFlags: lastTurn
+              ? lastTurn.remainingMissingFlags
+              : scenario.dialogue[scenario.dialogue.length - 1].remainingMissingFlags,
+            updatedAt: now,
+            aiIntakeActive: nextAiIntakeActive,
+            location: {
+              ...existing.location,
+              description:
+                existing.location.verificationStatus === 'VERIFIED'
+                  ? existing.location.description
+                  : snapshot.locationDescription,
+              landmark: snapshot.landmark ?? existing.location.landmark,
+              source:
+                existing.location.verificationStatus === 'VERIFIED'
+                  ? existing.location.source
+                  : includeCoords
+                  ? 'SIMULATED'
+                  : 'CALLER_DESCRIPTION',
+              lat:
+                existing.location.verificationStatus === 'VERIFIED'
+                  ? existing.location.lat
+                  : includeCoords
+                  ? scenario.resolvedCoords.lat
+                  : undefined,
+              lng:
+                existing.location.verificationStatus === 'VERIFIED'
+                  ? existing.location.lng
+                  : includeCoords
+                  ? scenario.resolvedCoords.lng
+                  : undefined,
+              accuracyMeters:
+                existing.location.verificationStatus === 'VERIFIED'
+                  ? existing.location.accuracyMeters
+                  : includeCoords && markLocationResolved
+                  ? scenario.resolvedCoords.accuracyMeters
+                  : undefined,
+            },
+            timeline: [...existing.timeline, ...completionTimeline],
+          }
+        : {
+            id: scenario.incidentId,
+            createdAt: now,
+            updatedAt: now,
+            category: snapshot.category,
+            priority: snapshot.priority,
+            priorityReason: snapshot.priorityReason,
+            status: nextStatus,
+            callerName: snapshot.callerName,
+            callerPhone: scenario.callerPhone,
+            summary: snapshot.summary,
+            description: snapshot.description,
+            peopleAffected: snapshot.peopleAffected ?? null,
+            immediateDanger: snapshot.immediateDanger,
+            dangerDetails: snapshot.dangerDetails,
+            clinicalDetails: snapshot.clinicalDetails,
+            missingInfoFlags: lastTurn
+              ? lastTurn.remainingMissingFlags
+              : ['Operator verification of exact location'],
+            transcript,
+            location: {
+              source: includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION',
+              verificationStatus: 'UNVERIFIED',
+              description: snapshot.locationDescription,
+              landmark: snapshot.landmark,
+              area: scenario.area,
+              lat: includeCoords ? scenario.resolvedCoords.lat : undefined,
+              lng: includeCoords ? scenario.resolvedCoords.lng : undefined,
+              accuracyMeters:
+                includeCoords && markLocationResolved
+                  ? scenario.resolvedCoords.accuracyMeters
+                  : undefined,
+              carrierNote: 'Carrier location integration not configured',
+              capturedAt: now,
+            },
+            timeline: [
+              {
+                id: `ev-${Date.now()}-1`,
+                type: 'INCIDENT_RECEIVED',
+                title: 'Simulated medical emergency call received',
+                description: `${scenario.incomingCallNotification} Real telephone integration not configured.`,
+                actor: voiceProvider.name,
+                actorRole: 'Telephony Adapter',
+                timestamp: now,
+                isSimulated: true,
               },
-              timeline: [
-                {
-                  id: `ev-${Date.now()}-1`,
-                  type: 'INCIDENT_RECEIVED',
-                  title: 'Simulated medical emergency call received',
-                  description: `${scenario.incomingCallNotification} Real telephone integration not configured.`,
-                  actor: voiceProvider.name,
-                  actorRole: 'Telephony Adapter',
-                  timestamp: now,
-                  isSimulated: true,
-                },
-                {
-                  id: `ev-${Date.now()}-2`,
-                  type: 'INCIDENT_CREATED',
-                  title: 'Structured incident record created (Simulation)',
-                  description: `${scenario.category} · Location: ${includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION'} (UNVERIFIED).`,
-                  actor: 'Responda AI Intake',
-                  actorRole: 'AI Assistant',
-                  timestamp: now,
-                  isSimulated: true,
-                },
-              ],
-              notes: [],
-              aiIntakeActive: true,
-              isSimulated: true,
-              callChannel: 'DEMO_SCENARIO',
-            };
+              {
+                id: `ev-${Date.now()}-2`,
+                type: 'INCIDENT_CREATED',
+                title: 'Structured incident record created (Simulation)',
+                description: `${scenario.category} · Location: ${includeCoords ? 'SIMULATED' : 'CALLER_DESCRIPTION'} (UNVERIFIED).`,
+                actor: 'Responda AI Intake',
+                actorRole: 'AI Assistant',
+                timestamp: now,
+                isSimulated: true,
+              },
+              ...completionTimeline,
+            ],
+            notes: [],
+            aiIntakeActive: nextAiIntakeActive,
+            isSimulated: true,
+            callChannel: 'DEMO_SCENARIO',
+          };
 
       if (existingIdx >= 0) {
         db.incidents[existingIdx] = record;

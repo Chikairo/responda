@@ -119,42 +119,42 @@ export function getLocationSourceBadgeMeta(source: LocationSource): {
         label: 'OPERATOR VERIFIED',
         shortLabel: 'Operator Verified',
         toneClass:
-          'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/30',
+          'text-[var(--status-verified-text)] bg-[var(--status-verified-bg)] border-[var(--status-verified-border)]',
       };
     case 'GPS':
       return {
         label: 'GPS LOCATION',
         shortLabel: 'Device GPS',
         toneClass:
-          'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-500/10 dark:border-blue-500/30',
+          'text-[var(--status-standard-text)] bg-[var(--status-standard-bg)] border-[var(--status-standard-border)]',
       };
     case 'CALLER_DESCRIPTION':
       return {
         label: 'CALLER DESCRIPTION',
         shortLabel: 'Caller Described',
         toneClass:
-          'text-amber-800 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/30',
+          'text-[var(--status-urgent-text)] bg-[var(--status-urgent-bg)] border-[var(--status-urgent-border)]',
       };
     case 'NETWORK_DERIVED':
       return {
         label: 'NETWORK-DERIVED',
         shortLabel: 'Carrier Derived',
         toneClass:
-          'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-400 dark:bg-cyan-500/10 dark:border-cyan-500/30',
+          'text-[var(--brand-teal)] bg-[var(--brand-teal-bg)] border-[var(--brand-teal-border)]',
       };
     case 'MANUAL':
       return {
         label: 'MANUAL ENTRY',
         shortLabel: 'Manual Entry',
         toneClass:
-          'text-indigo-700 bg-indigo-50 border-indigo-200 dark:text-indigo-400 dark:bg-indigo-500/10 dark:border-indigo-500/30',
+          'text-[var(--action-blue)] dark:text-[#60A5FA] bg-[var(--action-blue-bg)] border-[var(--action-blue-border)]',
       };
     case 'SIMULATED':
       return {
         label: 'SIMULATED LOCATION',
         shortLabel: 'Simulated',
         toneClass:
-          'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-500/10 dark:border-purple-500/30',
+          'text-[var(--status-unassessed-text)] bg-[var(--status-unassessed-bg)] border-[var(--status-unassessed-border)]',
       };
     case 'UNKNOWN':
     default:
@@ -162,7 +162,7 @@ export function getLocationSourceBadgeMeta(source: LocationSource): {
         label: 'UNKNOWN LOCATION',
         shortLabel: 'Unknown',
         toneClass:
-          'text-slate-700 bg-slate-100 border-slate-300 dark:text-slate-400 dark:bg-slate-500/10 dark:border-slate-500/30',
+          'text-[var(--status-neutral-text)] bg-[var(--status-neutral-bg)] border-[var(--status-neutral-border)]',
       };
   }
 }

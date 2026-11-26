@@ -52,20 +52,20 @@ function getIncidentColor(priority: IncidentRecord['priority']): string {
     case 'Critical':
       return '#EF4444';
     case 'Urgent':
-      return '#F97316';
+      return '#F59E0B';
     case 'Standard':
-      return '#22C55E';
+      return '#38BDF8';
     case 'Unassessed':
     default:
-      return '#D97706';
+      return '#A855F7';
   }
 }
 
 function getUnitColor(unit: ResponseUnit): string {
-  if (unit.availability === 'Available') return '#22C55E';
+  if (unit.availability === 'Available') return '#10B981';
   if (unit.availability === 'Unavailable') return '#64748B';
-  if (unit.availability === 'Transporting') return '#0EA5E9';
-  return '#06B6D4';
+  if (unit.availability === 'Transporting') return '#38BDF8';
+  return '#1EB6A3';
 }
 
 function createIncidentIcon(
@@ -86,7 +86,7 @@ function createIncidentIcon(
     html: `<div style="position:relative;width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
       ${ring}
       <div style="width:22px;height:22px;border-radius:9999px;background:${color};border:2px solid ${
-      isDarkTiles ? '#0B1220' : '#FFFFFF'
+      isDarkTiles ? '#0B1519' : '#FFFFFF'
     };color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(15,23,42,0.35);">${symbol}</div>
     </div>`,
   });
@@ -99,7 +99,7 @@ function createUnitIcon(
 ): L.DivIcon {
   const color = getUnitColor(unit);
   const shortTag = unit.unitType === 'Ambulance' ? 'A' : 'R';
-  const bg = isDarkTiles ? '#111C2E' : '#FFFFFF';
+  const bg = isDarkTiles ? '#101E24' : '#FFFFFF';
   const selectedBorder = isDarkTiles ? '#F8FAFC' : '#0F172A';
 
   return L.divIcon({
@@ -115,9 +115,9 @@ function createUnitIcon(
 }
 
 function createHospitalIcon(isDarkTiles: boolean): L.DivIcon {
-  const bg = isDarkTiles ? '#064E3B' : '#ECFDF5';
+  const bg = isDarkTiles ? '#101E24' : '#ECFDF5';
   const border = '#10B981';
-  const text = isDarkTiles ? '#6EE7B7' : '#047857';
+  const text = isDarkTiles ? '#34D399' : '#047857';
   return L.divIcon({
     className: 'responda-hospital-marker',
     iconSize: [28, 28],
@@ -126,6 +126,14 @@ function createHospitalIcon(isDarkTiles: boolean): L.DivIcon {
       H
     </div>`,
   });
+}
+
+function isDarkModeActive(): boolean {
+  if (typeof document === 'undefined') return true;
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'light') return false;
+  if (attr === 'dark') return true;
+  return document.documentElement.classList.contains('dark');
 }
 
 export function LagosMap({
@@ -152,9 +160,7 @@ export function LagosMap({
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const [tileMode, setTileMode] = useState<'dark' | 'osm'>(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-      ? 'dark'
-      : 'osm'
+    isDarkModeActive() ? 'dark' : 'osm'
   );
   const [tileError, setTileError] = useState(false);
   const [cardDismissed, setCardDismissed] = useState(false);
@@ -168,13 +174,13 @@ export function LagosMap({
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const syncWithTheme = () => {
-      const darkActive = document.documentElement.classList.contains('dark');
-      setTileMode(darkActive ? 'dark' : 'osm');
+      setTileMode(isDarkModeActive() ? 'dark' : 'osm');
     };
+    syncWithTheme();
     const observer = new MutationObserver(syncWithTheme);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['class', 'data-theme'],
     });
     return () => observer.disconnect();
   }, []);
@@ -254,7 +260,7 @@ export function LagosMap({
 
     if (route?.available && route.coordinates && route.coordinates.length > 1) {
       L.polyline(route.coordinates, {
-        color: route.isSimulatedFallback ? '#22D3EE' : '#3B82F6',
+        color: route.isSimulatedFallback ? '#1EB6A3' : '#2563EB',
         weight: 4,
         opacity: 0.9,
         dashArray: route.isSimulatedFallback ? '8 8' : undefined,
@@ -327,8 +333,8 @@ export function LagosMap({
         iconSize: [110, 110],
         iconAnchor: [55, 55],
         html: `<div style="position:relative;width:110px;height:110px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-          <span class="responda-radar-ring" style="position:absolute;width:84px;height:84px;border-radius:9999px;border:2px solid #3B82F6;background:rgba(59,130,246,0.12);"></span>
-          <span class="responda-radar-ring-delayed" style="position:absolute;width:84px;height:84px;border-radius:9999px;border:1.5px solid #22D3EE;background:rgba(34,211,238,0.08);"></span>
+          <span class="responda-radar-ring" style="position:absolute;width:84px;height:84px;border-radius:9999px;border:2px solid #2563EB;background:rgba(37,99,235,0.12);"></span>
+          <span class="responda-radar-ring-delayed" style="position:absolute;width:84px;height:84px;border-radius:9999px;border:1.5px solid #1EB6A3;background:rgba(30,182,163,0.08);"></span>
         </div>`,
       });
       L.marker(radarCoords, {
@@ -406,7 +412,7 @@ export function LagosMap({
   return (
     <div
       data-testid="lagos-map-container"
-      className={`relative w-full ${heightClass} rounded-xl overflow-hidden border border-slate-200 bg-slate-100 dark:border-[#26364B] dark:bg-[#0B1220]`}
+      className={`relative w-full ${heightClass} rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-canvas)]`}
     >
       <div
         ref={mapElRef}
@@ -420,7 +426,7 @@ export function LagosMap({
           type="button"
           onClick={() => mapRef.current?.zoomIn()}
           aria-label="Zoom in map"
-          className="w-8 h-8 rounded-lg bg-white/95 border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm dark:bg-[#111C2E]/95 dark:border-[#26364B] dark:text-slate-200 dark:hover:bg-[#172438] flex items-center justify-center transition-colors"
+          className="w-8 h-8 rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] shadow-[var(--shadow-card)] flex items-center justify-center transition-colors"
         >
           <Plus className="w-4 h-4" />
         </button>
@@ -428,7 +434,7 @@ export function LagosMap({
           type="button"
           onClick={() => mapRef.current?.zoomOut()}
           aria-label="Zoom out map"
-          className="w-8 h-8 rounded-lg bg-white/95 border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm dark:bg-[#111C2E]/95 dark:border-[#26364B] dark:text-slate-200 dark:hover:bg-[#172438] flex items-center justify-center transition-colors"
+          className="w-8 h-8 rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] shadow-[var(--shadow-card)] flex items-center justify-center transition-colors"
         >
           <Minus className="w-4 h-4" />
         </button>
@@ -437,7 +443,7 @@ export function LagosMap({
           onClick={() => mapRef.current?.setView(LAGOS_CENTER, 12, { animate: true })}
           aria-label="Center map on Lagos"
           title="Recenter on Lagos"
-          className="w-8 h-8 rounded-lg bg-white/95 border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm dark:bg-[#111C2E]/95 dark:border-[#26364B] dark:text-slate-200 dark:hover:bg-[#172438] flex items-center justify-center transition-colors"
+          className="w-8 h-8 rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] shadow-[var(--shadow-card)] flex items-center justify-center transition-colors"
         >
           <LocateFixed className="w-4 h-4" />
         </button>
@@ -445,33 +451,33 @@ export function LagosMap({
 
       <div className="absolute top-3 right-3 z-[400] flex items-center gap-2">
         {editablePin && (
-          <div className="px-2.5 py-1.5 rounded-lg bg-blue-600/95 text-white text-xs font-medium border border-blue-400/50 shadow-sm">
+          <div className="px-2.5 py-1.5 rounded-lg bg-[var(--action-blue)] text-[var(--text-on-solid)] text-xs font-medium border border-[var(--action-blue-border)] shadow-[var(--shadow-card)] whitespace-nowrap">
             Click map to position verified pin
           </div>
         )}
         <button
           type="button"
           onClick={() => setTileMode((m) => (m === 'dark' ? 'osm' : 'dark'))}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/95 border border-slate-200 text-xs font-medium text-slate-800 hover:bg-slate-100 shadow-sm dark:bg-[#111C2E]/95 dark:border-[#26364B] dark:text-slate-200 dark:hover:bg-[#172438] transition-colors"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] shadow-[var(--shadow-card)] transition-colors whitespace-nowrap shrink-0"
         >
-          <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+          <Layers className="w-3.5 h-3.5 text-[var(--brand-teal)]" />
           <span>{tileMode === 'dark' ? 'OSM Street' : 'Dark Ops'}</span>
         </button>
       </div>
 
       {tileError && (
-        <div className="absolute top-14 right-3 z-[400] max-w-xs px-3 py-2 rounded-lg bg-white/95 border border-amber-300 text-[11px] text-amber-800 shadow-sm dark:bg-[#111C2E]/95 dark:border-amber-500/40 dark:text-amber-200">
+        <div className="absolute top-14 right-3 z-[400] max-w-xs px-3 py-2 rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--status-urgent-border)] text-[11px] text-[var(--status-urgent-text)] shadow-[var(--shadow-card)]">
           Map tiles unreachable in offline sandbox; Lagos coordinates and unit overlays remain active.
         </div>
       )}
 
       {showInfoCard && !cardDismissed && (selectedIncident || selectedUnit) && (
-        <div className="absolute bottom-11 left-3 right-3 sm:right-auto sm:w-72 z-[400] rounded-xl bg-white/95 border border-slate-200 dark:bg-[#111C2E]/95 dark:border-[#26364B] p-3 shadow-xl backdrop-blur-sm">
+        <div className="absolute bottom-11 left-3 right-3 sm:right-auto sm:w-72 z-[400] rounded-xl bg-[var(--bg-surface)]/95 border border-[var(--border-strong)] p-3 shadow-[var(--shadow-floating)] backdrop-blur-sm">
           <button
             type="button"
             onClick={() => setCardDismissed(true)}
             aria-label="Close map selection card"
-            className="absolute top-2 right-2 w-6 h-6 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-[#172438] flex items-center justify-center text-xs"
+            className="absolute top-2 right-2 w-6 h-6 rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] flex items-center justify-center text-xs"
           >
             ✕
           </button>
@@ -479,18 +485,18 @@ export function LagosMap({
             <div className="space-y-2 pr-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  <div className="font-mono tabular-nums text-xs font-semibold text-[var(--text-secondary)]">
                     {selectedIncident.id}
                   </div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
                     {selectedIncident.category}
                   </div>
                 </div>
                 <PriorityBadge priority={selectedIncident.priority} />
               </div>
 
-              <div className="flex items-start gap-1.5 text-xs text-slate-700 dark:text-slate-300">
-                <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-1.5 text-xs text-[var(--text-secondary)]">
+                <MapPin className="w-3.5 h-3.5 text-[var(--brand-teal)] shrink-0 mt-0.5" />
                 <span className="line-clamp-2">
                   {selectedIncident.location.correctedDescription ||
                     selectedIncident.location.description}
@@ -502,13 +508,13 @@ export function LagosMap({
                 <VerificationBadge status={selectedIncident.location.verificationStatus} />
               </div>
 
-              <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-[#26364B] text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between pt-1 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)]">
                 <span>Received {formatRelativeTime(selectedIncident.createdAt)}</span>
                 <IncidentStatusBadge status={selectedIncident.status} />
               </div>
 
               {assignedUnitForSelected && (
-                <div className="text-[11px] text-cyan-700 dark:text-cyan-300 flex items-center gap-1.5">
+                <div className="text-[11px] text-[var(--brand-teal)] flex items-center gap-1.5">
                   <Navigation className="w-3 h-3" />
                   <span>
                     Assigned: {assignedUnitForSelected.callsign} (
@@ -518,12 +524,12 @@ export function LagosMap({
               )}
 
               {route && (
-                <div className="text-[11px] px-2 py-1 rounded bg-slate-100 border border-slate-200 text-slate-700 dark:bg-[#172438] dark:border-[#26364B] dark:text-slate-300">
+                <div className="text-[11px] px-2 py-1 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
                   {route.available ? (
                     route.isSimulatedFallback ? (
                       <span>Simulated demo route corridor shown (no ORS key)</span>
                     ) : (
-                      <span className="font-mono">
+                      <span className="font-mono tabular-nums">
                         Route: {formatDistanceKm(route.distanceMeters)} · ETA{' '}
                         {formatDurationMinutes(route.durationSeconds)}
                       </span>
@@ -538,7 +544,7 @@ export function LagosMap({
                 <button
                   type="button"
                   onClick={() => onOpenIncidentWorkspace(selectedIncident.id)}
-                  className="w-full mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+                  className="w-full mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-[var(--text-on-solid)] text-xs font-semibold transition-colors whitespace-nowrap"
                 >
                   <span>Open in Incident Management</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -549,26 +555,26 @@ export function LagosMap({
             <div className="space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                  <div className="font-mono tabular-nums text-xs text-[var(--text-secondary)]">
                     {selectedUnit.id} · {selectedUnit.vehicleRegistration}
                   </div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
                     {selectedUnit.callsign}
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <div className="text-xs text-[var(--text-secondary)]">
                     {selectedUnit.unitType} · {selectedUnit.organisation}
                   </div>
                 </div>
                 <UnitAvailabilityBadge availability={selectedUnit.availability} />
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                 <span>
                   {selectedUnit.locationName} ({selectedUnit.area})
                 </span>
                 <LocationFreshnessBadge freshness={selectedUnit.locationFreshness} />
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200 dark:border-[#26364B]">
-                <span>
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)] pt-1 border-t border-[var(--border-subtle)]">
+                <span className="font-mono tabular-nums">
                   {selectedUnit.currentAssignmentId
                     ? `Assigned: ${selectedUnit.currentAssignmentId}`
                     : 'No active assignment'}
@@ -581,28 +587,28 @@ export function LagosMap({
       )}
 
       {showLegend && (
-        <div className="absolute bottom-2 left-3 z-[400] hidden md:flex items-center gap-3 px-2.5 py-1 rounded-lg bg-white/95 border border-slate-200 text-[11px] text-slate-700 shadow-sm dark:bg-[#111C2E]/92 dark:border-[#26364B] dark:text-slate-300">
+        <div className="absolute bottom-2 left-3 z-[400] hidden md:flex items-center gap-3 px-2.5 py-1 rounded-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] shadow-[var(--shadow-card)]">
           <span className="inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]" />
             Critical
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
             Urgent
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-600" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#A855F7]" />
             Unassessed
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm border border-emerald-500 bg-white dark:bg-[#111C2E]" />
+            <span className="w-2.5 h-2.5 rounded-sm border border-[#10B981] bg-[var(--bg-surface)]" />
             Available Unit
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm border border-cyan-500 bg-white dark:bg-[#111C2E]" />
+            <span className="w-2.5 h-2.5 rounded-sm border border-[#1EB6A3] bg-[var(--bg-surface)]" />
             Responding
           </span>
-          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+          <span className="inline-flex items-center gap-1 text-[var(--status-verified-text)]">
             <CheckCircle2 className="w-3 h-3" />
             Lagos OSM
           </span>

@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
-  PlusCircle,
   Search,
   UserCheck,
 } from 'lucide-react';
@@ -26,8 +25,8 @@ import {
   sortIncidents,
 } from '../utils/incidentLogic';
 import type { IncidentWorkspaceTabId } from '../utils/guidedWorkflow';
-import { AiIntakeWorkspace } from './AiIntakeWorkspace';
 import { IncidentWorkspace, type IncidentWorkspaceDraft } from './IncidentWorkspace';
+import { SelectMenu } from './SelectMenu';
 import {
   IncidentStatusBadge,
   LocationSourceBadge,
@@ -41,22 +40,18 @@ interface IncidentManagementViewProps {
   userRole: UserRole;
   operatorName: string;
   authFetch: typeof fetch;
-  geminiConfigured: boolean;
   carrierConfigured: boolean;
   requireLocationVerificationBeforeDispatch: boolean;
   selectedIncidentId: string | null;
   workspaceOpen: boolean;
   initialTab: IncidentWorkspaceTabId;
-  intakeMode: boolean;
   simState: SimulationRuntimeState;
   preselectedUnitId: string | null;
   draftsByIncidentId: Record<string, IncidentWorkspaceDraft>;
   onUpdateDraft: (incidentId: string, patch: Partial<IncidentWorkspaceDraft>) => void;
-  onSetIntakeMode: (open: boolean) => void;
   onSelectIncident: (id: string) => void;
   onOpenWorkspace: (id: string, tab?: IncidentWorkspaceTabId) => void;
   onCloseWorkspace: () => void;
-  onIncidentCreated: (incident: IncidentRecord) => void;
   onTakeOver: (id: string) => Promise<void>;
   onUpdateMedicalDetails: (
     id: string,
@@ -114,22 +109,18 @@ export function IncidentManagementView({
   userRole,
   operatorName,
   authFetch,
-  geminiConfigured,
   carrierConfigured,
   requireLocationVerificationBeforeDispatch,
   selectedIncidentId,
   workspaceOpen,
   initialTab,
-  intakeMode,
   simState,
   preselectedUnitId,
   draftsByIncidentId,
   onUpdateDraft,
-  onSetIntakeMode,
   onSelectIncident,
   onOpenWorkspace,
   onCloseWorkspace,
-  onIncidentCreated,
   onTakeOver,
   onUpdateMedicalDetails,
   onVerifyLocation,
@@ -167,27 +158,6 @@ export function IncidentManagementView({
   const workspaceIncident = selectedIncidentId
     ? incidents.find((i) => i.id === selectedIncidentId) || null
     : null;
-
-  if (intakeMode) {
-    return (
-      <AiIntakeWorkspace
-        embedded
-        geminiConfigured={geminiConfigured}
-        authFetch={authFetch}
-        activeIncident={workspaceIncident}
-        onCloseEmbedded={() => onSetIntakeMode(false)}
-        onIncidentCreated={(inc) => {
-          onIncidentCreated(inc);
-          onSetIntakeMode(false);
-          onOpenWorkspace(inc.id, 'workflow');
-        }}
-        onOpenIncident={(id) => {
-          onSetIntakeMode(false);
-          onOpenWorkspace(id, 'workflow');
-        }}
-      />
-    );
-  }
 
   if (workspaceOpen && workspaceIncident) {
     return (
@@ -230,28 +200,19 @@ export function IncidentManagementView({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 shadow-2xs dark:shadow-none flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-bold text-slate-900 dark:text-slate-50">
+          <h1 className="font-display text-lg font-bold text-[var(--text-primary)]">
             Incident Management
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Create new medical intakes, review unassessed reports, verify Lagos locations, and manage dispatch through closure.
+          <p className="text-xs text-[var(--text-secondary)]">
+            Review incoming AI call intakes and unassessed reports, verify Lagos locations, and manage dispatch through closure.
           </p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => onSetIntakeMode(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-semibold text-white whitespace-nowrap"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>New Emergency Intake</span>
-        </button>
       </div>
 
       {/* Status Filter Tabs & Dropdowns */}
-      <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-4 space-y-3 shadow-2xs dark:shadow-none">
+      <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-1.5">
           {(
             [
@@ -269,10 +230,10 @@ export function IncidentManagementView({
               key={tab.id}
               type="button"
               onClick={() => setStatusTab(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 statusTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 dark:bg-[#0B1220] dark:text-slate-300 dark:border-[#26364B]'
+                  ? 'bg-[var(--action-blue)] text-[var(--text-on-solid)]'
+                  : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]'
               }`}
             >
               {tab.label}
@@ -282,51 +243,45 @@ export function IncidentManagementView({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-2.5" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search ID, caller, area, or symptom..."
-              className="w-full rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+              className="w-full rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] pl-8 pr-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             />
           </div>
 
-          <select
-            aria-label="Filter by priority"
+          <SelectMenu<'ALL' | IncidentPriority>
+            ariaLabel="Filter by priority"
             value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value as 'ALL' | IncidentPriority)}
-            className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
-          >
-            <option value="ALL">All Priorities</option>
-            <option value="Critical">Critical</option>
-            <option value="Urgent">Urgent</option>
-            <option value="Unassessed">Unassessed</option>
-            <option value="Standard">Standard</option>
-          </select>
+            onChange={setPriorityFilter}
+            options={[
+              { value: 'ALL', label: 'All Priorities' },
+              { value: 'Critical', label: 'Critical' },
+              { value: 'Urgent', label: 'Urgent' },
+              { value: 'Unassessed', label: 'Unassessed' },
+              { value: 'Standard', label: 'Standard' },
+            ]}
+          />
 
-          <select
-            aria-label="Filter by medical category"
+          <SelectMenu<'ALL' | MedicalEmergencyCategory>
+            ariaLabel="Filter by medical category"
             value={categoryFilter}
-            onChange={(e) =>
-              setCategoryFilter(e.target.value as 'ALL' | MedicalEmergencyCategory)
-            }
-            className="rounded-lg bg-slate-50 dark:bg-[#0B1220] border border-slate-200 dark:border-[#26364B] px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200"
-          >
-            <option value="ALL">All Medical Categories</option>
-            {MEDICAL_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+            onChange={setCategoryFilter}
+            options={[
+              { value: 'ALL', label: 'All Medical Categories' },
+              ...MEDICAL_CATEGORIES.map((c) => ({ value: c, label: c })),
+            ]}
+          />
         </div>
       </div>
 
       {/* Incident List */}
       <div className="space-y-2.5">
         {openIncidents.length === 0 ? (
-          <div className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+          <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-8 text-center text-xs text-[var(--text-secondary)]">
             No open medical incidents match the selected filters.
           </div>
         ) : (
@@ -342,14 +297,14 @@ export function IncidentManagementView({
                   onSelectIncident(inc.id);
                   onOpenWorkspace(inc.id, 'workflow');
                 }}
-                className="rounded-xl bg-white dark:bg-[#111C2E] border border-slate-200 dark:border-[#26364B] hover:border-blue-400 dark:hover:border-blue-500/50 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer shadow-2xs dark:shadow-none transition-colors"
+                className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] shadow-[var(--shadow-card)] p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer transition-colors"
               >
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+                    <span className="font-mono tabular-nums text-sm font-bold text-[var(--text-primary)]">
                       {inc.id}
                     </span>
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    <span className="text-xs font-semibold text-[var(--text-primary)]">
                       {inc.category}
                     </span>
                     <PriorityBadge priority={inc.priority} />
@@ -357,9 +312,11 @@ export function IncidentManagementView({
                     <LocationSourceBadge source={inc.location.source} />
                     <VerificationBadge status={inc.location.verificationStatus} />
                   </div>
-                  <p className="text-xs text-slate-700 dark:text-slate-300">{inc.summary}</p>
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-                    <span>Received {formatRelativeTime(inc.createdAt)}</span>
+                  <p className="text-xs text-[var(--text-secondary)]">{inc.summary}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
+                    <span className="font-mono tabular-nums">
+                      Received {formatRelativeTime(inc.createdAt)}
+                    </span>
                     <span>·</span>
                     <span>
                       Location:{' '}
@@ -368,14 +325,14 @@ export function IncidentManagementView({
                     {assignedUnit && (
                       <>
                         <span>·</span>
-                        <span className="font-semibold text-blue-700 dark:text-blue-400">
+                        <span className="font-semibold text-[var(--brand-teal)]">
                           Unit: {assignedUnit.callsign} ({assignedUnit.availability})
                         </span>
                       </>
                     )}
                   </div>
                   {inc.priority === 'Unassessed' && (
-                    <div className="inline-flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                    <div className="inline-flex items-center gap-1.5 text-[11px] text-[var(--status-unassessed-text)] font-medium">
                       <AlertTriangle className="w-3.5 h-3.5" />
                       <span>Unassessed clinical priority — operator assessment needed</span>
                     </div>
@@ -393,7 +350,7 @@ export function IncidentManagementView({
                         await onTakeOver(inc.id);
                         setBusyId(null);
                       }}
-                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold"
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-[var(--status-urgent-accent)] hover:opacity-90 text-[#0B1519] text-xs font-bold whitespace-nowrap shrink-0"
                     >
                       <UserCheck className="w-3.5 h-3.5" />
                       <span>Take Over</span>
@@ -405,7 +362,7 @@ export function IncidentManagementView({
                       e.stopPropagation();
                       onOpenWorkspace(inc.id, 'workflow');
                     }}
-                    className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold"
+                    className="inline-flex items-center gap-1 px-3.5 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-[var(--text-on-solid)] text-xs font-semibold whitespace-nowrap shrink-0"
                   >
                     <span>Open Case</span>
                     <ArrowRight className="w-3.5 h-3.5" />

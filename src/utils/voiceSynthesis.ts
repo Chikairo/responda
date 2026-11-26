@@ -95,7 +95,7 @@ export function speakSimulationTurn(options: SpeakTurnOptions): () => void {
 
   if (!enabled || !isSpeechSynthesisSupported()) {
     onStart?.();
-    const fallbackMs = Math.min(4500, Math.max(1800, text.length * 26));
+    const fallbackMs = Math.min(3400, Math.max(1500, text.length * 22));
     const timer = window.setTimeout(() => {
       onEnd?.();
     }, fallbackMs);
@@ -105,9 +105,20 @@ export function speakSimulationTurn(options: SpeakTurnOptions): () => void {
   }
 
   let finished = false;
+  let safetyTimer: number | null = null;
+  let minEndTimer: number | null = null;
+
   const finishOnce = () => {
     if (finished) return;
     finished = true;
+    if (safetyTimer !== null) {
+      window.clearTimeout(safetyTimer);
+      safetyTimer = null;
+    }
+    if (minEndTimer !== null) {
+      window.clearTimeout(minEndTimer);
+      minEndTimer = null;
+    }
     onEnd?.();
   };
 
@@ -129,26 +140,38 @@ export function speakSimulationTurn(options: SpeakTurnOptions): () => void {
       utter.pitch = 0.9;
     }
 
+    const startedAt = Date.now();
+    const scheduleCompleteAfterMinBeat = () => {
+      const elapsed = Date.now() - startedAt;
+      const waitMs = Math.max(0, 950 - elapsed);
+      if (waitMs === 0) {
+        finishOnce();
+      } else {
+        minEndTimer = window.setTimeout(finishOnce, waitMs);
+      }
+    };
+
     utter.onstart = () => {
       onStart?.();
     };
     utter.onend = () => {
-      finishOnce();
+      scheduleCompleteAfterMinBeat();
     };
     utter.onerror = () => {
-      finishOnce();
+      scheduleCompleteAfterMinBeat();
     };
 
     onStart?.();
     window.speechSynthesis.speak(utter);
 
     // Safety guard in case browser speechSynthesis stalls without firing onend
-    const maxTimeoutMs = Math.min(11000, Math.max(3500, text.length * 75));
-    const safetyTimer = window.setTimeout(finishOnce, maxTimeoutMs);
+    const maxTimeoutMs = Math.min(7200, Math.max(2400, text.length * 52));
+    safetyTimer = window.setTimeout(finishOnce, maxTimeoutMs);
 
     return () => {
-      window.clearTimeout(safetyTimer);
       finished = true;
+      if (safetyTimer !== null) window.clearTimeout(safetyTimer);
+      if (minEndTimer !== null) window.clearTimeout(minEndTimer);
       try {
         window.speechSynthesis.cancel();
       } catch {
@@ -157,8 +180,9 @@ export function speakSimulationTurn(options: SpeakTurnOptions): () => void {
     };
   } catch {
     onStart?.();
-    const fallbackTimer = window.setTimeout(finishOnce, 2200);
+    const fallbackTimer = window.setTimeout(finishOnce, 1800);
     return () => {
+      finished = true;
       window.clearTimeout(fallbackTimer);
     };
   }

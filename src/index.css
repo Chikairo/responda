@@ -2,22 +2,141 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
-  :root {
-    --bg-canvas: #f8fafc;
-    --bg-panel: #ffffff;
-    --bg-elevated: #f1f5f9;
-    --border-muted: #cbd5e1;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
+  /* ============================================================================
+     RESPONDA DUAL-THEME TOKEN SYSTEM
+     Default: Tactical Command (Dark) | Optional: Clinical Daylight (Light)
+     ============================================================================ */
+  :root,
+  [data-theme="dark"] {
+    /* Core Surfaces */
+    --bg-canvas: #0B1519;
+    --bg-surface: #101E24;
+    --bg-surface-elevated: #162830;
+    --bg-surface-subtle: #0D191E;
+    --bg-overlay: rgba(5, 11, 14, 0.78);
+
+    /* Borders */
+    --border-subtle: #1E333C;
+    --border-strong: #2D4A56;
+    --border-focus: #1EB6A3;
+
+    /* Typography */
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --text-on-solid: #FFFFFF;
+
+    /* Brand & AI Identity */
+    --brand-teal: #1EB6A3;
+    --brand-teal-bg: rgba(30, 182, 163, 0.14);
+    --brand-teal-border: rgba(30, 182, 163, 0.35);
+
+    /* Primary Actions */
+    --action-blue: #2563EB;
+    --action-blue-hover: #1D4ED8;
+    --action-blue-bg: rgba(37, 99, 235, 0.16);
+    --action-blue-border: rgba(37, 99, 235, 0.42);
+    --action-emerald: #10B981;
+    --action-emerald-hover: #059669;
+
+    /* Semantic Status & Priority Tokens */
+    --status-critical-text: #F87171;
+    --status-critical-bg: rgba(239, 68, 68, 0.14);
+    --status-critical-border: rgba(239, 68, 68, 0.40);
+    --status-critical-accent: #EF4444;
+
+    --status-urgent-text: #FBBF24;
+    --status-urgent-bg: rgba(245, 158, 11, 0.14);
+    --status-urgent-border: rgba(245, 158, 11, 0.38);
+    --status-urgent-accent: #F59E0B;
+
+    --status-standard-text: #38BDF8;
+    --status-standard-bg: rgba(56, 189, 248, 0.14);
+    --status-standard-border: rgba(56, 189, 248, 0.35);
+    --status-standard-accent: #4EA8DE;
+
+    --status-unassessed-text: #C084FC;
+    --status-unassessed-bg: rgba(168, 85, 247, 0.14);
+    --status-unassessed-border: rgba(168, 85, 247, 0.38);
+    --status-unassessed-accent: #A855F7;
+
+    --status-verified-text: #34D399;
+    --status-verified-bg: rgba(16, 185, 129, 0.14);
+    --status-verified-border: rgba(16, 185, 129, 0.35);
+
+    --status-neutral-text: #94A3B8;
+    --status-neutral-bg: rgba(100, 116, 139, 0.16);
+    --status-neutral-border: rgba(100, 116, 139, 0.32);
+
+    /* Elevation */
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.28);
+    --shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.48);
   }
 
-  .dark {
-    --bg-canvas: #0b1220;
-    --bg-panel: #111c2e;
-    --bg-elevated: #172438;
-    --border-muted: #26364b;
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
+  [data-theme="light"] {
+    /* Core Surfaces */
+    --bg-canvas: #F4F7F9;
+    --bg-surface: #FFFFFF;
+    --bg-surface-elevated: #F8FAFC;
+    --bg-surface-subtle: #EEF2F6;
+    --bg-overlay: rgba(15, 23, 42, 0.45);
+
+    /* Borders */
+    --border-subtle: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --border-focus: #0D9488;
+
+    /* Typography */
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+    --text-on-solid: #FFFFFF;
+
+    /* Brand & AI Identity (WCAG AA >= 4.5:1 deepened teal) */
+    --brand-teal: #0D9488;
+    --brand-teal-bg: rgba(13, 148, 136, 0.10);
+    --brand-teal-border: rgba(13, 148, 136, 0.30);
+
+    /* Primary Actions */
+    --action-blue: #1D4ED8;
+    --action-blue-hover: #1E40AF;
+    --action-blue-bg: rgba(29, 78, 216, 0.08);
+    --action-blue-border: rgba(29, 78, 216, 0.28);
+    --action-emerald: #059669;
+    --action-emerald-hover: #047857;
+
+    /* Semantic Status & Priority Tokens (WCAG AA light contrasts) */
+    --status-critical-text: #DC2626;
+    --status-critical-bg: #FEF2F2;
+    --status-critical-border: #FECACA;
+    --status-critical-accent: #DC2626;
+
+    --status-urgent-text: #B45309;
+    --status-urgent-bg: #FFFBEB;
+    --status-urgent-border: #FDE68A;
+    --status-urgent-accent: #D97706;
+
+    --status-standard-text: #0369A1;
+    --status-standard-bg: #F0F9FF;
+    --status-standard-border: #BAE6FD;
+    --status-standard-accent: #0284C7;
+
+    --status-unassessed-text: #7E22CE;
+    --status-unassessed-bg: #FAF5FF;
+    --status-unassessed-border: #E9D5FF;
+    --status-unassessed-accent: #9333EA;
+
+    --status-verified-text: #047857;
+    --status-verified-bg: #ECFDF5;
+    --status-verified-border: #A7F3D0;
+
+    --status-neutral-text: #475569;
+    --status-neutral-bg: #F1F5F9;
+    --status-neutral-border: #CBD5E1;
+
+    /* Elevation */
+    --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-floating: 0 10px 25px -5px rgba(15, 23, 42, 0.12);
   }
 
   body {
@@ -38,56 +157,62 @@
   .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
   }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  a {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  select:disabled {
+    cursor: not-allowed;
+  }
 }
 
 /* Custom Leaflet light & dark theme integration */
 .responda-leaflet-container {
-  background: #f1f5f9 !important;
+  background: var(--bg-canvas) !important;
   font-family: 'DM Sans', system-ui, sans-serif !important;
 }
 
-.dark .responda-leaflet-container {
-  background: #0b1220 !important;
-}
-
 .responda-dark-tiles .leaflet-tile-pane {
-  filter: invert(92%) hue-rotate(180deg) brightness(88%) contrast(92%) saturate(75%);
+  filter: invert(92%) hue-rotate(180deg) brightness(86%) contrast(94%) saturate(70%);
 }
 
 .responda-leaflet-container .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.9) !important;
-  color: #475569 !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-secondary) !important;
   font-size: 10px !important;
   border-top-left-radius: 6px;
-}
-
-.dark .responda-leaflet-container .leaflet-control-attribution {
-  background: rgba(11, 18, 32, 0.82) !important;
-  color: #94a3b8 !important;
+  border-top: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--border-subtle);
 }
 
 .responda-leaflet-container .leaflet-control-attribution a {
-  color: #2563eb !important;
+  color: var(--action-blue) !important;
 }
 
-.dark .responda-leaflet-container .leaflet-control-attribution a {
-  color: #60a5fa !important;
+[data-theme="dark"] .responda-leaflet-container .leaflet-control-attribution a {
+  color: #60A5FA !important;
 }
 
 .responda-leaflet-container .leaflet-popup-content-wrapper,
 .responda-leaflet-container .leaflet-popup-tip {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border: 1px solid #cbd5e1;
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.14);
-}
-
-.dark .responda-leaflet-container .leaflet-popup-content-wrapper,
-.dark .responda-leaflet-container .leaflet-popup-tip {
-  background: #172438 !important;
-  color: #f8fafc !important;
-  border: 1px solid #26364b;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  background: var(--bg-surface-elevated) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-floating);
 }
 
 /* Subtle scrollbar for light and dark command panels */
@@ -99,17 +224,11 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-subtle);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: #26364b;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #334863;
+  background: var(--border-strong);
 }
 
 /* Subtle simulation animations (compositor-only transform/opacity) */
