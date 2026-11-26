@@ -140,42 +140,45 @@ export function CommandCentre({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
           {/* Compact 9-Stage Simulation Launcher */}
-          <div className="flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-1">
+          <div className="flex flex-wrap md:flex-nowrap items-center gap-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] p-1.5 md:p-1 w-full md:w-auto min-w-0">
             <SelectMenu<SimulationScenarioId>
               ariaLabel="Simulation Scenario"
               value={selectedScenario}
               disabled={simulationActive}
               onChange={onSelectScenario}
+              className="w-full md:w-auto min-w-0"
               options={(Object.keys(SIMULATION_SCENARIOS) as SimulationScenarioId[]).map((id) => ({
                 value: id,
                 label: SIMULATION_SCENARIOS[id].label,
                 sublabel: SIMULATION_SCENARIOS[id].subtitle,
               }))}
-              buttonClassName="border-transparent bg-transparent py-1 px-2 font-medium min-w-[210px]"
+              buttonClassName="border-transparent bg-transparent py-1 px-2 font-medium w-full md:w-auto md:min-w-[210px]"
             />
-            <button
-              type="button"
-              onClick={onToggleSimulationAudio}
-              aria-label={simulationAudioEnabled ? 'Mute simulation voice' : 'Unmute simulation voice'}
-              title={simulationAudioEnabled ? 'Simulation voice enabled' : 'Simulation voice muted'}
-              className="p-1.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              {simulationAudioEnabled ? (
-                <Volume2 className="w-3.5 h-3.5 text-[var(--brand-teal)]" />
-              ) : (
-                <VolumeX className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onRunSimulation}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-xs font-semibold text-[var(--text-on-solid)] transition-colors whitespace-nowrap shrink-0"
-            >
-              <Play className="w-3.5 h-3.5" />
-              <span>{simulationActive ? 'Restart Demo' : 'RUN SIMULATION'}</span>
-            </button>
+            <div className="flex items-center gap-1.5 w-full md:w-auto justify-end">
+              <button
+                type="button"
+                onClick={onToggleSimulationAudio}
+                aria-label={simulationAudioEnabled ? 'Mute simulation voice' : 'Unmute simulation voice'}
+                title={simulationAudioEnabled ? 'Simulation voice enabled' : 'Simulation voice muted'}
+                className="p-1.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+              >
+                {simulationAudioEnabled ? (
+                  <Volume2 className="w-3.5 h-3.5 text-[var(--brand-teal)]" />
+                ) : (
+                  <VolumeX className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onRunSimulation}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] text-xs font-semibold text-[var(--text-on-solid)] transition-colors whitespace-nowrap shrink-0"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>{simulationActive ? 'Restart Demo' : 'RUN SIMULATION'}</span>
+              </button>
+            </div>
           </div>
 
           <button

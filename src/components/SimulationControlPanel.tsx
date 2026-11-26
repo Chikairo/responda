@@ -71,15 +71,15 @@ export function SimulationControlPanel({
     >
       <div
         role="status"
-        className="rounded-lg bg-[var(--status-critical-accent)] text-[var(--text-on-solid)] px-3.5 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold"
+        className="rounded-lg bg-[var(--status-critical-accent)] text-[var(--text-on-solid)] px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">
+        <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 sm:mt-0" />
+          <span className="leading-snug md:truncate">
             LIVE DEMO SIMULATION — SYNCED ACROSS OPERATIONAL VIEWS (NO REAL EMERGENCY SERVICES CONNECTED).
           </span>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[11px] opacity-95 shrink-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] opacity-95 shrink-0">
           <span>{scenario.label}</span>
           <span aria-hidden="true">·</span>
           <span className="tabular-nums">{simState.incidentId || scenario.incidentId}</span>
@@ -128,7 +128,7 @@ export function SimulationControlPanel({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 w-full xl:w-auto min-w-0">
             {!simState.completed && (
               <>
                 {onPrevStep && (
@@ -278,13 +278,14 @@ export function SimulationLaunchBar({
   }));
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full md:w-auto">
       <SelectMenu<SimulationScenarioId>
         ariaLabel="Select simulation scenario"
         value={selectedScenario}
         options={scenarioOptions}
         onChange={onSelectScenario}
-        buttonClassName="bg-[var(--bg-surface)] py-2 font-medium min-w-[240px]"
+        className="w-full md:w-auto min-w-0"
+        buttonClassName="bg-[var(--bg-surface)] py-2 font-medium w-full md:w-auto md:min-w-[240px]"
       />
 
       <button
@@ -311,7 +312,7 @@ export function SimulationLaunchBar({
         disabled={disabled}
         onClick={onRunSimulation}
         data-testid="run-simulation-button"
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-bold text-[var(--text-on-solid)] transition-colors whitespace-nowrap shrink-0"
+        className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[var(--action-blue)] hover:bg-[var(--action-blue-hover)] disabled:opacity-50 text-xs font-bold text-[var(--text-on-solid)] transition-colors whitespace-nowrap shrink-0"
       >
         <Play className="w-3.5 h-3.5 fill-current" />
         <span>RUN SIMULATION</span>

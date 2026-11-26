@@ -1861,7 +1861,7 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           {/* Top Navigation Bar */}
           <header className="shrink-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-3 sm:px-4 lg:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
@@ -1871,11 +1871,11 @@ export default function App() {
                 <Menu className="w-4 h-4" />
               </button>
               <div className="shrink-0">
-                <RespondaLogo showSubtitle={false} wordmark="Responda" />
+                <RespondaLogo showSubtitle={false} wordmark="Responda" hideWordmarkOnMobile />
               </div>
             </div>
 
-            <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="ml-auto flex items-center gap-1.5 sm:gap-3 min-w-0">
               {userRole === 'Operations Staff' && (
                 <button
                   type="button"
@@ -1888,7 +1888,7 @@ export default function App() {
               )}
 
               {/* Server-Issued Demo Profile Switcher */}
-              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-2 py-1">
+              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-1.5 sm:px-2 py-1 min-w-0">
                 <span className="hidden lg:inline text-[11px] text-[var(--text-secondary)] whitespace-nowrap">
                   Demo Profile (Prototype Auth):
                 </span>
@@ -1907,13 +1907,14 @@ export default function App() {
                   value={currentAccount?.id || ''}
                   onChange={(id) => void handleSwitchDemoAccount(id)}
                   menuAlign="right"
+                  className="min-w-0"
                   options={staffAccounts.map((acc) => ({
                     value: acc.id,
                     label: `${acc.name} · ${acc.role}`,
                     sublabel: acc.accountStatus !== 'ACTIVE' ? acc.accountStatus : acc.badgeCode,
                     disabled: acc.accountStatus !== 'ACTIVE',
                   }))}
-                  buttonClassName="border-transparent bg-transparent py-0.5 px-1.5 font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] max-w-[155px] sm:max-w-[240px]"
+                  buttonClassName="border-transparent bg-transparent py-0.5 px-1 sm:px-1.5 font-semibold text-[var(--action-blue)] dark:text-[#60A5FA] max-w-[130px] sm:max-w-[240px]"
                 />
               </div>
 
@@ -1980,7 +1981,7 @@ export default function App() {
 
           {/* Main Operational / Administrative Viewport (Only inner container scrolls) */}
           <main className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-[1640px] w-full mx-auto p-4 lg:p-6 pb-24 lg:pb-8 space-y-4">
+            <div className="max-w-[1640px] w-full mx-auto p-4 lg:p-6 pb-6 lg:pb-8 space-y-4">
               {userRole === 'Operations Staff' && (
                 <SimulationControlPanel
                   simState={simState}
@@ -2198,33 +2199,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav
-        aria-label="Mobile navigation"
-        className={`lg:hidden fixed bottom-0 inset-x-0 z-[900] bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] grid ${
-          navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'
-        }`}
-      >
-        {navItems.map((item) => {
-          const active = section === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => navigateTo(item.id)}
-              className={`flex flex-col items-center justify-center py-2.5 text-[10px] font-medium ${
-                active
-                  ? 'text-[var(--action-blue)] dark:text-[#60A5FA]'
-                  : 'text-[var(--text-secondary)]'
-              }`}
-            >
-              {item.icon}
-              <span className="mt-0.5 truncate max-w-[72px]">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
-
       {/* First-Use Operator Guide Modal */}
       {guideOpen && (
         <OperatorGuideModal
@@ -2236,7 +2210,7 @@ export default function App() {
       )}
 
       {/* Toast Stack */}
-      <div className="fixed bottom-16 lg:bottom-4 right-4 z-[1100] space-y-2 max-w-sm">
+      <div className="fixed bottom-4 right-4 z-[1100] space-y-2 max-w-sm">
         {toasts.map((t) => (
           <div
             key={t.id}

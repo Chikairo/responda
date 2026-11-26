@@ -27,10 +27,12 @@ export function RespondaLogo({
   compact = false,
   showSubtitle = true,
   wordmark = 'RESPONDA',
+  hideWordmarkOnMobile = false,
 }: {
   compact?: boolean;
   showSubtitle?: boolean;
   wordmark?: string;
+  hideWordmarkOnMobile?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2.5 shrink-0 select-none">
@@ -60,7 +62,7 @@ export function RespondaLogo({
         </svg>
       </div>
       {!compact && (
-        <div className="leading-tight">
+        <div className={`leading-tight ${hideWordmarkOnMobile ? 'hidden md:block' : ''}`}>
           <div className="font-display font-bold tracking-tight text-base text-[var(--text-primary)] whitespace-nowrap">
             {wordmark}
           </div>
